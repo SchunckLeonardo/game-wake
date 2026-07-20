@@ -30,9 +30,9 @@ jobs:
       TF_VAR_discord_allowed_user_ids: ${{ vars.DISCORD_ALLOWED_USER_IDS_JSON }}
       TF_VAR_discord_allowed_role_ids: ${{ vars.DISCORD_ALLOWED_ROLE_IDS_JSON }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
