@@ -109,6 +109,8 @@ check "palworld_settings_document" {
   assert {
     condition = try(
       local.palworld_settings.server_name != "" &&
+      length(local.palworld_settings.server_name) <= 100 &&
+      length(local.palworld_settings.server_description) <= 500 &&
       local.palworld_settings.max_players >= 1 &&
       floor(local.palworld_settings.max_players) == local.palworld_settings.max_players &&
       alltrue([

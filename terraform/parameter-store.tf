@@ -12,6 +12,17 @@ resource "aws_ssm_parameter" "palworld_config" {
   value       = local.palworld_config_payload
 }
 
+resource "aws_ssm_parameter" "palworld_settings_overrides" {
+  name        = "${local.parameter_path}/palworld/settings-overrides"
+  description = "Non-secret Palworld settings changed through the Discord panel"
+  type        = "String"
+  value       = "{}"
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+}
+
 resource "aws_ssm_parameter" "discord_webhook_url" {
   name             = "${local.parameter_path}/discord/webhook-url"
   description      = "Discord webhook used by the EC2 for ready/autostop notifications"

@@ -70,6 +70,19 @@ def test_read_game_snapshot_parses_json() -> None:
     assert service.read_game_snapshot() == {"players": 1}
 
 
+def test_settings_activation_uses_fail_closed_stop_before_restart() -> None:
+    ssm = FakeSSMClient()
+    service = EC2Service(FakeEC2Client(), ssm, "i-123", "/palworld/status")
+
+    command_id = service.request_settings_activation()
+
+    command = ssm.sent["Parameters"]["commands"][0]
+    assert command.startswith("set -Eeuo pipefail")
+    assert command.index("stop-palworld.sh") < command.index("systemctl start palworld.service")
+    assert "--force" not in command
+    assert command_id == "command-id"
+
+
 def test_human_uptime_formats_hours_and_minutes() -> None:
     launch = datetime(2026, 7, 19, 10, 15, tzinfo=UTC)
     now = datetime(2026, 7, 19, 12, 45, tzinfo=UTC)

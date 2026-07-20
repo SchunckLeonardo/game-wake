@@ -21,12 +21,13 @@ output "palworld_port" {
 output "parameter_store_names" {
   description = "Nomes dos parametros; nenhum valor secreto e exposto."
   value = {
-    discord_config  = aws_ssm_parameter.discord_config.name
-    palworld_config = aws_ssm_parameter.palworld_config.name
-    discord_webhook = aws_ssm_parameter.discord_webhook_url.name
-    server_password = aws_ssm_parameter.server_password.name
-    admin_password  = aws_ssm_parameter.admin_password.name
-    runtime_status  = aws_ssm_parameter.server_status.name
+    discord_config              = aws_ssm_parameter.discord_config.name
+    palworld_config             = aws_ssm_parameter.palworld_config.name
+    palworld_settings_overrides = aws_ssm_parameter.palworld_settings_overrides.name
+    discord_webhook             = aws_ssm_parameter.discord_webhook_url.name
+    server_password             = aws_ssm_parameter.server_password.name
+    admin_password              = aws_ssm_parameter.admin_password.name
+    runtime_status              = aws_ssm_parameter.server_status.name
   }
 }
 

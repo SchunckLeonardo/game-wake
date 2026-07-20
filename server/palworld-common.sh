@@ -41,6 +41,8 @@ ssm_get_secret() {
 
 load_palworld_config() {
   local config
+  local overrides
+  local overrides_parameter_name
 
   config=$(aws ssm get-parameter \
     --region "$AWS_REGION" \
@@ -48,6 +50,56 @@ load_palworld_config() {
     --query 'Parameter.Value' \
     --output text)
   jq -e 'type == "object"' >/dev/null <<<"$config"
+
+  overrides_parameter_name=${PALWORLD_OVERRIDES_PARAMETER_NAME:-"${PALWORLD_CONFIG_PARAMETER_NAME%/config}/settings-overrides"}
+  if overrides=$(aws ssm get-parameter \
+    --region "$AWS_REGION" \
+    --name "$overrides_parameter_name" \
+    --query 'Parameter.Value' \
+    --output text 2>/dev/null); then
+    jq -e '
+      type == "object" and
+      ((keys - [
+        "server_name",
+        "server_description",
+        "max_players",
+        "exp_rate",
+        "collection_drop_rate",
+        "pal_spawn_rate",
+        "death_penalty",
+        "pal_damage_attack_rate",
+        "pal_damage_defense_rate",
+        "player_damage_attack_rate",
+        "player_damage_defense_rate",
+        "pal_stamina_decrease_rate",
+        "player_stamina_decrease_rate",
+        "item_weight_rate"
+      ]) | length) == 0 and
+      ((.server_name // "valid") | type == "string" and length > 0 and length <= 100) and
+      ((.server_description // "") | type == "string" and length <= 500) and
+      ((.max_players // 1) | type == "number" and . >= 1 and floor == .) and
+      ([
+        .exp_rate?,
+        .collection_drop_rate?,
+        .pal_spawn_rate?,
+        .pal_damage_attack_rate?,
+        .pal_damage_defense_rate?,
+        .player_damage_attack_rate?,
+        .player_damage_defense_rate?,
+        .pal_stamina_decrease_rate?,
+        .player_stamina_decrease_rate?,
+        .item_weight_rate?
+      ] | all(. == null or (type == "number" and . > 0))) and
+      ((.death_penalty // "Item") as $death |
+        ["None", "Item", "ItemAndEquipment", "All"] | index($death) != null)
+    ' >/dev/null <<<"$overrides" || {
+      palworld_log err "Overrides do Discord contem configuracoes invalidas ou desconhecidas"
+      return 1
+    }
+    config=$(jq -ce --argjson overrides "$overrides" '. * $overrides' <<<"$config")
+  else
+    palworld_log warning "Overrides do Discord indisponiveis; usando configuracao base"
+  fi
 
   PALWORLD_SERVER_NAME=$(jq -er '.server_name | strings' <<<"$config")
   PALWORLD_SERVER_DESCRIPTION=$(jq -er '.server_description | strings' <<<"$config")

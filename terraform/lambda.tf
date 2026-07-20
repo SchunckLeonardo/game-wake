@@ -15,11 +15,13 @@ resource "aws_lambda_function" "discord" {
 
   environment {
     variables = {
-      DISCORD_CONFIG_JSON            = local.discord_config_payload
-      PALWORLD_INSTANCE_ID           = aws_instance.palworld.id
-      PALWORLD_STATUS_PARAMETER_NAME = aws_ssm_parameter.server_status.name
-      PALWORLD_PORT                  = tostring(var.palworld_port)
-      LOG_LEVEL                      = "INFO"
+      DISCORD_CONFIG_JSON               = local.discord_config_payload
+      PALWORLD_INSTANCE_ID              = aws_instance.palworld.id
+      PALWORLD_CONFIG_PARAMETER_NAME    = aws_ssm_parameter.palworld_config.name
+      PALWORLD_OVERRIDES_PARAMETER_NAME = aws_ssm_parameter.palworld_settings_overrides.name
+      PALWORLD_STATUS_PARAMETER_NAME    = aws_ssm_parameter.server_status.name
+      PALWORLD_PORT                     = tostring(var.palworld_port)
+      LOG_LEVEL                         = "INFO"
     }
   }
 

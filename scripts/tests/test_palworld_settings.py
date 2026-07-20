@@ -114,6 +114,7 @@ def test_update_validates_and_persists_a_canonical_document(tmp_path: Path) -> N
         ("exp_rate", 0, "must be greater than 0"),
         ("death_penalty", "Inventory", "must be one of"),
         ("ServerPassword", "do-not-store-here", "unknown setting"),
+        ("server_name", "x" * 101, "must be at most 100 characters"),
     ],
 )
 def test_update_rejects_invalid_or_secret_values(
@@ -317,3 +318,13 @@ def test_root_command_exposes_settings_help() -> None:
     assert "show" in completed.stdout
     assert "plan" in completed.stdout
     assert "apply" in completed.stdout
+
+
+def test_discord_registration_exposes_guided_settings_panel() -> None:
+    project_root = Path(__file__).resolve().parents[2]
+    registration_script = (project_root / "scripts" / "register-discord-commands.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'name:"configurar"' in registration_script
+    assert "painel guiado de configurações" in registration_script

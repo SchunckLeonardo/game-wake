@@ -21,6 +21,9 @@ install -d "$build_dir"
   --only-binary=:all:
 
 install -m 0644 "$project_root"/lambda/*.py "$build_dir"/
+install -m 0644 \
+  "$project_root/shared/palworld_settings_catalog.py" \
+  "$build_dir/palworld_settings_catalog.py"
 find "$build_dir" -type d -name '__pycache__' -prune -exec rm -rf {} +
 find "$build_dir" -exec touch -t 198001010000 {} +
 (

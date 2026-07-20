@@ -29,6 +29,7 @@ locals {
     server_password_parameter_name        = aws_ssm_parameter.server_password.name
     admin_password_parameter_name         = aws_ssm_parameter.admin_password.name
     palworld_config_parameter_name        = aws_ssm_parameter.palworld_config.name
+    palworld_overrides_parameter_name     = aws_ssm_parameter.palworld_settings_overrides.name
     discord_webhook_parameter_name        = aws_ssm_parameter.discord_webhook_url.name
     server_status_parameter_name          = aws_ssm_parameter.server_status.name
     s3_backup_uri                         = local.s3_backup_uri

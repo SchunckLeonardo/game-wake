@@ -32,8 +32,8 @@ jobs:
 
       - name: Python lint and format check
         run: |
-          python -m ruff check lambda server
-          python -m ruff format --check lambda server
+          python -m ruff check lambda server scripts shared palworld
+          python -m ruff format --check lambda server scripts shared palworld
 
       - name: Install ShellCheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck

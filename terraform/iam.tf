@@ -29,6 +29,7 @@ data "aws_iam_policy_document" "ec2_runtime" {
     ]
     resources = [
       aws_ssm_parameter.palworld_config.arn,
+      aws_ssm_parameter.palworld_settings_overrides.arn,
       aws_ssm_parameter.discord_webhook_url.arn,
       aws_ssm_parameter.server_password.arn,
       aws_ssm_parameter.admin_password.arn,
@@ -146,14 +147,24 @@ data "aws_iam_policy_document" "lambda_runtime" {
   }
 
   statement {
-    sid    = "ReadOnlyRuntimeStatus"
+    sid    = "ReadOnlyRuntimeConfiguration"
     effect = "Allow"
     actions = [
       "ssm:GetParameter",
+      "ssm:GetParameters",
     ]
     resources = [
       aws_ssm_parameter.server_status.arn,
+      aws_ssm_parameter.palworld_config.arn,
+      aws_ssm_parameter.palworld_settings_overrides.arn,
     ]
+  }
+
+  statement {
+    sid       = "WriteOnlyPalworldSettingsOverrides"
+    effect    = "Allow"
+    actions   = ["ssm:PutParameter"]
+    resources = [aws_ssm_parameter.palworld_settings_overrides.arn]
   }
 
   statement {

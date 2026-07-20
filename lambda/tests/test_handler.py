@@ -190,7 +190,7 @@ def test_lambda_handler_returns_controlled_aws_error(make_event, config, monkeyp
     monkeypatch.setattr(
         handler,
         "_runtime_services",
-        lambda: (StaticConfigProvider(config), FailingService()),
+        lambda: (StaticConfigProvider(config), FailingService(), object()),
     )
 
     response = handler.lambda_handler(make_event("status"), None)
@@ -213,6 +213,8 @@ def test_runtime_config_does_not_fetch_parameter_store(monkeypatch) -> None:
     monkeypatch.setenv("AWS_REGION", "us-east-1")
     monkeypatch.setenv("PALWORLD_INSTANCE_ID", "i-123")
     monkeypatch.setenv("PALWORLD_STATUS_PARAMETER_NAME", "/palworld/status")
+    monkeypatch.setenv("PALWORLD_CONFIG_PARAMETER_NAME", "/palworld/config")
+    monkeypatch.setenv("PALWORLD_OVERRIDES_PARAMETER_NAME", "/palworld/settings-overrides")
     monkeypatch.setenv("DISCORD_CONFIG_PARAMETER_NAME", "/palworld/discord/config")
     monkeypatch.setenv(
         "DISCORD_CONFIG_JSON",
@@ -228,7 +230,7 @@ def test_runtime_config_does_not_fetch_parameter_store(monkeypatch) -> None:
     monkeypatch.setattr(handler.boto3, "client", fake_client)
     monkeypatch.setattr(handler, "_runtime", None)
 
-    provider, _service = handler._runtime_services()
+    provider, _service, _settings = handler._runtime_services()
     config = provider.get()
 
     assert config.guild_id == "guild-1"

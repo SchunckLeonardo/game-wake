@@ -61,6 +61,7 @@ LOCAL_BACKUP_RETENTION_DAYS=${local_backup_retention_days}
 SERVER_PASSWORD_PARAMETER_NAME=${server_password_parameter_name}
 ADMIN_PASSWORD_PARAMETER_NAME=${admin_password_parameter_name}
 PALWORLD_CONFIG_PARAMETER_NAME=${palworld_config_parameter_name}
+PALWORLD_OVERRIDES_PARAMETER_NAME=${palworld_overrides_parameter_name}
 DISCORD_WEBHOOK_PARAMETER_NAME=${discord_webhook_parameter_name}
 STATUS_PARAMETER_NAME=${server_status_parameter_name}
 S3_BACKUP_URI=${s3_backup_uri}

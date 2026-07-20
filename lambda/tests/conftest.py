@@ -32,6 +32,7 @@ class FakeEC2Service:
         self.snapshot = snapshot
         self.started = False
         self.shutdown_force: bool | None = None
+        self.settings_activation_requested = False
 
     def describe(self) -> InstanceStatus:
         return self.status
@@ -42,6 +43,12 @@ class FakeEC2Service:
     def request_safe_shutdown(self, *, force: bool = False) -> str:
         self.shutdown_force = force
         return "12345678-aaaa-bbbb-cccc-123456789012"
+
+    def request_settings_activation(self) -> str:
+        if self.status.state != "running":
+            raise RuntimeError("instance is not running")
+        self.settings_activation_requested = True
+        return "87654321-aaaa-bbbb-cccc-123456789012"
 
     def read_game_snapshot(self) -> dict[str, Any] | None:
         return self.snapshot
@@ -73,6 +80,7 @@ def make_event(signing_key: SigningKey):
         roles: list[str] | None = None,
         permissions: str = "0",
         options: list[dict[str, Any]] | None = None,
+        interaction_data: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         interaction: dict[str, Any] = {"type": interaction_type}
         if interaction_type == 2:
@@ -88,6 +96,18 @@ def make_event(signing_key: SigningKey):
                         "permissions": permissions,
                     },
                     "data": {"name": "palworld", "options": [subcommand]},
+                }
+            )
+        elif interaction_type in {3, 5}:
+            interaction.update(
+                {
+                    "guild_id": guild_id,
+                    "member": {
+                        "user": {"id": user_id},
+                        "roles": roles or [],
+                        "permissions": permissions,
+                    },
+                    "data": interaction_data or {},
                 }
             )
         body = json.dumps(interaction, separators=(",", ":")).encode()

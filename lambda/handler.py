@@ -13,15 +13,19 @@ from config_service import DiscordConfig, EnvironmentConfigProvider
 from discord_signature import SignatureValidationError, verify_discord_signature
 from ec2_service import EC2Service, human_uptime
 from response_service import message, plain_error, pong
+from settings_interactions import SettingsInteractionController, is_settings_interaction
+from settings_service import ParameterSettingsService
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
 
 PING = 1
 APPLICATION_COMMAND = 2
+MESSAGE_COMPONENT = 3
+MODAL_SUBMIT = 5
 ADMINISTRATOR_PERMISSION = 1 << 3
 
-_runtime: tuple[EnvironmentConfigProvider, EC2Service] | None = None
+_runtime: tuple[EnvironmentConfigProvider, EC2Service, ParameterSettingsService] | None = None
 
 
 def _structured_log(event_name: str, **fields: Any) -> None:
@@ -33,7 +37,7 @@ def _raw_body(event: dict[str, Any]) -> bytes:
     return base64.b64decode(body) if event.get("isBase64Encoded") else body.encode("utf-8")
 
 
-def _runtime_services() -> tuple[EnvironmentConfigProvider, EC2Service]:
+def _runtime_services() -> tuple[EnvironmentConfigProvider, EC2Service, ParameterSettingsService]:
     global _runtime
     if _runtime is None:
         region = os.environ["AWS_REGION"]
@@ -43,6 +47,14 @@ def _runtime_services() -> tuple[EnvironmentConfigProvider, EC2Service]:
             retries={"total_max_attempts": 1, "mode": "standard"},
         )
         ec2 = boto3.client("ec2", region_name=region, config=client_config)
+        ssm_client = None
+
+        def get_ssm_client():
+            nonlocal ssm_client
+            if ssm_client is None:
+                ssm_client = boto3.client("ssm", region_name=region, config=client_config)
+            return ssm_client
+
         _runtime = (
             EnvironmentConfigProvider(os.environ["DISCORD_CONFIG_JSON"]),
             EC2Service(
@@ -50,9 +62,12 @@ def _runtime_services() -> tuple[EnvironmentConfigProvider, EC2Service]:
                 None,
                 os.environ["PALWORLD_INSTANCE_ID"],
                 os.environ["PALWORLD_STATUS_PARAMETER_NAME"],
-                ssm_client_factory=lambda: boto3.client(
-                    "ssm", region_name=region, config=client_config
-                ),
+                ssm_client_factory=get_ssm_client,
+            ),
+            ParameterSettingsService(
+                get_ssm_client,
+                os.environ["PALWORLD_CONFIG_PARAMETER_NAME"],
+                os.environ["PALWORLD_OVERRIDES_PARAMETER_NAME"],
             ),
         )
     return _runtime
@@ -221,13 +236,17 @@ def _handle_help() -> dict[str, Any]:
         "`/palworld status` — mostra EC2, endereço e jogadores quando disponíveis.\n"
         "`/palworld desligar` — salva e desliga somente após uma verificação segura.\n"
         "`/palworld desligar forcar:true` — uso exclusivo de administradores.\n"
+        "`/palworld configurar` — abre o painel guiado de configurações.\n"
         "`/palworld ajuda` — exibe esta ajuda.",
         ephemeral=True,
     )
 
 
 def process_event(
-    event: dict[str, Any], config_provider: EnvironmentConfigProvider, service: EC2Service
+    event: dict[str, Any],
+    config_provider: EnvironmentConfigProvider,
+    service: EC2Service,
+    settings_service: ParameterSettingsService | None = None,
 ) -> dict[str, Any]:
     raw_body = _raw_body(event)
     config = config_provider.get()
@@ -240,12 +259,20 @@ def process_event(
 
     if interaction.get("type") == PING:
         return pong()
-    if interaction.get("type") != APPLICATION_COMMAND:
+    interaction_type = interaction.get("type")
+    if interaction_type not in {APPLICATION_COMMAND, MESSAGE_COMPONENT, MODAL_SUBMIT}:
         return message("Tipo de interação não suportado.", ephemeral=True)
     if str(interaction.get("guild_id") or "") != config.guild_id:
         return message("⛔ Este servidor Discord não está autorizado.", ephemeral=True)
     if not _authorized(interaction, config):
         return message("⛔ Você não tem permissão para controlar o servidor.", ephemeral=True)
+
+    if is_settings_interaction(interaction):
+        if settings_service is None:
+            return message("Configuração pelo Discord indisponível.", ephemeral=True)
+        return SettingsInteractionController(settings_service, service).handle(interaction)
+    if interaction_type != APPLICATION_COMMAND:
+        return message("Interação desconhecida.", ephemeral=True)
 
     command, args = _subcommand(interaction)
     _structured_log("command_received", command=command, guild_id=interaction.get("guild_id"))
@@ -257,13 +284,17 @@ def process_event(
         return _handle_shutdown(interaction, service, args)
     if command == "ajuda":
         return _handle_help()
+    if command == "configurar":
+        if settings_service is None:
+            return message("Configuração pelo Discord indisponível.", ephemeral=True)
+        return SettingsInteractionController(settings_service, service).handle(interaction)
     return message("Comando desconhecido. Use `/palworld ajuda`.", ephemeral=True)
 
 
 def lambda_handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
     try:
-        config_provider, service = _runtime_services()
-        return process_event(event, config_provider, service)
+        config_provider, service, settings_service = _runtime_services()
+        return process_event(event, config_provider, service, settings_service)
     except SignatureValidationError as exc:
         _structured_log("invalid_signature", reason=str(exc))
         return plain_error(401, "assinatura invalida")

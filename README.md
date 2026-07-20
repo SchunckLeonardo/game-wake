@@ -14,8 +14,8 @@ SSH port by default.
 
 ## What is implemented
 
-- `/palworld ligar`, `/palworld status`, `/palworld desligar`, and `/palworld ajuda` commands in
-  Portuguese;
+- `/palworld ligar`, `/palworld status`, `/palworld desligar`, `/palworld configurar`, and
+  `/palworld ajuda` commands in Portuguese;
 - Ed25519 verification over the timestamp and raw HTTP body before parsing JSON;
 - allowlists by Discord Guild ID and by user or role;
 - Discord `PING` support and short initial Lambda responses;
@@ -30,6 +30,8 @@ SSH port by default.
 - optional private, encrypted, versioned S3 storage with lifecycle rules, disabled by default;
 - Session Manager administration without depending on SSH;
 - an interactive `./palworld settings` assistant for server and gameplay configuration;
+- a native Discord settings panel with a select menu, guided modals, official value guidance, and
+  a direct link to Pocketpair documentation;
 - Python tests, Ruff, ShellCheck, Terraform fmt/validate, and OIDC GitHub Actions workflows.
 
 ## Architecture
@@ -46,7 +48,8 @@ Lambda Function URL (AuthType NONE)
 AWS Lambda Python 3.12
         ├── Describe/Start the single EC2 instance
         ├── read runtime status from Parameter Store
-        └── SSM Run Command for safe shutdown
+        ├── read base settings and write isolated Discord overrides
+        └── SSM Run Command for safe shutdown and settings activation
                 ↓
 EC2 Ubuntu 24.04 + systemd + Palworld
 ```
@@ -106,8 +109,9 @@ script running on EC2 always checks the connected players again immediately befo
    the REST API, save, or backup cancels shutdown.
 6. Empty `allowed_user_ids` and `allowed_role_ids` deny everyone by default.
 7. EC2 uses an Instance Profile. No AWS access key is stored on disk.
-8. Gameplay settings contain no secrets and live in a local, Git-ignored JSON document. Secrets
-   remain separate in Parameter Store.
+8. Gameplay settings contain no secrets. The repository base lives in a local, Git-ignored JSON
+   document, while Discord writes only allowlisted fields to a separate non-secret Parameter Store
+   override. Secrets remain separate and cannot be edited by the panel.
 
 ## Repository layout
 
@@ -141,6 +145,8 @@ script running on EC2 always checks the connected players again immediately befo
 │   ├── config_service.py
 │   ├── ec2_service.py
 │   ├── response_service.py
+│   ├── settings_service.py
+│   ├── settings_interactions.py
 │   ├── requirements.txt
 │   ├── requirements-dev.txt
 │   └── tests/
@@ -160,10 +166,13 @@ script running on EC2 always checks the connected players again immediately befo
 │   ├── palworld_settings.py
 │   ├── package-lambda.sh
 │   ├── register-discord-commands.sh
+│   ├── update-runtime.sh
 │   ├── configure-secrets.sh
 │   ├── deploy.sh
 │   ├── destroy.sh
 │   └── validate.sh
+├── shared/
+│   └── palworld_settings_catalog.py
 ├── docs/research/official-platform-facts.md
 └── .github/workflows/
     ├── tests.yml
@@ -390,9 +399,10 @@ To publish a change without restarting a running server:
 ./palworld settings apply --activate next-start
 ```
 
-The local file is the single editing interface for gameplay values. Terraform converts it to the
-non-secret `/<project>/<environment>/palworld/config` parameter. Every service start regenerates the
-effective `PalWorldSettings.ini` from the installed official default.
+The local file is the base source for gameplay values. Terraform converts it to the non-secret
+`/<project>/<environment>/palworld/config` parameter. Discord overrides are stored separately at
+`/<project>/<environment>/palworld/settings-overrides`. Every service start merges base plus
+overrides and regenerates the effective `PalWorldSettings.ini` from the installed official default.
 
 Do not place `ServerPassword` or `AdminPassword` in the JSON document. The assistant rejects unknown
 fields, while the passwords continue to be read independently from `SecureString` parameters.
@@ -420,6 +430,45 @@ The project also enforces `bAllowEnhanceStat_Stamina=True`,
 `bAllowEnhanceStat_Weight=True`, `bIsUseBackupSaveData=True`, `RESTAPIEnabled=True`,
 `RCONEnabled=False`, and the private REST API port. `PublicPort` is written to the INI but does not
 change the listener; the real port is the `-port` process argument.
+
+## Configure Palworld from Discord
+
+Run:
+
+```text
+/palworld configurar
+```
+
+The command opens an ephemeral panel containing every effective value. Values marked **Discord**
+override the repository base. Select one setting to open a modal that contains:
+
+- the current value and its source;
+- the exact value format accepted by this project;
+- Pocketpair's description of the setting;
+- a direct link to the
+  [official Palworld configuration guide](https://docs.palworldgame.com/settings-and-operation/configuration/).
+
+The accepted values are deliberately honest about what Pocketpair publishes:
+
+| Setting type | Accepted by the panel | Official limit status |
+|---|---|---|
+| `ServerName` | Non-empty text, up to the project's 100-character safety limit | Pocketpair publishes no own length limit |
+| `ServerDescription` | Text or empty text, up to the project's 500-character safety limit | Pocketpair publishes no own length limit |
+| `ServerPlayerMaxNum` | Integer greater than or equal to `1` | Pocketpair publishes no maximum |
+| All exposed rate/multiplier settings | Decimal greater than `0`; dot or comma is accepted | Pocketpair publishes no supported range or maximum |
+| `DeathPenalty` | `None`, `Item`, `ItemAndEquipment`, or `All` | Closed list documented by Pocketpair |
+
+`None` drops nothing. `Item` drops items except equipment. `ItemAndEquipment` drops items and
+equipment. `All` also drops the Pals in the player's team. The modal presents these four values as
+a dropdown instead of free text.
+
+Enter `PADRAO` in a text modal, or choose **Padrão do repositório** in the death-penalty dropdown,
+to remove that Discord override. Passwords, ports, IAM settings, and other infrastructure values do
+not appear in the panel.
+
+When the server is stopped, a change is applied on the next start. When it is running, Lambda
+requests the existing fail-closed stop/save/backup/restart flow. Connected players or an
+inconclusive player query cancel the restart; the override remains pending for the next safe start.
 
 ## First deployment: exact sequence
 
@@ -534,6 +583,7 @@ In the Discord channel:
 
 ```text
 /palworld status
+/palworld configurar
 /palworld ligar
 ```
 
@@ -572,6 +622,13 @@ Lambda reads the snapshot for a quick response and sends a Run Command. On EC2, 
 
 `forcar:true` requires the Discord Administrator permission. It still attempts save and backup but
 can continue after failures. Use it only in an emergency.
+
+### `/palworld configurar`
+
+Opens the private settings panel, shows base and Discord-sourced values, and guides the user through
+one change at a time. Only the same allowlisted users and roles that can control the server may use
+the panel or submit its components and modals. Each submission is validated against the shared
+catalog before Parameter Store is updated.
 
 ### `/palworld ajuda`
 
@@ -657,6 +714,24 @@ sudo systemctl restart palworld-notify.service
 `--update-only` refuses to update while the unit is active. Save data lives under
 `/var/lib/palworld/saved`, outside the updated `/opt/palworld` installation tree.
 
+## Upgrade an existing deployment for Discord settings
+
+Fresh instances receive the override-aware runtime during user-data. Existing instances deliberately
+ignore later user-data changes, so update the installed configuration loader once after applying
+this Terraform change:
+
+```bash
+./scripts/deploy.sh plan
+./scripts/deploy.sh apply
+./scripts/update-runtime.sh
+./scripts/register-discord-commands.sh
+```
+
+`update-runtime.sh` uses Session Manager and never requires SSH. If the instance was stopped, the
+script starts it temporarily, installs the loader, and returns it to `stopped` through the safe
+player/save/backup flow. If players connect or the safety check fails, it leaves the instance
+running and reports the condition instead of forcing a shutdown.
+
 ## Backups
 
 `PalWorldSettings.ini` is generated by copying the defaults from the installed version and replacing
@@ -740,7 +815,8 @@ terraform -chdir=terraform validate
 Covered behavior includes valid and invalid signatures, missing headers, PING, start from stopped or
 running, intermediate EC2 states, status, shutdown, connected players, forced administrator
 shutdown, user/role/guild authorization, AWS errors, single-instance targeting, webhook formatting,
-settings bootstrapping and validation, canonical persistence, and the interactive assistant.
+settings bootstrapping and validation, canonical persistence, the interactive assistant, the
+Discord panel and modals, allowlisted override persistence, and fail-closed settings activation.
 
 A real `terraform plan` requires AWS credentials and valid Discord values. `terraform validate`
 creates no resources.

@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
 import re
 import shutil
@@ -16,174 +15,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from shared.palworld_settings_catalog import (
+    FIELDS,
+    FIELDS_BY_KEY,
+    SCHEMA_VERSION,
+    SECTIONS,
+    SettingField,
+    SettingsValidationError,
+)
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SETTINGS_PATH = PROJECT_ROOT / "config" / "palworld-settings.json"
 DEFAULT_TEMPLATE_PATH = PROJECT_ROOT / "config" / "palworld-settings.json.example"
-SCHEMA_VERSION = 1
-
-
-class SettingsValidationError(ValueError):
-    """Raised when a settings document cannot be safely used."""
-
-
-@dataclass(frozen=True)
-class SettingField:
-    key: str
-    ini_key: str
-    label: str
-    section: str
-    value_type: str
-    minimum: float | None = None
-    choices: tuple[str, ...] = ()
-    allow_empty: bool = False
-
-    def parse(self, value: object) -> str | int | float:
-        if self.value_type == "string":
-            if not isinstance(value, str):
-                raise SettingsValidationError(f"{self.label} must be text")
-            parsed = value.strip() if not self.allow_empty else value
-            if not parsed and not self.allow_empty:
-                raise SettingsValidationError(f"{self.label} must not be empty")
-            return parsed
-
-        if self.value_type == "choice":
-            if not isinstance(value, str):
-                raise SettingsValidationError(
-                    f"{self.label} must be one of: {', '.join(self.choices)}"
-                )
-            choices_by_case = {choice.casefold(): choice for choice in self.choices}
-            try:
-                return choices_by_case[value.strip().casefold()]
-            except KeyError as error:
-                raise SettingsValidationError(
-                    f"{self.label} must be one of: {', '.join(self.choices)}"
-                ) from error
-
-        if isinstance(value, bool):
-            raise SettingsValidationError(f"{self.label} must be a number")
-
-        if self.value_type == "integer":
-            if isinstance(value, int):
-                parsed_number = value
-            elif isinstance(value, str):
-                try:
-                    parsed_number = int(value.strip())
-                except ValueError as error:
-                    raise SettingsValidationError(f"{self.label} must be a whole number") from error
-            else:
-                raise SettingsValidationError(f"{self.label} must be a whole number")
-            if self.minimum is not None and parsed_number < self.minimum:
-                raise SettingsValidationError(f"{self.label} must be at least {int(self.minimum)}")
-            return parsed_number
-
-        if self.value_type == "number":
-            if isinstance(value, int | float):
-                parsed_float = float(value)
-            elif isinstance(value, str):
-                normalized = value.strip().replace(",", ".")
-                try:
-                    parsed_float = float(normalized)
-                except ValueError as error:
-                    raise SettingsValidationError(f"{self.label} must be a number") from error
-            else:
-                raise SettingsValidationError(f"{self.label} must be a number")
-            if not math.isfinite(parsed_float):
-                raise SettingsValidationError(f"{self.label} must be a finite number")
-            if self.minimum is not None and parsed_float <= self.minimum:
-                raise SettingsValidationError(f"{self.label} must be greater than {self.minimum:g}")
-            return parsed_float
-
-        raise RuntimeError(f"unsupported field type: {self.value_type}")
-
-
-FIELDS: tuple[SettingField, ...] = (
-    SettingField("server_name", "ServerName", "Server name", "Server", "string"),
-    SettingField(
-        "server_description",
-        "ServerDescription",
-        "Server description",
-        "Server",
-        "string",
-        allow_empty=True,
-    ),
-    SettingField("max_players", "ServerPlayerMaxNum", "Maximum players", "Server", "integer", 1),
-    SettingField("exp_rate", "ExpRate", "Experience rate", "Gameplay", "number", 0),
-    SettingField(
-        "collection_drop_rate",
-        "CollectionDropRate",
-        "Collection drop rate",
-        "Gameplay",
-        "number",
-        0,
-    ),
-    SettingField("pal_spawn_rate", "PalSpawnNumRate", "Pal spawn rate", "Gameplay", "number", 0),
-    SettingField(
-        "death_penalty",
-        "DeathPenalty",
-        "Death penalty",
-        "Gameplay",
-        "choice",
-        choices=("None", "Item", "ItemAndEquipment", "All"),
-    ),
-    SettingField(
-        "pal_damage_attack_rate",
-        "PalDamageRateAttack",
-        "Pal attack damage rate",
-        "Damage",
-        "number",
-        0,
-    ),
-    SettingField(
-        "pal_damage_defense_rate",
-        "PalDamageRateDefense",
-        "Pal received damage rate",
-        "Damage",
-        "number",
-        0,
-    ),
-    SettingField(
-        "player_damage_attack_rate",
-        "PlayerDamageRateAttack",
-        "Player attack damage rate",
-        "Damage",
-        "number",
-        0,
-    ),
-    SettingField(
-        "player_damage_defense_rate",
-        "PlayerDamageRateDefense",
-        "Player received damage rate",
-        "Damage",
-        "number",
-        0,
-    ),
-    SettingField(
-        "pal_stamina_decrease_rate",
-        "PalStaminaDecreaceRate",
-        "Pal stamina depletion rate",
-        "Stamina and inventory",
-        "number",
-        0,
-    ),
-    SettingField(
-        "player_stamina_decrease_rate",
-        "PlayerStaminaDecreaceRate",
-        "Player stamina depletion rate",
-        "Stamina and inventory",
-        "number",
-        0,
-    ),
-    SettingField(
-        "item_weight_rate",
-        "ItemWeightRate",
-        "Item weight rate",
-        "Stamina and inventory",
-        "number",
-        0,
-    ),
-)
-FIELDS_BY_KEY = {field.key: field for field in FIELDS}
-SECTIONS = tuple(dict.fromkeys(field.section for field in FIELDS))
 LEGACY_TFVARS_KEYS = {
     "palworld_server_name": "server_name",
     "palworld_server_description": "server_description",

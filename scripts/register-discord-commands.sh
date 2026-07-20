@@ -37,6 +37,11 @@ payload=$(jq -cn '[
           }
         ]
       },
+      {
+        type:1,
+        name:"configurar",
+        description:"Abre o painel guiado de configurações do servidor"
+      },
       {type:1,name:"ajuda",description:"Explica os comandos disponíveis"}
     ]
   }

@@ -75,6 +75,24 @@ class EC2Service:
         )
         return str(response["Command"]["CommandId"])
 
+    def request_settings_activation(self) -> str:
+        response = self._get_ssm_client().send_command(
+            InstanceIds=[self.instance_id],
+            DocumentName="AWS-RunShellScript",
+            Comment="Apply Palworld settings after a safe player check",
+            TimeoutSeconds=360,
+            Parameters={
+                "commands": [
+                    "set -Eeuo pipefail\n"
+                    "sudo /usr/local/sbin/stop-palworld.sh\n"
+                    "sudo systemctl start palworld.service\n"
+                    "sudo systemctl restart palworld-notify.service"
+                ],
+                "executionTimeout": ["360"],
+            },
+        )
+        return str(response["Command"]["CommandId"])
+
     def read_game_snapshot(self) -> dict[str, Any] | None:
         ssm = self._get_ssm_client()
         try:
