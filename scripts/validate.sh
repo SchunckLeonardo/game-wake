@@ -16,7 +16,26 @@ fi
 bash -n scripts/*.sh server/*.sh terraform/user-data.sh.tpl
 shellcheck scripts/*.sh server/*.sh
 
+if rg -n 'palworld_api POST save[[:space:]]*(>|$)' server/*.sh; then
+  echo "Toda chamada REST de save deve enviar um corpo JSON vazio: '{}'." >&2
+  exit 1
+fi
+
+if ! rg --fixed-strings --line-regexp --quiet 'RuntimeDirectory=palworld' server/palworld.service ||
+  ! rg --fixed-strings --line-regexp --quiet 'RuntimeDirectoryMode=0750' server/palworld.service; then
+  echo "A unit do Palworld deve recriar /run/palworld em todo boot." >&2
+  exit 1
+fi
+
 ./scripts/package-lambda.sh
+lambda_hash_before=$("$python_bin" -c 'import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' build/lambda.zip)
+./scripts/package-lambda.sh
+lambda_hash_after=$("$python_bin" -c 'import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' build/lambda.zip)
+if [[ $lambda_hash_before != "$lambda_hash_after" ]]; then
+  echo "O pacote Lambda nao e reprodutivel entre duas execucoes consecutivas." >&2
+  exit 1
+fi
+
 terraform -chdir=terraform fmt -check -recursive
 if [[ ! -d terraform/.terraform ]]; then
   terraform -chdir=terraform init -backend=false

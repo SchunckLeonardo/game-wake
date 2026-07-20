@@ -436,6 +436,20 @@ variable "lambda_timeout_seconds" {
   }
 }
 
+variable "lambda_reserved_concurrent_executions" {
+  description = "Concorrencia reservada da Lambda; -1 usa o limite nao reservado da conta."
+  type        = number
+  default     = -1
+
+  validation {
+    condition = (
+      var.lambda_reserved_concurrent_executions == -1 ||
+      var.lambda_reserved_concurrent_executions >= 1
+    )
+    error_message = "lambda_reserved_concurrent_executions deve ser -1 ou pelo menos 1."
+  }
+}
+
 variable "lambda_package_path" {
   description = "Caminho relativo ao diretorio terraform para o ZIP gerado."
   type        = string
@@ -447,4 +461,3 @@ variable "extra_tags" {
   type        = map(string)
   default     = {}
 }
-

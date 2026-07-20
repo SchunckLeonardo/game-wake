@@ -18,7 +18,7 @@ flock -n 9 || {
 }
 
 if [[ $skip_save == false ]] && systemctl is-active --quiet palworld.service; then
-  palworld_api POST save >/dev/null
+  palworld_api POST save '{}' >/dev/null
   sleep 3
 fi
 

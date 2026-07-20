@@ -22,9 +22,10 @@ install -d "$build_dir"
 
 install -m 0644 "$project_root"/lambda/*.py "$build_dir"/
 find "$build_dir" -type d -name '__pycache__' -prune -exec rm -rf {} +
+find "$build_dir" -exec touch -t 198001010000 {} +
 (
   cd "$build_dir"
-  zip -q -r "$zip_file" .
+  find . -type f -print | LC_ALL=C sort | zip -q -X "$zip_file" -@
 )
 
 printf 'Pacote Lambda criado: %s\n' "$zip_file"

@@ -20,6 +20,8 @@ KillMode=mixed
 KillSignal=SIGINT
 LimitNOFILE=100000
 UMask=0077
+RuntimeDirectory=palworld
+RuntimeDirectoryMode=0750
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
@@ -28,4 +30,3 @@ ReadWritePaths=/opt/palworld /var/lib/palworld /run/palworld
 
 [Install]
 WantedBy=multi-user.target
-

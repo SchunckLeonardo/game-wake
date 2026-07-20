@@ -31,7 +31,7 @@ while (($#)); do
 done
 
 if [[ $service_stop == true ]]; then
-  palworld_api POST save >/dev/null 2>&1 || palworld_log warning "Save REST indisponivel durante ExecStop"
+  palworld_api POST save '{}' >/dev/null 2>&1 || palworld_log warning "Save REST indisponivel durante ExecStop"
   if [[ -n "$main_pid" ]] && kill -0 "$main_pid" 2>/dev/null; then
     kill -INT "$main_pid"
     for _ in {1..60}; do
@@ -68,7 +68,7 @@ fi
 message="Servidor sera salvo e desligado para economizar custos."
 palworld_api POST announce "$(jq -cn --arg message "$message" '{message:$message}')" >/dev/null 2>&1 || true
 sleep 5
-palworld_api POST save >/dev/null 2>&1 || {
+palworld_api POST save '{}' >/dev/null 2>&1 || {
   if [[ $force == false ]]; then
     palworld_log err "Save REST falhou; desligamento seguro cancelado"
     exit 1

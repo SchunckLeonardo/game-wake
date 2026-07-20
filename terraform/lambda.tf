@@ -11,7 +11,7 @@ resource "aws_lambda_function" "discord" {
 
   timeout                        = var.lambda_timeout_seconds
   memory_size                    = 256
-  reserved_concurrent_executions = 5
+  reserved_concurrent_executions = var.lambda_reserved_concurrent_executions
 
   environment {
     variables = {
@@ -69,4 +69,3 @@ resource "aws_lambda_permission" "function_url_invoke" {
   principal                = "*"
   invoked_via_function_url = true
 }
-

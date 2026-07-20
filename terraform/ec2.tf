@@ -88,7 +88,12 @@ resource "aws_instance" "palworld" {
   tags = { Name = "${local.name_prefix}-server" }
 
   lifecycle {
-    ignore_changes = [ami]
+    ignore_changes = [
+      ami,
+      associate_public_ip_address,
+      # User-data is bootstrap-only; updates to a live server use explicit maintenance.
+      user_data_base64,
+    ]
 
     precondition {
       condition     = ceil(length(base64gzip(local.user_data)) * 3 / 4) <= 16384

@@ -87,7 +87,7 @@ if [[ '${stop_after_initial_bootstrap}' == 'true' ]]; then
     --unit=palworld-initial-bootstrap-stop \
     --description='Stop initial Palworld bootstrap EC2' \
     --on-active=15m \
-    /bin/systemctl poweroff
+    /usr/local/sbin/stop-palworld.sh --shutdown
 fi
 
 echo "Bootstrap Palworld concluido"

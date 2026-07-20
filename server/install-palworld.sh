@@ -19,6 +19,28 @@ install_server_files() {
   install -d -o palworld -g palworld -m 0750 /run/palworld
 }
 
+install_aws_cli() {
+  local aws_path
+  local installer_dir
+  local -a install_args
+
+  aws_path=$(command -v aws || true)
+  if [[ -n "$aws_path" && "$aws_path" != /snap/* ]]; then
+    return
+  fi
+
+  installer_dir=$(mktemp -d)
+  curl --fail --location --silent --show-error \
+    https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip \
+    --output "$installer_dir/awscliv2.zip"
+  unzip -q "$installer_dir/awscliv2.zip" -d "$installer_dir"
+
+  install_args=(--bin-dir /usr/local/bin --install-dir /usr/local/aws-cli)
+  [[ -d /usr/local/aws-cli ]] && install_args+=(--update)
+  "$installer_dir/aws/install" "${install_args[@]}"
+  rm -rf "$installer_dir"
+}
+
 install_dependencies() {
   apt-get update
   apt-get install -y --no-install-recommends software-properties-common
@@ -29,7 +51,6 @@ install_dependencies() {
   echo steam steam/question select "I AGREE" | debconf-set-selections
   echo steam steam/license note '' | debconf-set-selections
   apt-get install -y --no-install-recommends \
-    awscli \
     ca-certificates \
     curl \
     jq \
@@ -37,7 +58,10 @@ install_dependencies() {
     netcat-openbsd \
     steamcmd \
     tar \
+    unzip \
     util-linux
+
+  install_aws_cli
 }
 
 update_palworld() {
