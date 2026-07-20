@@ -1,0 +1,9 @@
+[Unit]
+Description=Create a local and optional S3 Palworld save backup
+After=palworld.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/palworld/palworld.env
+ExecStart=/usr/local/sbin/backup-palworld.sh
+

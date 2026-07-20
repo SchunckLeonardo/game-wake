@@ -1,0 +1,15 @@
+[Unit]
+Description=Wait for Palworld readiness and notify Discord
+Wants=palworld.service
+After=palworld.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/palworld/palworld.env
+ExecStart=/usr/local/sbin/healthcheck.sh
+Restart=on-failure
+RestartSec=60
+
+[Install]
+WantedBy=multi-user.target
+

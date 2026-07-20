@@ -1,0 +1,31 @@
+[Unit]
+Description=Palworld Dedicated Server
+Documentation=https://docs.palworldgame.com/
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=palworld
+Group=palworld
+WorkingDirectory=/opt/palworld
+EnvironmentFile=/etc/palworld/palworld.env
+ExecStart=/usr/local/sbin/start-palworld.sh
+ExecStop=/usr/local/sbin/stop-palworld.sh --service-stop $MAINPID
+Restart=on-failure
+RestartSec=15
+TimeoutStartSec=0
+TimeoutStopSec=120
+KillMode=mixed
+KillSignal=SIGINT
+LimitNOFILE=100000
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/opt/palworld /var/lib/palworld /run/palworld
+
+[Install]
+WantedBy=multi-user.target
+

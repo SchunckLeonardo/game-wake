@@ -1,0 +1,35 @@
+aws_region    = "us-east-1"
+instance_type = "m6a.xlarge"
+
+# Discord Developer Portal (nao sao segredos)
+discord_application_id = "123456789012345678"
+discord_public_key     = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+discord_guild_id       = "123456789012345678"
+
+# Pelo menos uma das listas deve autorizar alguem.
+discord_allowed_user_ids = [
+  "123456789012345678",
+]
+discord_allowed_role_ids = [
+  "234567890123456789",
+]
+
+palworld_allowed_cidr      = "0.0.0.0/0"
+palworld_server_name       = "Palworld dos Amigos"
+palworld_server_description = "Servidor privado iniciado sob demanda pelo Discord"
+palworld_max_players       = 16
+
+autostop_check_minutes = 5
+autostop_idle_minutes  = 20
+
+enable_s3_backup = false
+
+# SSH permanece fechado. Para uma excecao temporaria, configure tambem um Key Pair:
+# enable_ssh       = true
+# ssh_allowed_cidr = "203.0.113.10/32"
+# ssh_key_name     = "minha-chave"
+
+extra_tags = {
+  Owner = "seu-nome"
+}
+

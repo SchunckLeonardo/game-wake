@@ -1,0 +1,77 @@
+name: Terraform plan
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: GitHub Environment containing the AWS OIDC configuration
+        required: true
+        default: production
+        type: environment
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: palworld-terraform-plan
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.environment }}
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_VAR_aws_region: ${{ vars.AWS_REGION }}
+      TF_VAR_discord_application_id: ${{ vars.DISCORD_APPLICATION_ID }}
+      TF_VAR_discord_public_key: ${{ vars.DISCORD_PUBLIC_KEY }}
+      TF_VAR_discord_guild_id: ${{ vars.DISCORD_GUILD_ID }}
+      TF_VAR_discord_allowed_user_ids: ${{ vars.DISCORD_ALLOWED_USER_IDS_JSON }}
+      TF_VAR_discord_allowed_role_ids: ${{ vars.DISCORD_ALLOWED_ROLE_IDS_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.11.4
+
+      - name: Configure AWS credentials with OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Package Lambda
+        run: ./scripts/package-lambda.sh
+
+      - name: Require a persistent remote backend
+        run: |
+          if ! grep -Eq '^[[:space:]]*backend "s3"' terraform/versions.tf; then
+            echo "GitHub runners cannot safely use local Terraform state." >&2
+            echo "Enable and migrate the documented S3 backend before this workflow." >&2
+            exit 1
+          fi
+
+      - name: Initialize Terraform
+        run: terraform -chdir=terraform init
+
+      - name: Plan
+        run: terraform -chdir=terraform plan -input=false -out=tfplan
+
+      - name: Render plan
+        run: terraform -chdir=terraform show -no-color tfplan > terraform/tfplan.txt
+
+      - name: Upload saved plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan
+          path: |
+            terraform/tfplan
+            terraform/tfplan.txt
+          retention-days: 3
+          if-no-files-found: error
