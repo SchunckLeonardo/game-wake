@@ -1,16 +1,24 @@
-name: Tests and static validation
+name: Continuous integration
 
 on:
   pull_request:
+    branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  validate:
+  unit-tests:
+    name: Unit tests
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,38 +32,142 @@ jobs:
             lambda/requirements.txt
             lambda/requirements-dev.txt
 
-      - name: Install Python dependencies
+      - name: Install dependencies
         run: python -m pip install -r lambda/requirements.txt -r lambda/requirements-dev.txt
 
-      - name: Unit tests
+      - name: Run tests
         run: python -m pytest -q
 
-      - name: Python lint and format check
-        run: |
-          python -m ruff check lambda server scripts shared palworld
-          python -m ruff format --check lambda server scripts shared palworld
+  python-quality:
+    name: Python quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: lambda/requirements-dev.txt
+
+      - name: Install quality tools
+        run: python -m pip install -r lambda/requirements-dev.txt
+
+      - name: Ruff lint
+        run: python -m ruff check lambda server scripts shared palworld
+
+      - name: Ruff format check
+        run: python -m ruff format --check lambda server scripts shared palworld
+
+  shell-quality:
+    name: Shell quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Install ShellCheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
 
-      - name: Shell syntax and ShellCheck
+      - name: Check shell syntax
+        run: bash -n scripts/*.sh server/*.sh terraform/user-data.sh.tpl
+
+      - name: Run ShellCheck
+        run: shellcheck scripts/*.sh server/*.sh
+
+      - name: Check server safety invariants
         run: |
-          bash -n scripts/*.sh server/*.sh terraform/user-data.sh.tpl
-          shellcheck scripts/*.sh server/*.sh
+          if rg -n 'palworld_api POST save[[:space:]]*(>|$)' server/*.sh; then
+            echo "Every REST save call must send an empty JSON body: '{}'." >&2
+            exit 1
+          fi
+          rg --fixed-strings --line-regexp --quiet 'RuntimeDirectory=palworld' server/palworld.service
+          rg --fixed-strings --line-regexp --quiet 'RuntimeDirectoryMode=0750' server/palworld.service
+
+  terraform-validation:
+    name: Terraform and Lambda package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.11.4
 
-      - name: Package Lambda
-        run: ./scripts/package-lambda.sh
+      - name: Verify reproducible Lambda package
+        run: |
+          ./scripts/package-lambda.sh
+          cp build/lambda.zip "${RUNNER_TEMP}/lambda-first.zip"
+          ./scripts/package-lambda.sh
+          cmp --silent "${RUNNER_TEMP}/lambda-first.zip" build/lambda.zip
 
-      - name: Terraform format
+      - name: Check Terraform format
         run: terraform -chdir=terraform fmt -check -recursive
 
-      - name: Terraform initialize without backend
+      - name: Initialize Terraform without backend
         run: terraform -chdir=terraform init -backend=false
 
-      - name: Terraform validate
+      - name: Validate Terraform
         run: terraform -chdir=terraform validate
+
+  dependency-review:
+    name: Dependency review
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Review dependency changes
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+
+      - name: No dependency diff outside pull requests
+        if: github.event_name != 'pull_request'
+        run: echo "Dependency review runs against pull request diffs."
+
+  quality-gate:
+    name: Required quality gate
+    if: always()
+    needs:
+      - unit-tests
+      - python-quality
+      - shell-quality
+      - terraform-validation
+      - dependency-review
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      UNIT_TESTS_RESULT: ${{ needs.unit-tests.result }}
+      PYTHON_QUALITY_RESULT: ${{ needs.python-quality.result }}
+      SHELL_QUALITY_RESULT: ${{ needs.shell-quality.result }}
+      TERRAFORM_VALIDATION_RESULT: ${{ needs.terraform-validation.result }}
+      DEPENDENCY_REVIEW_RESULT: ${{ needs.dependency-review.result }}
+    steps:
+      - name: Require every validation to pass
+        run: |
+          for result in \
+            "$UNIT_TESTS_RESULT" \
+            "$PYTHON_QUALITY_RESULT" \
+            "$SHELL_QUALITY_RESULT" \
+            "$TERRAFORM_VALIDATION_RESULT" \
+            "$DEPENDENCY_REVIEW_RESULT"; do
+            if [[ "$result" != success ]]; then
+              echo "A required validation finished with status: $result" >&2
+              exit 1
+            fi
+          done

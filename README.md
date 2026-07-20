@@ -1,5 +1,9 @@
 # palworld-cloud-server
 
+[![Continuous integration](https://github.com/SchunckLeonardo/palworld-server/actions/workflows/tests.yml/badge.svg)](https://github.com/SchunckLeonardo/palworld-server/actions/workflows/tests.yml)
+[![CodeQL](https://github.com/SchunckLeonardo/palworld-server/actions/workflows/codeql.yml/badge.svg)](https://github.com/SchunckLeonardo/palworld-server/actions/workflows/codeql.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 An on-demand Palworld dedicated server on AWS, controlled through Discord slash commands. The EC2
 instance starts only when an authorized user requests it, publishes its dynamic public address when
 the game is ready, and shuts down with a save and backup after remaining empty.
@@ -1066,6 +1070,24 @@ and only then create another destroy plan. Do not set `force_destroy` merely to 
   starts after bootstrap, not before.
 - Local validation cannot prove account quotas, `m6a.xlarge` availability, permissions in another
   AWS account, or behavior of a future Palworld version.
+
+## Pull request policy
+
+The `main` branch is protected on GitHub. Every change must arrive through a pull request with:
+
+- the `Required quality gate` and `CodeQL` checks passing;
+- the branch updated with the latest `main` commit;
+- all review conversations resolved;
+- one approval from the code owner declared in `.github/CODEOWNERS`;
+- no force push, deletion, or administrator bypass.
+
+GitHub does not allow a pull request author to approve their own pull request. If the current code
+owner authors a change, add another trusted code owner before opening the pull request or explicitly
+revise the protection policy.
+
+## License
+
+This project is distributed under the [MIT License](LICENSE).
 
 ## Official references
 
