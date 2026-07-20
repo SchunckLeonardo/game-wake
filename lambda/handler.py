@@ -9,7 +9,7 @@ from typing import Any
 
 import boto3
 from botocore.config import Config
-from config_service import DiscordConfig, ParameterConfigProvider
+from config_service import DiscordConfig, EnvironmentConfigProvider
 from discord_signature import SignatureValidationError, verify_discord_signature
 from ec2_service import EC2Service, human_uptime
 from response_service import message, plain_error, pong
@@ -21,7 +21,7 @@ PING = 1
 APPLICATION_COMMAND = 2
 ADMINISTRATOR_PERMISSION = 1 << 3
 
-_runtime: tuple[ParameterConfigProvider, EC2Service] | None = None
+_runtime: tuple[EnvironmentConfigProvider, EC2Service] | None = None
 
 
 def _structured_log(event_name: str, **fields: Any) -> None:
@@ -33,7 +33,7 @@ def _raw_body(event: dict[str, Any]) -> bytes:
     return base64.b64decode(body) if event.get("isBase64Encoded") else body.encode("utf-8")
 
 
-def _runtime_services() -> tuple[ParameterConfigProvider, EC2Service]:
+def _runtime_services() -> tuple[EnvironmentConfigProvider, EC2Service]:
     global _runtime
     if _runtime is None:
         region = os.environ["AWS_REGION"]
@@ -42,15 +42,17 @@ def _runtime_services() -> tuple[ParameterConfigProvider, EC2Service]:
             read_timeout=1.0,
             retries={"total_max_attempts": 1, "mode": "standard"},
         )
-        ssm = boto3.client("ssm", region_name=region, config=client_config)
         ec2 = boto3.client("ec2", region_name=region, config=client_config)
         _runtime = (
-            ParameterConfigProvider(ssm, os.environ["DISCORD_CONFIG_PARAMETER_NAME"]),
+            EnvironmentConfigProvider(os.environ["DISCORD_CONFIG_JSON"]),
             EC2Service(
                 ec2,
-                ssm,
+                None,
                 os.environ["PALWORLD_INSTANCE_ID"],
                 os.environ["PALWORLD_STATUS_PARAMETER_NAME"],
+                ssm_client_factory=lambda: boto3.client(
+                    "ssm", region_name=region, config=client_config
+                ),
             ),
         )
     return _runtime
@@ -225,7 +227,7 @@ def _handle_help() -> dict[str, Any]:
 
 
 def process_event(
-    event: dict[str, Any], config_provider: ParameterConfigProvider, service: EC2Service
+    event: dict[str, Any], config_provider: EnvironmentConfigProvider, service: EC2Service
 ) -> dict[str, Any]:
     raw_body = _raw_body(event)
     config = config_provider.get()

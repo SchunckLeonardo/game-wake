@@ -330,6 +330,7 @@ Nenhuma delas entra em `terraform.tfvars`.
 | `autostop_idle_minutes` | `20` | vazio antes de desligar |
 | `enable_s3_backup` | `false` | cria bucket privado opcional |
 | `cloudwatch_log_retention_days` | `7` | retenção da Lambda |
+| `lambda_memory_size_mb` | `512` | memória/CPU para responder ao Discord dentro de 3 segundos |
 | `lambda_reserved_concurrent_executions` | `-1` | usa a concorrência não reservada; aumente a quota antes de reservar |
 | `stop_after_initial_bootstrap` | `true` | agenda stop 15 min após o primeiro bootstrap |
 

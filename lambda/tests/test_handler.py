@@ -199,6 +199,43 @@ def test_lambda_handler_returns_controlled_aws_error(make_event, config, monkeyp
     assert json.loads(response["body"]) == {"error": "falha interna ao processar a interacao"}
 
 
+def test_runtime_config_does_not_fetch_parameter_store(monkeypatch) -> None:
+    created_services: list[str] = []
+
+    class UnexpectedSSMClient:
+        def get_parameter(self, **_kwargs):
+            raise AssertionError("Discord config must not be fetched from SSM on the request path")
+
+    def fake_client(service_name, **_kwargs):
+        created_services.append(service_name)
+        return UnexpectedSSMClient() if service_name == "ssm" else object()
+
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+    monkeypatch.setenv("PALWORLD_INSTANCE_ID", "i-123")
+    monkeypatch.setenv("PALWORLD_STATUS_PARAMETER_NAME", "/palworld/status")
+    monkeypatch.setenv("DISCORD_CONFIG_PARAMETER_NAME", "/palworld/discord/config")
+    monkeypatch.setenv(
+        "DISCORD_CONFIG_JSON",
+        json.dumps(
+            {
+                "public_key": "ab" * 32,
+                "guild_id": "guild-1",
+                "allowed_user_ids": ["user-1"],
+                "allowed_role_ids": ["role-1"],
+            }
+        ),
+    )
+    monkeypatch.setattr(handler.boto3, "client", fake_client)
+    monkeypatch.setattr(handler, "_runtime", None)
+
+    provider, _service = handler._runtime_services()
+    config = provider.get()
+
+    assert config.guild_id == "guild-1"
+    assert config.allowed_user_ids == frozenset({"user-1"})
+    assert created_services == ["ec2"]
+
+
 def test_empty_authorization_lists_deny_by_default(make_event, config) -> None:
     locked_config = DiscordConfig(
         public_key=config.public_key,

@@ -26,6 +26,7 @@ enable_s3_backup = false
 
 # Contas novas podem ter limite total Lambda igual a 10, o que impede reservas.
 lambda_reserved_concurrent_executions = -1
+lambda_memory_size_mb                  = 512
 
 # SSH permanece fechado. Para uma excecao temporaria, configure tambem um Key Pair:
 # enable_ssh       = true

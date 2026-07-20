@@ -146,13 +146,12 @@ data "aws_iam_policy_document" "lambda_runtime" {
   }
 
   statement {
-    sid    = "ReadOnlyDiscordConfigAndStatus"
+    sid    = "ReadOnlyRuntimeStatus"
     effect = "Allow"
     actions = [
       "ssm:GetParameter",
     ]
     resources = [
-      aws_ssm_parameter.discord_config.arn,
       aws_ssm_parameter.server_status.arn,
     ]
   }

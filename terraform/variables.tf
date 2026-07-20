@@ -436,6 +436,17 @@ variable "lambda_timeout_seconds" {
   }
 }
 
+variable "lambda_memory_size_mb" {
+  description = "Memoria da Lambda; mais memoria tambem fornece mais CPU para cumprir o prazo do Discord."
+  type        = number
+  default     = 512
+
+  validation {
+    condition     = var.lambda_memory_size_mb >= 256 && var.lambda_memory_size_mb <= 1024
+    error_message = "lambda_memory_size_mb deve ficar entre 256 e 1024 MB."
+  }
+}
+
 variable "lambda_reserved_concurrent_executions" {
   description = "Concorrencia reservada da Lambda; -1 usa o limite nao reservado da conta."
   type        = number

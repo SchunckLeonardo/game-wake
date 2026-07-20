@@ -16,7 +16,10 @@ while ((SECONDS < deadline)); do
     chown palworld:palworld /run/palworld/ready
     publish_status online "$players" "REST API ready" || true
     public_ip=$(current_public_ipv4 || printf 'IP_PUBLICO_INDISPONIVEL')
-    discord_webhook_send "🟢 Servidor Palworld disponível!\n\nEndereço:\n${public_ip}:${PALWORLD_PORT}\n\nO servidor será desligado automaticamente após ficar vazio por ${AUTOSTOP_IDLE_MINUTES} minutos." || true
+    printf -v ready_message \
+      "🟢 **Servidor Palworld disponível!**\n\n🎮 **Endereço para conectar**\n\`%s:%s\`\n\n_Desligamento automático após %s minutos sem jogadores._" \
+      "$public_ip" "$PALWORLD_PORT" "$AUTOSTOP_IDLE_MINUTES"
+    discord_webhook_send "$ready_message" || true
     palworld_log info "Healthcheck concluido; endereco ${public_ip}:${PALWORLD_PORT}"
     exit 0
   fi

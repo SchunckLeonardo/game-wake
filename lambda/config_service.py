@@ -14,6 +14,29 @@ class DiscordConfig:
     allowed_role_ids: frozenset[str]
 
 
+def _parse_config(raw_json: str) -> DiscordConfig:
+    raw = json.loads(raw_json)
+    config = DiscordConfig(
+        public_key=str(raw["public_key"]),
+        guild_id=str(raw["guild_id"]),
+        allowed_user_ids=frozenset(map(str, raw.get("allowed_user_ids", []))),
+        allowed_role_ids=frozenset(map(str, raw.get("allowed_role_ids", []))),
+    )
+    if not config.public_key or not config.guild_id:
+        raise ValueError("configuracao Discord incompleta")
+    return config
+
+
+class EnvironmentConfigProvider:
+    """Configuração local para manter interações abaixo do limite do Discord."""
+
+    def __init__(self, raw_json: str):
+        self._config = _parse_config(raw_json)
+
+    def get(self) -> DiscordConfig:
+        return self._config
+
+
 class ParameterConfigProvider:
     def __init__(self, ssm_client: Any, parameter_name: str, cache_seconds: int = 300):
         self._ssm = ssm_client
@@ -28,15 +51,7 @@ class ParameterConfigProvider:
             return self._cached_config
 
         response = self._ssm.get_parameter(Name=self._parameter_name, WithDecryption=False)
-        raw = json.loads(response["Parameter"]["Value"])
-        config = DiscordConfig(
-            public_key=str(raw["public_key"]),
-            guild_id=str(raw["guild_id"]),
-            allowed_user_ids=frozenset(map(str, raw.get("allowed_user_ids", []))),
-            allowed_role_ids=frozenset(map(str, raw.get("allowed_role_ids", []))),
-        )
-        if not config.public_key or not config.guild_id:
-            raise ValueError("configuracao Discord incompleta")
+        config = _parse_config(response["Parameter"]["Value"])
 
         self._cached_config = config
         self._cached_at = now

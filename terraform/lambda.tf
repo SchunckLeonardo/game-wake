@@ -10,12 +10,12 @@ resource "aws_lambda_function" "discord" {
   source_code_hash = fileexists(local.lambda_package_file) ? filebase64sha256(local.lambda_package_file) : null
 
   timeout                        = var.lambda_timeout_seconds
-  memory_size                    = 256
+  memory_size                    = var.lambda_memory_size_mb
   reserved_concurrent_executions = var.lambda_reserved_concurrent_executions
 
   environment {
     variables = {
-      DISCORD_CONFIG_PARAMETER_NAME  = aws_ssm_parameter.discord_config.name
+      DISCORD_CONFIG_JSON            = local.discord_config_payload
       PALWORLD_INSTANCE_ID           = aws_instance.palworld.id
       PALWORLD_STATUS_PARAMETER_NAME = aws_ssm_parameter.server_status.name
       PALWORLD_PORT                  = tostring(var.palworld_port)
