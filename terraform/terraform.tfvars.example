@@ -14,10 +14,9 @@ discord_allowed_role_ids = [
   "234567890123456789",
 ]
 
-palworld_allowed_cidr      = "0.0.0.0/0"
-palworld_server_name       = "Palworld dos Amigos"
-palworld_server_description = "Servidor privado iniciado sob demanda pelo Discord"
-palworld_max_players       = 16
+palworld_allowed_cidr = "0.0.0.0/0"
+
+# Gameplay and server identity are managed with: ./palworld settings
 
 autostop_check_minutes = 5
 autostop_idle_minutes  = 20

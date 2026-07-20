@@ -26,15 +26,15 @@ test:
 	$(PYTHON) -m pytest -q
 
 lint:
-	$(PYTHON) -m ruff check lambda server
-	$(PYTHON) -m ruff format --check lambda server
+	$(PYTHON) -m ruff check lambda server scripts palworld
+	$(PYTHON) -m ruff format --check lambda server scripts palworld
 
 shellcheck:
 	shellcheck scripts/*.sh server/*.sh
 
 fmt:
 	$(TERRAFORM) -chdir=terraform fmt -recursive
-	$(PYTHON) -m ruff format lambda server
+	$(PYTHON) -m ruff format lambda server scripts palworld
 
 terraform-init:
 	$(TERRAFORM) -chdir=terraform init -backend=false

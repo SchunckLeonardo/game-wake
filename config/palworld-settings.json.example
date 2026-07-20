@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "settings": {
+    "server_name": "Palworld Friends Server",
+    "server_description": "Private server started on demand through Discord",
+    "max_players": 16,
+    "exp_rate": 1.0,
+    "collection_drop_rate": 1.0,
+    "pal_spawn_rate": 1.0,
+    "death_penalty": "Item",
+    "pal_damage_attack_rate": 1.0,
+    "pal_damage_defense_rate": 1.0,
+    "player_damage_attack_rate": 1.0,
+    "player_damage_defense_rate": 1.0,
+    "pal_stamina_decrease_rate": 1.0,
+    "player_stamina_decrease_rate": 1.0,
+    "item_weight_rate": 1.0
+  }
+}

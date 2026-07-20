@@ -1,7 +1,7 @@
 [tool.pytest.ini_options]
 addopts = "--strict-markers"
-testpaths = ["lambda/tests", "server/tests"]
-pythonpath = ["lambda", "server"]
+testpaths = ["lambda/tests", "server/tests", "scripts/tests"]
+pythonpath = ["lambda", "server", "scripts"]
 
 [tool.ruff]
 target-version = "py312"

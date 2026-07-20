@@ -1,0 +1,23 @@
+#!/usr/bin/env python3
+"""Repository command-line entry point."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+
+from palworld_settings import run_settings_cli  # noqa: E402
+
+
+def main() -> int:
+    if len(sys.argv) < 2 or sys.argv[1] != "settings":
+        print("Usage: ./palworld settings [edit|show|validate|plan|apply]", file=sys.stderr)
+        return 64
+    return run_settings_cli(sys.argv[2:])
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

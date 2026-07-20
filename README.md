@@ -1,124 +1,132 @@
 # palworld-cloud-server
 
-Servidor dedicado de Palworld sob demanda na AWS, controlado por comandos slash do Discord. A
-instância EC2 inicia somente quando alguém autorizado pede, publica o IP público dinâmico quando o
-jogo fica pronto e desliga com save e backup depois de permanecer vazia.
+An on-demand Palworld dedicated server on AWS, controlled through Discord slash commands. The EC2
+instance starts only when an authorized user requests it, publishes its dynamic public address when
+the game is ready, and shuts down with a save and backup after remaining empty.
 
-O projeto usa Terraform, EC2 On-Demand, Lambda Function URL, Systems Manager Parameter Store,
-Session Manager, CloudWatch Logs, Python 3.12, Bash, systemd, SteamCMD e GitHub Actions. Não existe
-bot permanente, container, API Gateway, NAT Gateway, Elastic IP, Load Balancer ou SSH aberto por
-padrão. Não há módulo Java, portanto Gradle não é necessário.
+The project uses Terraform, EC2 On-Demand, Lambda Function URL, Systems Manager Parameter Store,
+Session Manager, CloudWatch Logs, Python 3.12, Bash, systemd, SteamCMD, and GitHub Actions. There is
+no permanently running bot, container, API Gateway, NAT Gateway, Elastic IP, Load Balancer, or open
+SSH port by default.
 
-> Este repositório cria infraestrutura cobrável. Ele nunca executa `terraform apply` ou
-> `terraform destroy` automaticamente em push. Revise sempre o plano salvo.
+> This repository creates billable infrastructure. It never runs `terraform apply` or
+> `terraform destroy` automatically after a push. Always review the saved plan.
 
-## O que está implementado
+## What is implemented
 
-- `/palworld ligar`, `/palworld status`, `/palworld desligar` e `/palworld ajuda`, em português;
-- verificação Ed25519 sobre timestamp + corpo HTTP bruto antes de interpretar o JSON;
-- allowlist por Guild ID e por usuário ou cargo do Discord;
-- `PING` do Discord e respostas iniciais dentro do fluxo curto da Lambda;
-- controle de uma única EC2, com tratamento de `pending`, `running`, `stopping`, `stopped`,
-  `shutting-down` e `terminated`;
-- Ubuntu Server 24.04 LTS x86-64 obtido pelo parâmetro público da Canonical;
-- `m6a.xlarge`, EBS `gp3` de 50 GiB e `us-east-1` como defaults configuráveis;
-- IMDSv2 obrigatório, EBS criptografado, shutdown behavior `stop` e IP público efêmero;
-- instalação automática do SteamCMD e Palworld App ID `2394010` sem executar o jogo como root;
-- REST API e RCON sem regra de entrada; somente UDP 8211 é aberto;
-- healthcheck, notificação por webhook, telemetria sem segredos, autostop fail-safe e backup;
-- S3 opcional, privado, criptografado, versionado e com lifecycle; desabilitado por padrão;
-- Session Manager para administração, sem depender de SSH;
-- 28 testes unitários, Ruff, ShellCheck, Terraform fmt/validate e workflows com OIDC.
+- `/palworld ligar`, `/palworld status`, `/palworld desligar`, and `/palworld ajuda` commands in
+  Portuguese;
+- Ed25519 verification over the timestamp and raw HTTP body before parsing JSON;
+- allowlists by Discord Guild ID and by user or role;
+- Discord `PING` support and short initial Lambda responses;
+- one-EC2 control with explicit handling for `pending`, `running`, `stopping`, `stopped`,
+  `shutting-down`, and `terminated`;
+- Ubuntu Server 24.04 LTS x86-64 obtained through Canonical's public parameter;
+- configurable defaults of `m6a.xlarge`, 50 GiB `gp3`, and `us-east-1`;
+- required IMDSv2, encrypted EBS, instance shutdown behavior `stop`, and an ephemeral public IP;
+- automatic SteamCMD and Palworld App ID `2394010` installation without running the game as root;
+- no inbound rule for the REST API or RCON; only UDP 8211 is open;
+- health checks, webhook notifications, secret-free telemetry, fail-safe autostop, and backups;
+- optional private, encrypted, versioned S3 storage with lifecycle rules, disabled by default;
+- Session Manager administration without depending on SSH;
+- an interactive `./palworld settings` assistant for server and gameplay configuration;
+- Python tests, Ruff, ShellCheck, Terraform fmt/validate, and OIDC GitHub Actions workflows.
 
-## Arquitetura
+## Architecture
 
-Fluxo de comando:
+Command flow:
 
 ```text
-Jogador autorizado
+Authorized player
         ↓
 Discord Slash Command
-        ↓ HTTPS + assinatura Ed25519
+        ↓ HTTPS + Ed25519 signature
 Lambda Function URL (AuthType NONE)
         ↓
 AWS Lambda Python 3.12
-        ├── Describe/Start da única EC2
-        ├── leitura do status no Parameter Store
-        └── Run Command SSM para shutdown seguro
+        ├── Describe/Start the single EC2 instance
+        ├── read runtime status from Parameter Store
+        └── SSM Run Command for safe shutdown
                 ↓
 EC2 Ubuntu 24.04 + systemd + Palworld
 ```
 
-Fluxo de boot:
+Boot flow:
 
 ```text
 Discord /palworld ligar
         ↓
-EC2 stopped → pending → running, com novo IP público
+EC2 stopped → pending → running with a new public IP
         ↓
-palworld.service lê configuração e SecureStrings no Parameter Store
+palworld.service reads configuration and SecureStrings from Parameter Store
         ↓
 PalServer.sh -port=8211
         ↓
-healthcheck consulta a REST API em 127.0.0.1:8212
+health check queries the REST API at 127.0.0.1:8212
         ↓
-webhook: 🟢 IP_PUBLICO:8211
+webhook publishes the formatted public address
 ```
 
-Fluxo de autostop:
+Autostop flow:
 
 ```text
-timer systemd
-        ↓ a cada 5 min por padrão
-GET /v1/api/players em localhost
-        ├── jogadores > 0 → zera o contador
-        ├── erro/timeout/401 → não altera contador e não desliga
-        └── zero jogadores por 20 min
+systemd timer
+        ↓ every 5 minutes by default
+GET /v1/api/players on localhost
+        ├── players > 0 → reset idle counter
+        ├── error/timeout/401 → keep counter unchanged and do not shut down
+        └── zero players for 20 minutes
                     ↓
-              anúncio → save → backup → shutdown do Palworld
+              announcement → save → backup → Palworld shutdown
                     ↓
               systemctl poweroff
                     ↓
-              EC2 fica stopped, nunca terminated
+              EC2 becomes stopped, never terminated
 ```
 
-O snapshot gravado em `/<projeto>/<ambiente>/runtime/status` não contém senha, IP de jogador nem
-outro dado pessoal. A Lambda usa esse snapshot somente para enriquecer `/status` e dar um aviso
-rápido. O script executado na EC2 sempre verifica os jogadores novamente antes de desligar.
+The snapshot stored at `/<project>/<environment>/runtime/status` contains no password, player IP,
+or other personal data. Lambda only uses it to enrich `/status` and provide a quick warning. The
+script running on EC2 always checks the connected players again immediately before shutdown.
 
-## Decisões de segurança
+## Security decisions
 
-1. A Function URL precisa ser pública (`AuthType=NONE`), pois o Discord não usa AWS SigV4. Toda
-   interação é autenticada na aplicação com `X-Signature-Ed25519`, `X-Signature-Timestamp` e o corpo
-   original. Requisição inválida recebe HTTP 401.
-2. O Security Group abre somente a porta UDP do jogo. A REST API em 8212 não é exposta, RCON fica
-   desabilitado e SSH fica fechado.
-3. Senha do servidor, senha administrativa e webhook são `SecureString`. O Terraform cria apenas
-   placeholders com o atributo write-only `value_wo`; nem o placeholder nem mudanças posteriores
-   feitas pela CLI são persistidos como valor no state.
-4. A Lambda pode iniciar/parar somente a instância criada neste stack e executar apenas
-   `AWS-RunShellScript` nela. `DescribeInstances` e `GetCommandInvocation` usam `Resource: "*"`
-   porque essas APIs não oferecem resource-level permission; a região é limitada por condition.
-5. `forcar:true` exige o bit Administrator do membro no Discord. Sem `forcar`, erro na REST API,
-   save ou backup cancela o desligamento.
-6. `allowed_user_ids` e `allowed_role_ids` vazios negam todos por padrão.
-7. A EC2 usa Instance Profile; não existem access keys em disco.
+1. The Function URL must be public (`AuthType=NONE`) because Discord does not use AWS SigV4. The
+   application authenticates every interaction with `X-Signature-Ed25519`,
+   `X-Signature-Timestamp`, and the original body. Invalid requests receive HTTP 401.
+2. The Security Group opens only the UDP game port. The REST API on 8212 is not exposed, RCON is
+   disabled, and SSH is closed.
+3. The server password, administrator password, and webhook are `SecureString` parameters.
+   Terraform creates only write-only placeholders using `value_wo`. Neither the placeholder nor
+   later CLI updates are persisted as values in Terraform state.
+4. Lambda can start or stop only the instance created by this stack and can run only
+   `AWS-RunShellScript` on it. `DescribeInstances` and `GetCommandInvocation` require
+   `Resource: "*"` because those actions do not support resource-level permissions; the policy
+   limits the Region through conditions.
+5. `forcar:true` requires the Discord Administrator permission bit. Without `forcar`, an error from
+   the REST API, save, or backup cancels shutdown.
+6. Empty `allowed_user_ids` and `allowed_role_ids` deny everyone by default.
+7. EC2 uses an Instance Profile. No AWS access key is stored on disk.
+8. Gameplay settings contain no secrets and live in a local, Git-ignored JSON document. Secrets
+   remain separate in Parameter Store.
 
-## Estrutura do repositório
+## Repository layout
 
 ```text
 .
 ├── README.md
 ├── Makefile
 ├── pyproject.toml
+├── palworld                       # repository command-line interface
 ├── .env.example
+├── config/
+│   └── palworld-settings.json.example
 ├── terraform/
-│   ├── versions.tf                 # Terraform/provider fixados e backend local
-│   ├── provider.tf                 # provider, tags e payloads de configuração
-│   ├── variables.tf                # tipos, defaults, descriptions e validações
+│   ├── versions.tf               # pinned Terraform/provider and local backend
+│   ├── provider.tf               # provider, tags, and configuration payloads
+│   ├── variables.tf              # infrastructure types, defaults, and validations
 │   ├── terraform.tfvars.example
-│   ├── network.tf                  # VPC, subnet, IGW e rota pública
-│   ├── security-group.tf           # UDP e SSH opcional/restrito
+│   ├── network.tf
+│   ├── security-group.tf
 │   ├── parameter-store.tf
 │   ├── iam.tf
 │   ├── ec2.tf
@@ -138,7 +146,7 @@ rápido. O script executado na EC2 sempre verifica os jogadores novamente antes 
 │   └── tests/
 ├── server/
 │   ├── palworld-common.sh
-│   ├── render_settings.py          # preserva defaults oficiais instalados
+│   ├── render_settings.py        # preserves installed official defaults
 │   ├── install-palworld.sh
 │   ├── configure-palworld.sh
 │   ├── start-palworld.sh
@@ -149,6 +157,7 @@ rápido. O script executado na EC2 sempre verifica os jogadores novamente antes 
 │   ├── healthcheck.sh
 │   └── *.service / *.timer
 ├── scripts/
+│   ├── palworld_settings.py
 │   ├── package-lambda.sh
 │   ├── register-discord-commands.sh
 │   ├── configure-secrets.sh
@@ -162,17 +171,18 @@ rápido. O script executado na EC2 sempre verifica os jogadores novamente antes 
     └── terraform-apply.yml
 ```
 
-## Pré-requisitos
+## Prerequisites
 
-- conta AWS com permissão para criar VPC, EC2, IAM Role/Instance Profile, Lambda, SSM Parameter,
-  CloudWatch Log Group e opcionalmente S3;
-- aplicativo e servidor (guild) Discord administrados por você;
-- AWS CLI v2 autenticada, preferencialmente por IAM Identity Center/SSO;
+- an AWS account allowed to create VPC, EC2, IAM Role/Instance Profile, Lambda, SSM Parameters,
+  CloudWatch Log Groups, and optionally S3;
+- a Discord application and guild that you administer;
+- an authenticated AWS CLI v2, preferably through IAM Identity Center/SSO;
 - Terraform 1.11.x;
-- Python 3.12, `pip`, `zip`, `jq`, `curl`, `shellcheck` e `make`;
-- Git e uma máquina x86-64 ou arm64. O empacotador baixa wheels Linux x86-64 para a Lambda.
+- Python 3.12, `pip`, `zip`, `jq`, `curl`, `shellcheck`, and `make`;
+- Git and an x86-64 or arm64 development machine. The packager downloads Linux x86-64 wheels for
+  Lambda.
 
-Verifique:
+Check your environment:
 
 ```bash
 aws --version
@@ -183,26 +193,27 @@ shellcheck --version
 aws sts get-caller-identity
 ```
 
-### Instalar AWS CLI
+### Install the AWS CLI
 
-Siga a [documentação oficial da AWS CLI v2](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html).
-Depois, use SSO quando sua conta oferecer IAM Identity Center:
+Follow the official
+[AWS CLI v2 installation guide](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html).
+Use SSO when your account provides IAM Identity Center:
 
 ```bash
 aws configure sso
-aws sso login --profile SEU_PROFILE
-export AWS_PROFILE=SEU_PROFILE
+aws sso login --profile YOUR_PROFILE
+export AWS_PROFILE=YOUR_PROFILE
 export AWS_REGION=us-east-1
 aws sts get-caller-identity
 ```
 
-Para uma conta pessoal sem SSO, `aws configure` funciona, mas use um usuário/role dedicado com MFA
-e permissões mínimas. Não coloque access keys no repositório nem em GitHub Secrets quando OIDC for
-possível.
+For a personal account without SSO, `aws configure` works, but use a dedicated user or role with MFA
+and least privilege. Do not place access keys in the repository or GitHub Secrets when OIDC is
+available.
 
-### Instalar Terraform
+### Install Terraform
 
-Use o pacote oficial da HashiCorp. No macOS:
+Use the official HashiCorp package. On macOS:
 
 ```bash
 brew tap hashicorp/tap
@@ -210,96 +221,102 @@ brew install hashicorp/tap/terraform
 terraform version
 ```
 
-No Linux, siga [Install Terraform](https://developer.hashicorp.com/terraform/install). O provider
-AWS está fixado em `6.53.0` e o lockfile deve permanecer versionado.
+On Linux, follow [Install Terraform](https://developer.hashicorp.com/terraform/install). The AWS
+provider is pinned to `6.53.0` and the lockfile should remain versioned.
 
-## AWS Free Plan, Paid Plan e créditos
+## AWS Free Plan, Paid Plan, and credits
 
-`m6a.xlarge` tem 4 vCPU e 16 GiB, capacidade recomendada para este grupo pequeno, mas não está na
-lista atual de tipos EC2 Free Tier eligible. Contas novas no AWS Free account plan podem não ter
-acesso a esse recurso; nesse caso, faça upgrade manual para o Paid account plan em **Billing and
-Cost Management → Account → AWS Free Tier plan**.
+`m6a.xlarge` provides 4 vCPUs and 16 GiB, a reasonable baseline for this small group, but it is not
+currently listed as an EC2 Free Tier eligible type. New AWS Free account plan accounts might not
+have access to it. If necessary, manually upgrade to the Paid account plan under **Billing and Cost
+Management → Account → AWS Free Tier plan**.
 
-Segundo a documentação atual da AWS, um upgrade manual preserva os créditos restantes e os aplica
-às faturas elegíveis até a expiração. Há exceções: entrada em AWS Organizations/Control Tower pode
-fazer os créditos expirarem, e contas antigas seguem regras legadas. Confirme no Billing antes do
-upgrade. Paid Plan significa que uso além dos créditos será cobrado.
+According to the current AWS documentation, a manual upgrade preserves remaining credits and
+applies them to eligible bills until expiration. Exceptions exist: joining AWS Organizations or
+Control Tower can cause credits to expire, and older accounts follow legacy rules. Confirm the
+conditions in Billing before upgrading. A Paid Plan means usage beyond credits is billable.
 
-Fontes: [Choosing an AWS Free Tier plan](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/free-tier-plans.html),
-[Free Tier FAQ](https://aws.amazon.com/free/free-tier-faqs/) e
+Sources: [Choosing an AWS Free Tier plan](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/free-tier-plans.html),
+[Free Tier FAQ](https://aws.amazon.com/free/free-tier-faqs/), and
 [EC2 Free Tier usage](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-free-tier-usage.html).
 
-## Criar e configurar o aplicativo Discord
+## Create and configure the Discord application
 
-### 1. Criar o aplicativo e obter Application ID/Public Key
+### 1. Create the application and obtain its Application ID and Public Key
 
-1. Abra o [Discord Developer Portal](https://discord.com/developers/applications).
-2. Clique em **New Application**, escolha um nome e confirme.
-3. Em **General Information**, copie:
-   - **Application ID** → `discord_application_id` e `DISCORD_APPLICATION_ID`;
+1. Open the [Discord Developer Portal](https://discord.com/developers/applications).
+2. Select **New Application**, choose a name, and confirm.
+3. Under **General Information**, copy:
+   - **Application ID** → `discord_application_id` and `DISCORD_APPLICATION_ID`;
    - **Public Key** → `discord_public_key`.
-4. A Public Key não é segredo. O Bot Token e o webhook são segredos.
+4. The Public Key is not a secret. The Bot Token and webhook URL are secrets.
 
-### 2. Criar o bot e obter o token
+### 2. Create the bot and obtain its token
 
-1. Abra **Bot** e clique em **Add Bot**, se necessário.
-2. Em **Token**, gere/reset o token e copie uma única vez.
-3. Guarde-o somente em `.env` local como `DISCORD_BOT_TOKEN`.
-4. Não são necessários Message Content Intent nem um processo de bot online; o token serve apenas
-   para registrar o comando pela API do Discord.
+1. Open **Bot** and select **Add Bot**, if necessary.
+2. Under **Token**, generate or reset the token and copy it once.
+3. Store it only in the local `.env` file as `DISCORD_BOT_TOKEN`.
+4. Message Content Intent and a permanently online bot process are not required. The token is used
+   only to register commands through the Discord API.
 
-### 3. Instalar o aplicativo na guild
+### 3. Install the application in the guild
 
-Em **Installation** ou **OAuth2 → URL Generator**:
+Under **Installation** or **OAuth2 → URL Generator**:
 
-1. selecione os scopes `applications.commands` e `bot`;
-2. conceda ao bot apenas as permissões mínimas desejadas; os comandos HTTP não exigem Administrator;
-3. abra a URL gerada e escolha sua guild.
+1. select the `applications.commands` and `bot` scopes;
+2. grant only the minimum bot permissions you want; HTTP commands do not require Administrator;
+3. open the generated URL and select your guild.
 
-### 4. Obter Guild ID, User IDs e Role IDs
+### 4. Obtain Guild, User, and Role IDs
 
-No Discord, abra **User Settings → Advanced → Developer Mode**. Depois:
+In Discord, open **User Settings → Advanced → Developer Mode**. Then:
 
-- clique com o botão direito no servidor → **Copy Server ID**;
-- clique no usuário → **Copy User ID**;
-- em Server Settings → Roles, clique no cargo → **Copy Role ID**.
+- right-click the server and select **Copy Server ID**;
+- right-click a user and select **Copy User ID**;
+- under Server Settings → Roles, right-click the role and select **Copy Role ID**.
 
-Preencha ao menos um usuário ou cargo. A Lambda exige também que a interação venha exatamente da
-guild configurada.
+Configure at least one user or role. Lambda also requires the interaction to originate from exactly
+the configured guild.
 
-### 5. Criar o webhook
+### 5. Create the webhook
 
-Na guild, vá ao canal onde os avisos devem aparecer:
+In the guild, open the channel that should receive notifications:
 
 1. **Edit Channel → Integrations → Webhooks → New Webhook**;
-2. escolha o canal, nomeie o webhook e copie a URL;
-3. guarde em `.env` como `DISCORD_WEBHOOK_URL`.
+2. choose the channel, name the webhook, and copy the URL;
+3. store it in `.env` as `DISCORD_WEBHOOK_URL`.
 
-O webhook pertence a um canal fixo. Para que “o endereço será enviado neste canal” seja literal,
-use os comandos nesse mesmo canal. O projeto não persiste interaction tokens de 15 minutos.
+A webhook belongs to one fixed channel. To make “the address will be sent in this channel” literal,
+use the commands in that same channel. The project does not persist 15-minute interaction tokens.
 
-## Configuração local
+## Local configuration
 
-Crie arquivos que são ignorados pelo Git:
+Create the local files ignored by Git:
 
 ```bash
 cp terraform/terraform.tfvars.example terraform/terraform.tfvars
 cp .env.example .env
-chmod 600 .env terraform/terraform.tfvars
+./palworld settings
+chmod 600 .env terraform/terraform.tfvars config/palworld-settings.json
 ```
 
-Edite `terraform/terraform.tfvars` e preencha pelo menos:
+The first `./palworld settings` invocation copies
+`config/palworld-settings.json.example` to `config/palworld-settings.json` and opens the interactive
+assistant. Existing clones are upgraded automatically: supported gameplay values still present in
+`terraform/terraform.tfvars` are imported only when the local JSON file is first created.
+
+Edit `terraform/terraform.tfvars` and configure at least:
 
 ```hcl
-discord_application_id = "SEU_APPLICATION_ID"
-discord_public_key      = "SUA_PUBLIC_KEY_HEX_DE_64_CARACTERES"
-discord_guild_id        = "SUA_GUILD_ID"
+discord_application_id = "YOUR_APPLICATION_ID"
+discord_public_key      = "YOUR_64_CHARACTER_HEX_PUBLIC_KEY"
+discord_guild_id        = "YOUR_GUILD_ID"
 
-discord_allowed_user_ids = ["SEU_USER_ID"]
-discord_allowed_role_ids = ["ROLE_ID_OPCIONAL"]
+discord_allowed_user_ids = ["YOUR_USER_ID"]
+discord_allowed_role_ids = ["OPTIONAL_ROLE_ID"]
 ```
 
-Edite `.env`:
+Edit `.env`:
 
 ```dotenv
 DISCORD_APPLICATION_ID=...
@@ -312,51 +329,103 @@ PALWORLD_SERVER_PASSWORD=...
 PALWORLD_ADMIN_PASSWORD=...
 ```
 
-As senhas devem ser diferentes; a administrativa precisa de pelo menos 12 caracteres no script.
-Nenhuma delas entra em `terraform.tfvars`.
+The two passwords must differ. The configuration script requires at least 12 characters for the
+administrator password. Neither password belongs in `terraform.tfvars` or
+`config/palworld-settings.json`.
 
-### Variáveis principais
+### Main infrastructure variables
 
-| Variável | Default | Efeito |
+| Variable | Default | Effect |
 |---|---:|---|
-| `aws_region` | `us-east-1` | região de todos os recursos |
-| `instance_type` | `m6a.xlarge` | tipo On-Demand x86-64 |
-| `root_volume_size_gib` | `50` | volume raiz gp3 criptografado |
-| `root_volume_delete_on_termination` | `true` | apaga o volume ao destruir a EC2 |
-| `enable_termination_protection` | `false` | proteção opcional contra terminate |
-| `palworld_port` | `8211` | listener real passado a `PalServer.sh -port` |
-| `palworld_allowed_cidr` | `0.0.0.0/0` | origem da conexão UDP; restrinja se puder |
-| `autostop_check_minutes` | `5` | frequência real da consulta a jogadores |
-| `autostop_idle_minutes` | `20` | vazio antes de desligar |
-| `enable_s3_backup` | `false` | cria bucket privado opcional |
-| `cloudwatch_log_retention_days` | `7` | retenção da Lambda |
-| `lambda_memory_size_mb` | `512` | memória/CPU para responder ao Discord dentro de 3 segundos |
-| `lambda_reserved_concurrent_executions` | `-1` | usa a concorrência não reservada; aumente a quota antes de reservar |
-| `stop_after_initial_bootstrap` | `true` | agenda stop 15 min após o primeiro bootstrap |
+| `aws_region` | `us-east-1` | Region for every resource |
+| `instance_type` | `m6a.xlarge` | On-Demand x86-64 instance type |
+| `root_volume_size_gib` | `50` | Encrypted gp3 root volume |
+| `root_volume_delete_on_termination` | `true` | Delete the volume when EC2 is destroyed |
+| `enable_termination_protection` | `false` | Optional terminate protection |
+| `palworld_port` | `8211` | Real listener passed to `PalServer.sh -port` |
+| `palworld_allowed_cidr` | `0.0.0.0/0` | Allowed UDP source; restrict it when possible |
+| `autostop_check_minutes` | `5` | Effective player-query frequency |
+| `autostop_idle_minutes` | `20` | Empty time before shutdown |
+| `enable_s3_backup` | `false` | Create the optional private bucket |
+| `cloudwatch_log_retention_days` | `7` | Lambda log retention |
+| `lambda_memory_size_mb` | `512` | Memory and CPU for the Discord response deadline |
+| `lambda_reserved_concurrent_executions` | `-1` | Use unreserved concurrency |
+| `stop_after_initial_bootstrap` | `true` | Schedule a stop after the first bootstrap |
 
-O timer acorda a cada minuto, mas o script respeita `autostop_check_minutes` antes de consultar a
-API. Isso permite mudar o intervalo no Parameter Store via Terraform sem reescrever a unit.
+The timer wakes every minute, but the script honors `autostop_check_minutes` before querying the
+API. This allows the interval to change through Terraform without rewriting the systemd unit.
 
-### Configurações oficiais de gameplay incluídas
+## Configure `PalWorldSettings.ini` with the assistant
 
-- `ServerName`, `ServerDescription`, `ServerPassword`, `AdminPassword`;
-- `ServerPlayerMaxNum`, `ExpRate`, `CollectionDropRate`, `PalSpawnNumRate`;
-- `DeathPenalty`: `None`, `Item`, `ItemAndEquipment` ou `All`;
-- `PalDamageRateAttack`, `PalDamageRateDefense`;
-- `PlayerDamageRateAttack`, `PlayerDamageRateDefense`;
-- `PalStaminaDecreaceRate`, `PlayerStaminaDecreaceRate` — a grafia oficial é `Decreace`;
-- `ItemWeightRate`, `bAllowEnhanceStat_Stamina`, `bAllowEnhanceStat_Weight`;
-- `bIsUseBackupSaveData=True`, `RESTAPIEnabled=True`, `RESTAPIPort=8212`;
-- `RCONEnabled=False`.
+Run:
 
-`PublicPort` é gravado no INI, mas, oficialmente, não altera o listener. A porta real é o argumento
-`-port`. Não adicione nomes não confirmados sem consultar a documentação da versão instalada.
+```bash
+./palworld settings
+```
 
-## Primeiro deploy: sequência exata
+The assistant groups the supported settings into **Server**, **Gameplay**, **Damage**, and
+**Stamina and inventory**. Press Enter to keep a value, review the diff, and confirm before saving.
 
-Nenhum comando abaixo contém segredo real.
+Useful non-interactive commands:
 
-### 1. Preparar Python e validar tudo
+```bash
+./palworld settings show
+./palworld settings validate
+./palworld settings plan
+./palworld settings apply
+```
+
+- `show` prints the current values with friendly labels.
+- `validate` checks the schema, required keys, numeric values, and `DeathPenalty`.
+- `plan` validates the document and generates the normal saved Terraform plan.
+- `apply` runs the reviewed Terraform flow and then:
+  - if EC2 is stopped, leaves the configuration ready for the next start;
+  - if EC2 is running, sends a safe SSM activation command;
+  - if players are connected or the player query fails, does not stop the game and leaves the
+    change pending for the next safe start.
+
+To publish a change without restarting a running server:
+
+```bash
+./palworld settings apply --activate next-start
+```
+
+The local file is the single editing interface for gameplay values. Terraform converts it to the
+non-secret `/<project>/<environment>/palworld/config` parameter. Every service start regenerates the
+effective `PalWorldSettings.ini` from the installed official default.
+
+Do not place `ServerPassword` or `AdminPassword` in the JSON document. The assistant rejects unknown
+fields, while the passwords continue to be read independently from `SecureString` parameters.
+
+### Official gameplay settings currently exposed
+
+| Assistant label | Official INI key |
+|---|---|
+| Server name | `ServerName` |
+| Server description | `ServerDescription` |
+| Maximum players | `ServerPlayerMaxNum` |
+| Experience rate | `ExpRate` |
+| Collection drop rate | `CollectionDropRate` |
+| Pal spawn rate | `PalSpawnNumRate` |
+| Death penalty | `DeathPenalty` |
+| Pal attack/received damage | `PalDamageRateAttack` / `PalDamageRateDefense` |
+| Player attack/received damage | `PlayerDamageRateAttack` / `PlayerDamageRateDefense` |
+| Pal/player stamina depletion | `PalStaminaDecreaceRate` / `PlayerStaminaDecreaceRate` |
+| Item weight rate | `ItemWeightRate` |
+
+`DeathPenalty` accepts `None`, `Item`, `ItemAndEquipment`, or `All`. The official spelling really is
+`Decreace`. High `PalSpawnNumRate` values can affect performance.
+
+The project also enforces `bAllowEnhanceStat_Stamina=True`,
+`bAllowEnhanceStat_Weight=True`, `bIsUseBackupSaveData=True`, `RESTAPIEnabled=True`,
+`RCONEnabled=False`, and the private REST API port. `PublicPort` is written to the INI but does not
+change the listener; the real port is the `-port` process argument.
+
+## First deployment: exact sequence
+
+No command below contains a real secret.
+
+### 1. Prepare Python and validate everything
 
 ```bash
 python3.12 -m venv .venv
@@ -365,31 +434,31 @@ python -m pip install -r lambda/requirements.txt -r lambda/requirements-dev.txt
 make validate
 ```
 
-`make validate` executa testes, Ruff, `bash -n`, ShellCheck, empacota wheels Linux para a Lambda,
-executa `terraform fmt -check`, `terraform init -backend=false` e `terraform validate`.
+`make validate` runs tests, Ruff, `bash -n`, ShellCheck, deterministic Linux Lambda packaging,
+`terraform fmt -check`, `terraform init -backend=false` when needed, and `terraform validate`.
 
-### 2. Gerar e revisar o plano
+### 2. Generate and review the plan
 
 ```bash
-export AWS_PROFILE=SEU_PROFILE
+export AWS_PROFILE=YOUR_PROFILE
 export AWS_REGION=us-east-1
 aws sts get-caller-identity
 ./scripts/deploy.sh plan
 terraform -chdir=terraform show -no-color tfplan
 ```
 
-Até aqui nenhum recurso foi alterado.
+No resource has changed yet.
 
-### 3. Aplicar somente após revisar
+### 3. Apply only after review
 
 ```bash
 ./scripts/deploy.sh apply
 ```
 
-O script gera um novo saved plan, mostra o conteúdo e exige digitar `APLICAR`. Não use
-`terraform apply -auto-approve` localmente.
+The script creates a new saved plan, displays it, and requires the literal confirmation `APLICAR`.
+Do not use local `terraform apply -auto-approve`.
 
-### 4. Gravar os SecureStrings reais
+### 4. Store the real SecureStrings
 
 ```bash
 set -a
@@ -398,18 +467,18 @@ set +a
 ./scripts/configure-secrets.sh /palworld-cloud-server/prod
 ```
 
-O Terraform cria esses parâmetros com placeholder. O script substitui os três valores sem
-imprimi-los. Se você alterou `project_name` ou `environment`, obtenha o path correto:
+Terraform creates placeholder parameters. The script replaces the three values without printing
+them. If you changed `project_name` or `environment`, get the correct path with:
 
 ```bash
 terraform -chdir=terraform output parameter_store_names
 ```
 
-### 5. Aguardar o bootstrap e confirmar que ficou stopped
+### 5. Wait for bootstrap and confirm that EC2 stopped
 
-O primeiro apply inicia a EC2 para instalar SteamCMD/Palworld. Por padrão, um transient timer faz
-`poweroff` após 15 minutos do término do user-data, evitando deixá-la ociosa. Não use o comando do
-Discord antes de confirmar o primeiro stop.
+The first apply starts EC2 to install SteamCMD and Palworld. By default, a transient timer powers it
+off 15 minutes after user-data finishes, preventing an idle instance. Do not use the Discord start
+command before confirming this first stop.
 
 ```bash
 INSTANCE_ID=$(terraform -chdir=terraform output -raw instance_id)
@@ -417,7 +486,7 @@ aws ec2 wait instance-status-ok --region "$AWS_REGION" --instance-ids "$INSTANCE
 aws ssm start-session --region "$AWS_REGION" --target "$INSTANCE_ID"
 ```
 
-Dentro da sessão, acompanhe:
+Inside the session:
 
 ```bash
 sudo cloud-init status --wait
@@ -425,30 +494,30 @@ sudo journalctl -t palworld-user-data --no-pager
 exit
 ```
 
-Depois aguarde:
+Then wait for the instance to stop:
 
 ```bash
 aws ec2 wait instance-stopped --region "$AWS_REGION" --instance-ids "$INSTANCE_ID"
 ```
 
-### 6. Configurar Interactions Endpoint URL
+### 6. Configure the Interactions Endpoint URL
 
-Obtenha a URL:
+Get the URL:
 
 ```bash
 terraform -chdir=terraform output -raw lambda_function_url
 ```
 
-No Discord Developer Portal:
+In the Discord Developer Portal:
 
-1. abra **General Information**;
-2. cole em **Interactions Endpoint URL**;
-3. salve.
+1. open **General Information**;
+2. paste it into **Interactions Endpoint URL**;
+3. save.
 
-O Discord envia um PING assinado. A Lambda valida e retorna `{"type":1}`. Se a URL não for aceita,
-consulte o troubleshooting de assinatura/logs.
+Discord sends a signed PING. Lambda validates it and returns `{"type":1}`. If Discord rejects the
+URL, see the signature and logging troubleshooting section.
 
-### 7. Registrar comandos na guild
+### 7. Register guild commands
 
 ```bash
 set -a
@@ -457,78 +526,79 @@ set +a
 ./scripts/register-discord-commands.sh
 ```
 
-Comandos de guild normalmente aparecem rapidamente. O Bot Token não é enviado à AWS.
+Guild commands usually appear quickly. The Bot Token is never sent to AWS.
 
-### 8. Primeiro teste funcional
+### 8. Run the first functional test
 
-No canal do Discord:
+In the Discord channel:
 
 ```text
 /palworld status
 /palworld ligar
 ```
 
-Espere a mensagem do webhook e conecte no endereço `IP_PUBLICO:8211`.
+Wait for the webhook message and connect to `PUBLIC_IP:8211`.
 
-## Operação diária
+## Daily operation
 
 ### `/palworld ligar`
 
-- `stopped`: chama `StartInstances` e responde imediatamente;
-- `pending`: informa que já está iniciando;
-- `running`: informa que já está ligada e mostra o IP, se disponível;
-- `stopping`: pede para aguardar;
-- `shutting-down`/`terminated`: não tenta recriar nada.
+- `stopped`: calls `StartInstances` and responds immediately;
+- `pending`: reports that startup is already in progress;
+- `running`: reports that it is already running and includes the IP when available;
+- `stopping`: asks the user to wait;
+- `shutting-down` or `terminated`: does not attempt to recreate anything.
 
-O IP público muda normalmente a cada start porque não existe Elastic IP.
+The public IP normally changes after every start because there is no Elastic IP.
 
 ### `/palworld status`
 
-Mostra estado EC2, IP/porta e uptime. Quando o snapshot da EC2 foi atualizado nos últimos dez
-minutos, mostra estado do serviço e jogadores. Snapshot ausente/desatualizado é exibido como tal,
-sem inferir zero jogadores.
+Displays EC2 state, IP and port, and uptime. When the EC2 snapshot was updated within the last ten
+minutes, it also displays game state and player count. A missing or stale snapshot is shown as such,
+never interpreted as zero players.
 
 ### `/palworld desligar`
 
-A Lambda consulta o snapshot para resposta rápida e envia um Run Command. Na EC2, o script:
+Lambda reads the snapshot for a quick response and sends a Run Command. On EC2, the script:
 
-1. consulta `/players` novamente;
-2. cancela se houver jogadores ou a consulta falhar;
-3. envia anúncio;
-4. chama `/save`;
-5. cria backup;
-6. pede `/shutdown` e para a unit systemd com SIGINT;
-7. espera a unit parar;
-8. executa `poweroff`, que vira estado EC2 `stopped`.
+1. queries `/players` again;
+2. cancels if players are connected or the query fails;
+3. sends an announcement;
+4. calls `/save`;
+5. creates a backup;
+6. requests `/shutdown` and stops the systemd unit with SIGINT;
+7. waits for the unit to stop;
+8. runs `poweroff`, which becomes EC2 state `stopped`.
 
-`forcar:true` exige Administrator do Discord. Ele continua tentando save/backup, mas permite
-prosseguir diante de falhas; use apenas em emergência.
+`forcar:true` requires the Discord Administrator permission. It still attempts save and backup but
+can continue after failures. Use it only in an emergency.
 
 ### `/palworld ajuda`
 
-Mostra os comandos sem divulgar configuração sensível.
+Lists the commands without exposing sensitive configuration.
 
-## Conectar ao Palworld
+## Connect to Palworld
 
-No jogo, use o endereço informado pelo webhook ou `/palworld status`:
+Use the address reported by the webhook or `/palworld status`:
 
 ```text
 203.0.113.10:8211
 ```
 
-Se o CIDR foi restrito, o IP público do jogador precisa estar incluído em
-`palworld_allowed_cidr`. Não confunda TCP com UDP ao testar regras de rede.
+If you restricted the CIDR, the player's public IP must be allowed by `palworld_allowed_cidr`. Do
+not confuse TCP with UDP when testing network rules.
 
-## Administração com Systems Manager
+## Administration through Systems Manager
 
-Não há porta SSH por padrão. Inicie uma sessão:
+SSH is closed by default. Start a session with:
 
 ```bash
 INSTANCE_ID=$(terraform -chdir=terraform output -raw instance_id)
 aws ssm start-session --region us-east-1 --target "$INSTANCE_ID"
 ```
 
-Se a instância estiver stopped, ligue pelo Discord e espere `running`/SSM online. Comandos úteis:
+If the instance is stopped, start it through Discord and wait until it is running and SSM is online.
+Useful commands:
 
 ```bash
 sudo systemctl status palworld.service palworld-notify.service
@@ -539,8 +609,9 @@ sudo journalctl -t palworld-automation -n 200 --no-pager
 sudo cloud-init status --long
 ```
 
-SSH temporário existe apenas como escape hatch. Configure `enable_ssh=true`, um `/32` em
-`ssh_allowed_cidr` e `ssh_key_name`, revise o plan e remova logo depois. `0.0.0.0/0` é rejeitado.
+Temporary SSH exists only as an escape hatch. Set `enable_ssh=true`, use a `/32`
+`ssh_allowed_cidr` and `ssh_key_name`, review the plan, and remove them immediately afterward.
+`0.0.0.0/0` is rejected for SSH.
 
 ## Logs
 
@@ -553,7 +624,7 @@ aws logs tail /aws/lambda/palworld-cloud-server-prod-discord \
   --follow
 ```
 
-EC2, via Session Manager:
+EC2 through Session Manager:
 
 ```bash
 sudo journalctl -u palworld.service --since '1 hour ago'
@@ -562,54 +633,19 @@ sudo journalctl -u palworld-autostop.service --since '1 hour ago'
 sudo journalctl -t palworld-user-data --no-pager
 ```
 
-CloudWatch retém logs da Lambda por sete dias por padrão. O Palworld fica no journald/EBS para não
-adicionar agente e ingestão contínua desnecessários.
+CloudWatch retains Lambda logs for seven days by default. Palworld logs stay in journald and EBS to
+avoid an extra agent and continuous log-ingestion cost.
 
-## Alterar `PalWorldSettings.ini`
+## Update Palworld
 
-Altere as variáveis documentadas em `terraform/terraform.tfvars`, por exemplo:
-
-```hcl
-palworld_exp_rate             = 1.5
-palworld_collection_drop_rate = 1.5
-palworld_spawn_rate           = 1.0
-palworld_death_penalty        = "Item"
-palworld_item_weight_rate     = 0.8
-```
-
-Depois:
-
-```bash
-./scripts/deploy.sh plan
-./scripts/deploy.sh apply
-```
-
-Isso atualiza `/<projeto>/<ambiente>/palworld/config` sem recriar a EC2. A próxima inicialização do
-serviço gera um novo `PalWorldSettings.ini`. Para aplicar imediatamente numa instância ligada:
-
-```bash
-INSTANCE_ID=$(terraform -chdir=terraform output -raw instance_id)
-aws ssm send-command \
-  --region us-east-1 \
-  --instance-ids "$INSTANCE_ID" \
-  --document-name AWS-RunShellScript \
-  --parameters 'commands=["sudo /usr/local/sbin/stop-palworld.sh","sudo systemctl start palworld.service","sudo systemctl restart palworld-notify.service"]'
-```
-
-Esse comando para com verificação de jogadores; se houver alguém online, ele falha sem reiniciar.
-Não edite `DefaultPalWorldSettings.ini`: o arquivo efetivo é
-`/var/lib/palworld/saved/Config/LinuxServer/PalWorldSettings.ini`.
-
-## Atualizar o Palworld
-
-Faça manutenção com jogadores desconectados:
+Perform maintenance only when players are disconnected:
 
 ```bash
 INSTANCE_ID=$(terraform -chdir=terraform output -raw instance_id)
 aws ssm start-session --region us-east-1 --target "$INSTANCE_ID"
 ```
 
-Na sessão:
+Inside the session:
 
 ```bash
 sudo /usr/local/sbin/stop-palworld.sh
@@ -618,47 +654,47 @@ sudo systemctl start palworld.service
 sudo systemctl restart palworld-notify.service
 ```
 
-`--update-only` recusa atualização com a unit ativa. O save fica em `/var/lib/palworld/saved`, fora
-da árvore atualizada em `/opt/palworld`.
+`--update-only` refuses to update while the unit is active. Save data lives under
+`/var/lib/palworld/saved`, outside the updated `/opt/palworld` installation tree.
 
 ## Backups
 
-O `PalWorldSettings.ini` é gerado copiando os defaults da versão instalada e substituindo somente
-as chaves oficiais listadas acima. O renderizador recusa qualquer chave ausente, em vez de inventar
-um parâmetro ou apagar silenciosamente defaults novos da Pocketpair.
+`PalWorldSettings.ini` is generated by copying the defaults from the installed version and replacing
+only the supported official keys. The renderer rejects a key that is absent instead of inventing a
+parameter or silently deleting new Pocketpair defaults.
 
-O Palworld mantém seu backup interno (`bIsUseBackupSaveData=True`). Além disso, o projeto cria um
-`tar.gz` diário e antes de desligar:
+Palworld keeps its internal backup when `bIsUseBackupSaveData=True`. The project also creates a daily
+`tar.gz` archive and another archive before shutdown:
 
 ```text
 /var/backups/palworld/palworld-save-YYYYMMDDTHHMMSSZ.tar.gz
 ```
 
-Retenção local default: 14 dias. Backup manual:
+Default local retention is 14 days. Create and inspect a manual backup with:
 
 ```bash
 sudo /usr/local/sbin/backup-palworld.sh
 sudo ls -lh /var/backups/palworld
 ```
 
-### Habilitar S3
+### Enable S3
 
-Em `terraform.tfvars`:
+In `terraform.tfvars`:
 
 ```hcl
-enable_s3_backup        = true
-s3_backup_versioning    = true
+enable_s3_backup         = true
+s3_backup_versioning     = true
 s3_backup_retention_days = 30
-# s3_backup_bucket_name = "nome-global-opcional"
+# s3_backup_bucket_name  = "optional-globally-unique-name"
 ```
 
-Revise e aplique. O bucket tem Block Public Access, SSE-S3, versionamento opcional, lifecycle e IAM
-de escrita/listagem limitado ao prefixo `saves/`. `force_destroy=false` impede remoção acidental de
-objetos pelo Terraform.
+Review and apply. The bucket has Block Public Access, SSE-S3, optional versioning, lifecycle rules,
+and write/list IAM limited to the `saves/` prefix. `force_destroy=false` prevents Terraform from
+accidentally deleting stored objects.
 
-### Restaurar backup local
+### Restore a local backup
 
-Com a EC2 ligada e sem jogadores:
+With EC2 running and no connected players:
 
 ```bash
 sudo /usr/local/sbin/stop-palworld.sh
@@ -670,26 +706,26 @@ sudo systemctl start palworld.service
 sudo systemctl restart palworld-notify.service
 ```
 
-Valide o mundo antes de apagar `saved.before-restore`.
+Validate the world before deleting `saved.before-restore`.
 
-### Restaurar do S3
+### Restore from S3
 
 ```bash
-aws s3 ls s3://SEU_BUCKET/saves/
-aws s3 cp s3://SEU_BUCKET/saves/palworld-save-ARQUIVO.tar.gz /tmp/restore.tar.gz
+aws s3 ls s3://YOUR_BUCKET/saves/
+aws s3 cp s3://YOUR_BUCKET/saves/palworld-save-FILE.tar.gz /tmp/restore.tar.gz
 ```
 
-Depois repita o procedimento local usando `/tmp/restore.tar.gz`.
+Then repeat the local restore procedure with `/tmp/restore.tar.gz`.
 
-## Testes e validação
+## Tests and validation
 
-Gate completo:
+Run the complete gate:
 
 ```bash
 make validate
 ```
 
-Gates isolados:
+Run individual gates:
 
 ```bash
 make test
@@ -701,33 +737,34 @@ terraform -chdir=terraform init -backend=false
 terraform -chdir=terraform validate
 ```
 
-Casos cobertos: assinatura válida/inválida, headers ausentes, PING, ligar stopped/running,
-intermediários EC2, status, desligamento, jogadores conectados, force admin, usuário/cargo/guild,
-erro AWS, targeting da única instância e mensagens principais.
+Covered behavior includes valid and invalid signatures, missing headers, PING, start from stopped or
+running, intermediate EC2 states, status, shutdown, connected players, forced administrator
+shutdown, user/role/guild authorization, AWS errors, single-instance targeting, webhook formatting,
+settings bootstrapping and validation, canonical persistence, and the interactive assistant.
 
-Um `terraform plan` real requer credenciais AWS e valores Discord válidos; `terraform validate` não
-cria recursos.
+A real `terraform plan` requires AWS credentials and valid Discord values. `terraform validate`
+creates no resources.
 
-## GitHub Actions e OIDC
+## GitHub Actions and OIDC
 
 Workflows:
 
-- `tests.yml`: PR/main; Python, Ruff, ShellCheck, Terraform fmt/validate;
-- `terraform-plan.yml`: somente `workflow_dispatch`; assume role OIDC e publica saved plan por três dias;
-- `terraform-apply.yml`: somente `workflow_dispatch`, GitHub Environment protegido, exige `APPLY` ou
-  `DESTROY`, mostra um saved plan e aplica exatamente esse arquivo.
+- `tests.yml`: pull requests and `main`; Python, Ruff, ShellCheck, Terraform fmt/validate;
+- `terraform-plan.yml`: manual `workflow_dispatch` only; assumes an OIDC role and publishes a saved
+  plan for three days;
+- `terraform-apply.yml`: manual `workflow_dispatch` only, protected GitHub Environment, requires
+  `APPLY` or `DESTROY`, displays a saved plan, and applies exactly that file.
 
-Os workflows de plan/apply recusam execução enquanto o backend S3 não estiver habilitado. Runner
-efêmero com state local perderia a fonte de verdade e poderia duplicar recursos. Para operação
-somente local, continue usando `scripts/deploy.sh`; para Actions, migre primeiro conforme a seção de
-backend remoto.
+The plan and apply workflows refuse to run while the S3 backend remains disabled. An ephemeral
+runner with local state would lose the source of truth and could duplicate resources. Continue
+using `scripts/deploy.sh` for local-only operation, or migrate the backend first.
 
-### Criar a role OIDC
+### Create the OIDC role
 
-1. Em IAM → **Identity providers**, adicione `https://token.actions.githubusercontent.com` com
-   audience `sts.amazonaws.com`, seguindo
+1. In IAM → **Identity providers**, add `https://token.actions.githubusercontent.com` with audience
+   `sts.amazonaws.com` by following
    [Configuring OpenID Connect in AWS](https://docs.github.com/actions/security-for-github-actions/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services).
-2. Crie uma role para Web Identity com trust restrito ao seu repositório e Environment:
+2. Create a Web Identity role with trust restricted to your repository and Environment:
 
 ```json
 {
@@ -748,126 +785,129 @@ backend remoto.
 }
 ```
 
-3. Anexe uma policy de provisionamento dedicada somente aos tipos usados por este stack: VPC/EC2,
-   IAM roles do projeto, Lambda/Function URL, SSM Parameters, CloudWatch Logs e S3 opcional. Restrinja
-   região, prefixos `palworld-cloud-server-*`, path `/palworld-cloud-server/*` e `iam:PassedToService`
-   a EC2/Lambda onde a API permitir. Não use `AdministratorAccess`.
-4. Em Settings → Environments, crie `production`, habilite required reviewers e impeça branches não
-   autorizadas.
-5. Cadastre estas **Environment variables**, não access keys:
+3. Attach a dedicated provisioning policy limited to the resource types used by this stack: VPC and
+   EC2, project IAM roles, Lambda and Function URL, SSM Parameters, CloudWatch Logs, and optional S3.
+   Limit Region, `palworld-cloud-server-*` prefixes, the `/palworld-cloud-server/*` path, and
+   `iam:PassedToService` for EC2 and Lambda wherever the action supports it. Do not use
+   `AdministratorAccess`.
+4. Under Settings → Environments, create `production`, enable required reviewers, and reject
+   unauthorized branches.
+5. Configure these **Environment variables**, not access keys:
 
-| GitHub variable | Exemplo |
+| GitHub variable | Example |
 |---|---|
 | `AWS_ROLE_TO_ASSUME` | `arn:aws:iam::123456789012:role/palworld-github-oidc` |
 | `AWS_REGION` | `us-east-1` |
-| `DISCORD_APPLICATION_ID` | ID numérico |
-| `DISCORD_PUBLIC_KEY` | 64 hex |
-| `DISCORD_GUILD_ID` | ID numérico |
+| `DISCORD_APPLICATION_ID` | numeric ID |
+| `DISCORD_PUBLIC_KEY` | 64 hex characters |
+| `DISCORD_GUILD_ID` | numeric ID |
 | `DISCORD_ALLOWED_USER_IDS_JSON` | `["123..."]` |
 | `DISCORD_ALLOWED_ROLE_IDS_JSON` | `["234..."]` |
 
-Os segredos do Palworld/webhook continuam no Parameter Store e não são necessários no workflow.
+Palworld passwords and the webhook remain in Parameter Store and are not needed by the workflow.
 
-## Backend Terraform remoto opcional
+## Optional remote Terraform backend
 
-O backend é local por padrão. Isso é simples para um operador, mas `terraform.tfstate` contém IDs e
-metadados sensíveis e não deve ir para o Git. Para colaboração:
+The backend is local by default. This is simple for one operator, but `terraform.tfstate` contains
+IDs and sensitive metadata and must not be committed. For collaboration:
 
-1. crie manualmente um bucket S3 separado, privado, criptografado e versionado;
-2. descomente o bloco `backend "s3"` em `terraform/versions.tf`;
-3. ajuste bucket/key/region;
-4. execute:
+1. manually create a separate private, encrypted, and versioned S3 bucket;
+2. uncomment the `backend "s3"` block in `terraform/versions.tf`;
+3. set its bucket, key, and Region;
+4. run:
 
 ```bash
 terraform -chdir=terraform init -migrate-state
 ```
 
-Terraform 1.11 suporta `use_lockfile=true` no backend S3. Restrinja o bucket à role de deploy.
+Terraform 1.11 supports `use_lockfile=true` in the S3 backend. Restrict the bucket to the deployment
+role.
 
-## Custos estimados e riscos de cobrança
+## Estimated costs and billing risks
 
-Estimativa orientativa em `us-east-1`, antes de impostos e data transfer, verificada em julho de
+Approximate orders of magnitude in `us-east-1` before taxes and data transfer, last reviewed in July
 2026:
 
-| Componente | Ordem de grandeza |
+| Item | Order of magnitude |
 |---|---:|
-| EC2 `m6a.xlarge` Linux On-Demand ligada | cerca de USD 0,1728/h |
-| IPv4 público enquanto ligado | USD 0,005/h |
-| EBS gp3 50 GiB | cerca de USD 4/mês em região a USD 0,08/GiB-mês |
-| Lambda/SSM/CloudWatch | normalmente centavos para um grupo pequeno, conforme uso |
-| S3 | conforme GB armazenados, versões, requests e data transfer |
+| EC2 `m6a.xlarge` Linux On-Demand while running | about USD 0.1728/hour |
+| Public IPv4 while running | USD 0.005/hour |
+| 50 GiB gp3 EBS | about USD 4/month in a USD 0.08/GiB-month Region |
+| Lambda, SSM, and CloudWatch | usually cents for a small group, depending on usage |
+| S3 | depends on stored GB, versions, requests, and data transfer |
 
-Exemplos, sem créditos:
+Examples without credits:
 
-- 20 horas de jogo/mês: EC2 + IPv4 ≈ USD 3,56, mais EBS ≈ USD 4 e demais usos;
-- 80 horas de jogo/mês: EC2 + IPv4 ≈ USD 14,22, mais EBS ≈ USD 4;
-- ligada 24x7 por 730 h: EC2 + IPv4 ≈ USD 129,79, mais EBS e dados.
+- 20 game hours/month: EC2 plus IPv4 ≈ USD 3.56, plus EBS ≈ USD 4 and other usage;
+- 80 game hours/month: EC2 plus IPv4 ≈ USD 14.22, plus EBS ≈ USD 4;
+- running 24×7 for 730 hours: EC2 plus IPv4 ≈ USD 129.79, plus EBS and data.
 
-Preços mudam. Refaça no [AWS Pricing Calculator](https://calculator.aws/) e confira
+Prices change. Recalculate them with the [AWS Pricing Calculator](https://calculator.aws/) and check
 [EC2 On-Demand](https://aws.amazon.com/ec2/pricing/on-demand/),
-[EBS](https://aws.amazon.com/ebs/pricing/) e [VPC IPv4](https://aws.amazon.com/vpc/pricing/).
-O EBS continua cobrado com a EC2 stopped. Data transfer de saída, snapshots, S3 e logs podem cobrar.
+[EBS](https://aws.amazon.com/ebs/pricing/), and
+[VPC IPv4](https://aws.amazon.com/vpc/pricing/). EBS remains billable while EC2 is stopped.
+Outbound data transfer, snapshots, S3, and logs can also incur charges.
 
-### Configurar AWS Budgets
+### Configure AWS Budgets
 
-No console:
+In the console:
 
 1. Billing and Cost Management → **Budgets → Create budget**;
-2. escolha **Cost budget** mensal;
-3. defina, por exemplo, USD 10 ou USD 20;
-4. crie alertas em 50%, 80% e 100% para seu e-mail;
-5. opcionalmente crie também um Cost Anomaly Monitor.
+2. select a monthly **Cost budget**;
+3. set, for example, USD 10 or USD 20;
+4. create email alerts at 50%, 80%, and 100%;
+5. optionally create a Cost Anomaly Monitor.
 
-Budgets alerta, mas não desliga recursos imediatamente. Teste `/palworld desligar`, acompanhe a EC2
-e mantenha MFA na conta root. Não confunda créditos com limite rígido de cobrança.
+Budgets send alerts but do not immediately stop resources. Test `/palworld desligar`, monitor EC2,
+and keep MFA on the root account. Do not confuse credits with a hard billing limit.
 
-## Destruir recursos
+## Destroy resources
 
-Antes:
+Before destruction:
 
-1. pare o servidor com save;
-2. confirme backups/restauração;
-3. esvazie o bucket S3 e versões se S3 estiver habilitado (`force_destroy=false`);
-4. revise se o volume raiz está configurado para ser apagado.
+1. stop the server with a save;
+2. verify backups and the restore procedure;
+3. empty the S3 bucket and its versions when S3 is enabled (`force_destroy=false`);
+4. verify whether the root volume is configured for deletion.
 
-Gere, mostre e confirme o plano de destruição:
+Generate, display, and confirm the destroy plan:
 
 ```bash
 ./scripts/destroy.sh
 ```
 
-O script exige digitar `DESTRUIR`. Nunca rode isso automaticamente. A role OIDC, backend S3 e AWS
-Budget criados fora deste stack não são removidos.
+The script requires the literal confirmation `DESTRUIR`. Never run it automatically. The OIDC role,
+remote backend bucket, and AWS Budget created outside this stack are not removed.
 
 ## Troubleshooting
 
-### Discord rejeita a Interactions Endpoint URL
+### Discord rejects the Interactions Endpoint URL
 
 ```bash
 aws logs tail /aws/lambda/palworld-cloud-server-prod-discord \
   --region us-east-1 --since 15m
 ```
 
-- confirme Public Key de 64 hex e Guild/Application corretos;
-- confirme as duas resource policies da Function URL (`InvokeFunctionUrl` e `InvokeFunction`);
-- republique o ZIP se mudou a Lambda;
-- a Lambda deve devolver 401 para assinaturas inválidas; não desabilite essa verificação.
+- confirm the 64-character hex Public Key and the correct Guild/Application;
+- confirm both Function URL resource-policy permissions (`InvokeFunctionUrl` and `InvokeFunction`);
+- republish the ZIP after changing Lambda;
+- Lambda must return 401 for invalid signatures; never disable that verification.
 
-### `/palworld ligar` responde AccessDenied
+### `/palworld ligar` returns AccessDenied
 
-- confira a policy da role Lambda e o Instance ID no environment;
-- execute `aws lambda get-function-configuration --function-name ...`;
-- execute `aws iam simulate-principal-policy` para `ec2:StartInstances` no ARN exato.
+- inspect the Lambda role policy and the Instance ID in its environment;
+- run `aws lambda get-function-configuration --function-name ...`;
+- use `aws iam simulate-principal-policy` for `ec2:StartInstances` on the exact ARN.
 
-### EC2 running, mas não aparece no Session Manager
+### EC2 is running but does not appear in Session Manager
 
-- aguarde o boot e confirme Internet Gateway/rota/egress;
-- veja o Console EC2 → Connect → Session Manager;
-- pelo EC2 serial console, se habilitado, confirme
+- wait for boot and confirm Internet Gateway, route, and egress;
+- open EC2 → Connect → Session Manager;
+- when the EC2 serial console is enabled, inspect
   `snap.amazon-ssm-agent.amazon-ssm-agent.service`;
-- o user-data instala/inicia o Snap como fallback, mas AMIs podem variar com o tempo.
+- user-data installs and starts the Snap as a fallback, but AMIs can change over time.
 
-### Palworld service em loop de restart
+### Palworld service is restarting in a loop
 
 ```bash
 sudo systemctl status palworld.service
@@ -875,28 +915,44 @@ sudo journalctl -u palworld.service -n 200 --no-pager
 sudo /usr/local/sbin/configure-palworld.sh
 ```
 
-As causas mais comuns são SecureStrings ainda com placeholder, falha de acesso SSM, username REST
-incompatível com a versão instalada ou instalação SteamCMD incompleta.
+Common causes are SecureStrings that still contain placeholders, SSM access failure, a REST
+username incompatible with the installed version, or an incomplete SteamCMD installation.
 
-### Healthcheck recebe 401
+### Health check receives 401
 
-A documentação oficial da Pocketpair afirma Basic Auth, mas não define o username nem vincula de
-forma inequívoca a credencial a `AdminPassword`. O projeto usa `admin` como default operacional em
-`palworld_rest_api_username`; valide na versão instalada e altere se necessário. A REST API nunca é
-exposta para testar esse problema.
+Pocketpair documents Basic Auth but does not define the username or unambiguously tie the credential
+to `AdminPassword`. The project uses `admin` as the operational
+`palworld_rest_api_username` default. Validate it against the installed version and change it when
+necessary. The REST API is never exposed just to troubleshoot this problem.
 
-### Servidor não é acessível
+### The settings assistant rejects the file
 
-- confirme `running`, IP atual e `palworld_port`;
-- confirme que o cliente usa UDP e o CIDR está autorizado;
-- verifique `sudo ss -lunp | grep 8211` e logs do serviço;
-- não use o IP antigo após um stop/start;
-- `PublicPort` não muda o listener; o projeto usa `PalServer.sh -port=...`.
+```bash
+./palworld settings validate
+```
 
-### Autostop não desliga
+The local JSON must use `schema_version: 1` and contain exactly the supported non-secret settings.
+If the file was damaged, compare it with `config/palworld-settings.json.example`. Do not copy
+passwords into it.
 
-Isso é intencional se o serviço ainda inicia, não existe `/run/palworld/ready`, a API falhou ou o
-contador não é confiável:
+### A settings change remains pending
+
+`./palworld settings apply` refuses an immediate restart when players are connected or the REST
+player query is inconclusive. This is fail-safe behavior. Run `./palworld settings apply` again when
+the server is empty, or let the next normal start activate the already published configuration.
+
+### The server is not reachable
+
+- confirm `running`, the current IP, and `palworld_port`;
+- confirm the client uses UDP and its address is allowed by the CIDR;
+- inspect `sudo ss -lunp | grep 8211` and service logs;
+- do not reuse an old IP after stop/start;
+- `PublicPort` does not change the listener; this project uses `PalServer.sh -port=...`.
+
+### Autostop does not shut down
+
+This is intentional while the service is still starting, `/run/palworld/ready` is absent, the API
+failed, or the player count is unreliable:
 
 ```bash
 sudo systemctl start palworld-autostop.service
@@ -904,44 +960,45 @@ sudo journalctl -u palworld-autostop.service -n 100 --no-pager
 sudo cat /var/lib/palworld-monitor/idle-seconds
 ```
 
-Nunca transforme erro de consulta em zero jogadores.
+Never convert a query error into zero connected players.
 
-### Terraform quer substituir a EC2
+### Terraform wants to replace EC2
 
-Pare e examine o atributo que força replacement. Mudanças de gameplay atualizam Parameter Store e
-não devem recriar a instância. AMI é ignorada no lifecycle após criação. Alterações como subnet,
-arquitetura ou certos atributos fundamentais podem exigir replacement; faça backup antes.
+Stop and inspect the attribute forcing replacement. Gameplay changes update Parameter Store and
+must not recreate the instance. AMI and bootstrap-only user-data are ignored after creation.
+Subnet, architecture, and some fundamental attributes can still require replacement; create a
+backup first.
 
-### Bucket S3 impede destroy
+### The S3 bucket prevents destroy
 
-É proteção esperada. Baixe o que precisa, remova objetos e versões explicitamente e só depois gere
-novo destroy plan. Não altere `force_destroy` apenas para contornar uma revisão.
+This is expected protection. Download anything you need, explicitly remove objects and versions,
+and only then create another destroy plan. Do not set `force_destroy` merely to bypass review.
 
-## Limitações conhecidas
+## Known limitations
 
-- A Pocketpair documenta Linux/Ubuntu genericamente, não certifica especificamente Ubuntu 24.04;
-  o pacote SteamCMD existe no Ubuntu Noble multiverse/i386.
-- O username da REST Basic Auth e a relação exata com `AdminPassword` não estão claros na
-  documentação oficial atual. O valor é configurável e precisa ser validado com a versão instalada.
-- A unidade de `waittime` do endpoint `/shutdown` não é declarada de forma coerente. O projeto não
-  depende dela: salva, chama o endpoint e confirma a parada via systemd/SIGINT.
-- A notificação “online” vai ao canal fixo do webhook, não necessariamente ao canal de qualquer
-  comando emitido em outra sala.
-- `/status` usa telemetria eventual; nunca trata snapshot antigo como prova de zero jogadores.
-- A instância inicial precisa ficar ligada tempo suficiente para baixar o servidor. O timer de 15
-  minutos começa depois do bootstrap, não antes.
-- Não houve deploy real neste repositório. `terraform validate` prova schema/sintaxe, não quota,
-  disponibilidade de `m6a.xlarge`, permissões da sua conta nem comportamento da versão futura do
-  Palworld.
+- Pocketpair documents Linux and Ubuntu in general but does not specifically certify Ubuntu 24.04.
+  The SteamCMD package is available in Ubuntu Noble multiverse/i386.
+- The REST Basic Auth username and its exact relationship with `AdminPassword` remain unclear in the
+  current official documentation. The value is configurable and must be validated against the
+  installed version.
+- The `waittime` unit for the `/shutdown` endpoint is not documented consistently. The project does
+  not rely on it: it saves, calls the endpoint, and confirms shutdown through systemd and SIGINT.
+- The “online” notification goes to the fixed webhook channel, not necessarily the channel where a
+  command was issued.
+- `/status` uses eventual telemetry and never treats a stale snapshot as evidence of zero players.
+- The first instance boot must remain online long enough to download the server. The 15-minute timer
+  starts after bootstrap, not before.
+- Local validation cannot prove account quotas, `m6a.xlarge` availability, permissions in another
+  AWS account, or behavior of a future Palworld version.
 
-## Referências oficiais
+## Official references
 
-- [Pocketpair: requisitos](https://docs.palworldgame.com/getting-started/requirements/)
-- [Pocketpair: deploy com SteamCMD](https://docs.palworldgame.com/getting-started/deploy-dedicated-server/)
-- [Pocketpair: parâmetros](https://docs.palworldgame.com/settings-and-operation/configuration/)
-- [Pocketpair: argumentos](https://docs.palworldgame.com/settings-and-operation/arguments/)
+- [Pocketpair: requirements](https://docs.palworldgame.com/getting-started/requirements/)
+- [Pocketpair: SteamCMD deployment](https://docs.palworldgame.com/getting-started/deploy-dedicated-server/)
+- [Pocketpair: configuration parameters](https://docs.palworldgame.com/settings-and-operation/configuration/)
+- [Pocketpair: server arguments](https://docs.palworldgame.com/settings-and-operation/arguments/)
 - [Pocketpair: REST API](https://docs.palworldgame.com/api/rest-api/palwold-rest-api/)
 - [Discord Interactions](https://docs.discord.com/developers/interactions/overview)
 - [AWS Lambda Function URL access](https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html)
 - [AWS Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html)
-- [Pesquisa de decisões e lacunas](docs/research/official-platform-facts.md)
+- [Documented decisions and open gaps](docs/research/official-platform-facts.md)
