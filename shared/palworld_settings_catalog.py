@@ -174,6 +174,18 @@ FIELDS: tuple[SettingField, ...] = (
         minimum=0,
     ),
     SettingField(
+        "enemy_drop_item_rate",
+        "EnemyDropItemRate",
+        "Enemy drop item rate",
+        "Drops de inimigos/Pals",
+        "Gameplay",
+        "number",
+        _POSITIVE_RATE,
+        _RATE_MENU,
+        "Multiplicador da quantidade de itens derrubados por inimigos e Pals derrotados.",
+        minimum=0,
+    ),
+    SettingField(
         "pal_spawn_rate",
         "PalSpawnNumRate",
         "Pal spawn rate",

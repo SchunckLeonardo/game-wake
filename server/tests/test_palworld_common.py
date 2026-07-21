@@ -5,6 +5,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 COMMON_SCRIPT = PROJECT_ROOT / "server" / "palworld-common.sh"
+CONFIGURE_SCRIPT = PROJECT_ROOT / "server" / "configure-palworld.sh"
 
 BASE_CONFIG = {
     "server_name": "Base Server",
@@ -13,6 +14,7 @@ BASE_CONFIG = {
     "max_players": 16,
     "exp_rate": 1.0,
     "collection_drop_rate": 1.0,
+    "enemy_drop_item_rate": 1.0,
     "pal_spawn_rate": 1.0,
     "death_penalty": "Item",
     "pal_damage_attack_rate": 1.0,
@@ -47,7 +49,11 @@ aws() {{
   fi
 }}
 load_palworld_config
-printf '%s|%s|%s' \"$PALWORLD_SERVER_NAME\" \"$EXP_RATE\" \"$DEATH_PENALTY\"
+printf '%s|%s|%s|%s' \\
+  \"$PALWORLD_SERVER_NAME\" \\
+  \"$EXP_RATE\" \\
+  \"$ENEMY_DROP_ITEM_RATE\" \\
+  \"$DEATH_PENALTY\"
 """
     return subprocess.run(
         ["bash", "-c", script],
@@ -65,11 +71,16 @@ printf '%s|%s|%s' \"$PALWORLD_SERVER_NAME\" \"$EXP_RATE\" \"$DEATH_PENALTY\"
 
 def test_load_palworld_config_merges_discord_overrides() -> None:
     completed = run_load(
-        {"server_name": "Discord Server", "exp_rate": 1.5, "death_penalty": "None"}
+        {
+            "server_name": "Discord Server",
+            "exp_rate": 1.5,
+            "enemy_drop_item_rate": 2.5,
+            "death_penalty": "None",
+        }
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert completed.stdout == "Discord Server|1.5|None"
+    assert completed.stdout == "Discord Server|1.5|2.5|None"
 
 
 def test_load_palworld_config_rejects_unknown_override_keys() -> None:
@@ -80,7 +91,14 @@ def test_load_palworld_config_rejects_unknown_override_keys() -> None:
 
 
 def test_load_palworld_config_rejects_invalid_override_values() -> None:
-    completed = run_load({"exp_rate": 0, "death_penalty": "Inventory"})
+    completed = run_load({"enemy_drop_item_rate": 0})
 
     assert completed.returncode != 0
     assert "invalidas ou desconhecidas" in completed.stderr
+
+
+def test_configure_script_maps_enemy_drop_rate_to_official_ini_key() -> None:
+    script = CONFIGURE_SCRIPT.read_text(encoding="utf-8")
+
+    assert '--argjson enemy_drop_item_rate "$ENEMY_DROP_ITEM_RATE"' in script
+    assert "EnemyDropItemRate:$enemy_drop_item_rate" in script

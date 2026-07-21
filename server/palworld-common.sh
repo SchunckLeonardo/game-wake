@@ -65,6 +65,7 @@ load_palworld_config() {
         "max_players",
         "exp_rate",
         "collection_drop_rate",
+        "enemy_drop_item_rate",
         "pal_spawn_rate",
         "death_penalty",
         "pal_damage_attack_rate",
@@ -81,6 +82,7 @@ load_palworld_config() {
       ([
         .exp_rate?,
         .collection_drop_rate?,
+        .enemy_drop_item_rate?,
         .pal_spawn_rate?,
         .pal_damage_attack_rate?,
         .pal_damage_defense_rate?,
@@ -107,6 +109,7 @@ load_palworld_config() {
   PALWORLD_MAX_PLAYERS=$(jq -er '.max_players | numbers' <<<"$config")
   EXP_RATE=$(jq -er '.exp_rate | numbers' <<<"$config")
   COLLECTION_DROP_RATE=$(jq -er '.collection_drop_rate | numbers' <<<"$config")
+  ENEMY_DROP_ITEM_RATE=$(jq -er '.enemy_drop_item_rate | numbers' <<<"$config")
   PAL_SPAWN_RATE=$(jq -er '.pal_spawn_rate | numbers' <<<"$config")
   DEATH_PENALTY=$(jq -er '.death_penalty | strings' <<<"$config")
   PAL_DAMAGE_ATTACK_RATE=$(jq -er '.pal_damage_attack_rate | numbers' <<<"$config")
@@ -125,7 +128,8 @@ load_palworld_config() {
   S3_BACKUP_URI=$(jq -er '.s3_backup_uri | strings' <<<"$config")
 
   export PALWORLD_SERVER_NAME PALWORLD_SERVER_DESCRIPTION PALWORLD_PORT
-  export PALWORLD_MAX_PLAYERS EXP_RATE COLLECTION_DROP_RATE PAL_SPAWN_RATE DEATH_PENALTY
+  export PALWORLD_MAX_PLAYERS EXP_RATE COLLECTION_DROP_RATE ENEMY_DROP_ITEM_RATE
+  export PAL_SPAWN_RATE DEATH_PENALTY
   export PAL_DAMAGE_ATTACK_RATE PAL_DAMAGE_DEFENSE_RATE PLAYER_DAMAGE_ATTACK_RATE
   export PLAYER_DAMAGE_DEFENSE_RATE PAL_STAMINA_DECREASE_RATE
   export PLAYER_STAMINA_DECREASE_RATE ITEM_WEIGHT_RATE REST_API_PORT REST_API_USERNAME

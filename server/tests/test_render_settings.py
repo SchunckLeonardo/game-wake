@@ -4,6 +4,7 @@ from render_settings import render_settings
 DEFAULT = (
     "[/Script/Pal.PalGameWorldSettings]\n"
     "OptionSettings=(ExpRate=1.000000,"
+    "EnemyDropItemRate=1.000000,"
     "CrossplayPlatforms=(Steam,Xbox,PS5),"
     "DeathPenalty=All,"
     'ServerName="Default Palworld Server",'
@@ -18,6 +19,7 @@ def test_updates_selected_values_and_preserves_nested_defaults() -> None:
         DEFAULT,
         {
             "ExpRate": 1.5,
+            "EnemyDropItemRate": 2.5,
             "DeathPenalty": "Item",
             "ServerName": "Amigos, São Paulo",
             "RESTAPIEnabled": True,
@@ -25,6 +27,7 @@ def test_updates_selected_values_and_preserves_nested_defaults() -> None:
     )
 
     assert "ExpRate=1.5" in rendered
+    assert "EnemyDropItemRate=2.5" in rendered
     assert "DeathPenalty=Item" in rendered
     assert 'ServerName="Amigos, São Paulo"' in rendered
     assert "RESTAPIEnabled=True" in rendered

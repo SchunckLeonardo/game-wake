@@ -58,6 +58,20 @@ def test_parameter_service_validates_and_persists_only_the_override_document() -
     assert ssm.puts[-1]["Overwrite"] is True
 
 
+def test_parameter_service_persists_enemy_drop_rate_override() -> None:
+    ssm = FakeSSM(BASE_SETTINGS, {})
+    service = ParameterSettingsService(
+        lambda: ssm,
+        "/palworld/config",
+        "/palworld/settings-overrides",
+    )
+
+    snapshot = service.set_override("enemy_drop_item_rate", "2,5")
+
+    assert snapshot.effective["enemy_drop_item_rate"] == 2.5
+    assert json.loads(ssm.puts[-1]["Value"]) == {"enemy_drop_item_rate": 2.5}
+
+
 def test_parameter_service_rejects_unknown_or_invalid_values() -> None:
     ssm = FakeSSM(BASE_SETTINGS, {})
     service = ParameterSettingsService(

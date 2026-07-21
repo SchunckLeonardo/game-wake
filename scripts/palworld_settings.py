@@ -33,6 +33,7 @@ LEGACY_TFVARS_KEYS = {
     "palworld_max_players": "max_players",
     "palworld_exp_rate": "exp_rate",
     "palworld_collection_drop_rate": "collection_drop_rate",
+    "palworld_enemy_drop_item_rate": "enemy_drop_item_rate",
     "palworld_spawn_rate": "pal_spawn_rate",
     "palworld_death_penalty": "death_penalty",
     "palworld_pal_damage_attack_rate": "pal_damage_attack_rate",

@@ -13,6 +13,7 @@ BASE_SETTINGS: dict[str, str | int | float] = {
     "max_players": 16,
     "exp_rate": 1.0,
     "collection_drop_rate": 1.0,
+    "enemy_drop_item_rate": 1.0,
     "pal_spawn_rate": 1.0,
     "death_penalty": "Item",
     "pal_damage_attack_rate": 1.0,
@@ -57,6 +58,15 @@ def _modal_child(payload: dict[str, Any], custom_id: str) -> dict[str, Any]:
         if child.get("custom_id") == custom_id:
             return child
     raise AssertionError(f"modal child not found: {custom_id}")
+
+
+def test_enemy_drop_rate_uses_the_official_key_and_explains_its_effect() -> None:
+    field = FIELDS_BY_KEY["enemy_drop_item_rate"]
+
+    assert field.ini_key == "EnemyDropItemRate"
+    assert "Pals" in field.label_pt
+    assert "derrotados" in field.official_description_pt
+    assert "maior que 0" in field.allowed_values_pt
 
 
 def test_configurar_opens_ephemeral_panel_with_every_setting_and_official_docs(

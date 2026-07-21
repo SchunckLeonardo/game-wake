@@ -45,6 +45,7 @@ PALWORLD_SERVER_DESCRIPTION_B64=${palworld_server_description_b64}
 PALWORLD_MAX_PLAYERS=${palworld_max_players}
 EXP_RATE=${palworld_exp_rate}
 COLLECTION_DROP_RATE=${palworld_collection_drop_rate}
+ENEMY_DROP_ITEM_RATE=${palworld_enemy_drop_item_rate}
 PAL_SPAWN_RATE=${palworld_spawn_rate}
 DEATH_PENALTY=${palworld_death_penalty}
 PAL_DAMAGE_ATTACK_RATE=${palworld_pal_damage_attack_rate}
