@@ -420,6 +420,7 @@ fields, while the passwords continue to be read independently from `SecureString
 | Maximum players | `ServerPlayerMaxNum` |
 | Experience rate | `ExpRate` |
 | Collection drop rate | `CollectionDropRate` |
+| Enemy/Pal drop rate | `EnemyDropItemRate` |
 | Pal spawn rate | `PalSpawnNumRate` |
 | Death penalty | `DeathPenalty` |
 | Pal attack/received damage | `PalDamageRateAttack` / `PalDamageRateDefense` |
@@ -428,7 +429,9 @@ fields, while the passwords continue to be read independently from `SecureString
 | Item weight rate | `ItemWeightRate` |
 
 `DeathPenalty` accepts `None`, `Item`, `ItemAndEquipment`, or `All`. The official spelling really is
-`Decreace`. High `PalSpawnNumRate` values can affect performance.
+`Decreace`. `CollectionDropRate` changes gatherable resources, while `EnemyDropItemRate` changes the
+quantity of items dropped by defeated enemies and Pals. High `PalSpawnNumRate` values can affect
+performance.
 
 The project also enforces `bAllowEnhanceStat_Stamina=True`,
 `bAllowEnhanceStat_Weight=True`, `bIsUseBackupSaveData=True`, `RESTAPIEnabled=True`,
@@ -461,6 +464,9 @@ The accepted values are deliberately honest about what Pocketpair publishes:
 | `ServerPlayerMaxNum` | Integer greater than or equal to `1` | Pocketpair publishes no maximum |
 | All exposed rate/multiplier settings | Decimal greater than `0`; dot or comma is accepted | Pocketpair publishes no supported range or maximum |
 | `DeathPenalty` | `None`, `Item`, `ItemAndEquipment`, or `All` | Closed list documented by Pocketpair |
+
+For example, set `EnemyDropItemRate` to `2` for twice the normal quantity of drops from defeated
+enemies and Pals. This does not change resource gathering, which uses `CollectionDropRate`.
 
 `None` drops nothing. `Item` drops items except equipment. `ItemAndEquipment` drops items and
 equipment. `All` also drops the Pals in the player's team. The modal presents these four values as

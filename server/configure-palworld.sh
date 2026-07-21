@@ -24,6 +24,7 @@ updates=$(jq -cn \
   --argjson max_players "$PALWORLD_MAX_PLAYERS" \
   --argjson exp_rate "$EXP_RATE" \
   --argjson collection_drop_rate "$COLLECTION_DROP_RATE" \
+  --argjson enemy_drop_item_rate "$ENEMY_DROP_ITEM_RATE" \
   --argjson pal_spawn_rate "$PAL_SPAWN_RATE" \
   --arg death_penalty "$DEATH_PENALTY" \
   --argjson pal_damage_attack_rate "$PAL_DAMAGE_ATTACK_RATE" \
@@ -43,6 +44,7 @@ updates=$(jq -cn \
     ServerPlayerMaxNum:$max_players,
     ExpRate:$exp_rate,
     CollectionDropRate:$collection_drop_rate,
+    EnemyDropItemRate:$enemy_drop_item_rate,
     PalSpawnNumRate:$pal_spawn_rate,
     DeathPenalty:$death_penalty,
     PalDamageRateAttack:$pal_damage_attack_rate,

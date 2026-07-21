@@ -19,6 +19,7 @@ DEFAULT_DOCUMENT = {
         "max_players": 16,
         "exp_rate": 1.0,
         "collection_drop_rate": 1.0,
+        "enemy_drop_item_rate": 1.0,
         "pal_spawn_rate": 1.0,
         "death_penalty": "Item",
         "pal_damage_attack_rate": 1.0,
@@ -60,6 +61,7 @@ def test_bootstrap_imports_supported_values_from_legacy_tfvars(tmp_path: Path) -
                 'palworld_server_name = "Existing Guild World"',
                 "palworld_max_players = 10",
                 "palworld_exp_rate = 1.75",
+                "palworld_enemy_drop_item_rate = 2.5",
                 'palworld_death_penalty = "None"',
             ]
         ),
@@ -75,6 +77,7 @@ def test_bootstrap_imports_supported_values_from_legacy_tfvars(tmp_path: Path) -
     assert document.values["server_name"] == "Existing Guild World"
     assert document.values["max_players"] == 10
     assert document.values["exp_rate"] == 1.75
+    assert document.values["enemy_drop_item_rate"] == 2.5
     assert document.values["death_penalty"] == "None"
 
 
@@ -165,6 +168,7 @@ def test_default_command_runs_wizard_and_saves_only_confirmed_changes(tmp_path: 
             "2",  # Gameplay
             "1.5",  # Experience
             "",  # Collection drops
+            "",  # Enemy/Pal drops
             "",  # Pal spawn
             "",  # Death penalty
             "5",  # Review and save
