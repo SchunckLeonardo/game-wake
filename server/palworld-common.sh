@@ -66,7 +66,9 @@ load_palworld_config() {
         "exp_rate",
         "collection_drop_rate",
         "enemy_drop_item_rate",
+        "supply_drop_span",
         "base_camp_worker_max_num",
+        "monster_farm_action_speed_rate",
         "allow_global_palbox_export",
         "allow_global_palbox_import",
         "pal_auto_hp_regen_rate_in_sleep",
@@ -78,6 +80,7 @@ load_palworld_config() {
         "player_damage_attack_rate",
         "player_damage_defense_rate",
         "pal_stamina_decrease_rate",
+        "pal_stomach_decrease_rate",
         "player_stamina_decrease_rate",
         "item_weight_rate"
       ]) | length) == 0 and
@@ -86,6 +89,8 @@ load_palworld_config() {
       ((.max_players // 1) | type == "number" and . >= 1 and floor == .) and
       ([.base_camp_worker_max_num?] |
         all(. == null or (type == "number" and . >= 1 and . <= 50 and floor == .))) and
+      ([.supply_drop_span?] |
+        all(. == null or (type == "number" and . >= 1 and floor == .))) and
       ([
         .allow_global_palbox_export?,
         .allow_global_palbox_import?
@@ -94,6 +99,7 @@ load_palworld_config() {
         .exp_rate?,
         .collection_drop_rate?,
         .enemy_drop_item_rate?,
+        .monster_farm_action_speed_rate?,
         .pal_auto_hp_regen_rate_in_sleep?,
         .pal_spawn_rate?,
         .pal_damage_attack_rate?,
@@ -101,6 +107,7 @@ load_palworld_config() {
         .player_damage_attack_rate?,
         .player_damage_defense_rate?,
         .pal_stamina_decrease_rate?,
+        .pal_stomach_decrease_rate?,
         .player_stamina_decrease_rate?,
         .item_weight_rate?
       ] | all(. == null or (type == "number" and . > 0))) and
@@ -124,7 +131,10 @@ load_palworld_config() {
   EXP_RATE=$(jq -er '.exp_rate | numbers' <<<"$config")
   COLLECTION_DROP_RATE=$(jq -er '.collection_drop_rate | numbers' <<<"$config")
   ENEMY_DROP_ITEM_RATE=$(jq -er '.enemy_drop_item_rate | numbers' <<<"$config")
+  SUPPLY_DROP_SPAN=$(jq -er '.supply_drop_span | numbers' <<<"$config")
   BASE_CAMP_WORKER_MAX_NUM=$(jq -er '.base_camp_worker_max_num | numbers' <<<"$config")
+  MONSTER_FARM_ACTION_SPEED_RATE=$(jq -er \
+    '.monster_farm_action_speed_rate | numbers' <<<"$config")
   ALLOW_GLOBAL_PALBOX_EXPORT=$(jq -r '
     .allow_global_palbox_export |
     if type == "boolean" then . else error("expected boolean") end
@@ -144,6 +154,7 @@ load_palworld_config() {
   PLAYER_DAMAGE_ATTACK_RATE=$(jq -er '.player_damage_attack_rate | numbers' <<<"$config")
   PLAYER_DAMAGE_DEFENSE_RATE=$(jq -er '.player_damage_defense_rate | numbers' <<<"$config")
   PAL_STAMINA_DECREASE_RATE=$(jq -er '.pal_stamina_decrease_rate | numbers' <<<"$config")
+  PAL_STOMACH_DECREASE_RATE=$(jq -er '.pal_stomach_decrease_rate | numbers' <<<"$config")
   PLAYER_STAMINA_DECREASE_RATE=$(jq -er '.player_stamina_decrease_rate | numbers' <<<"$config")
   ITEM_WEIGHT_RATE=$(jq -er '.item_weight_rate | numbers' <<<"$config")
   REST_API_PORT=$(jq -er '.rest_api_port | numbers' <<<"$config")
@@ -155,12 +166,13 @@ load_palworld_config() {
   S3_BACKUP_URI=$(jq -er '.s3_backup_uri | strings' <<<"$config")
 
   export PALWORLD_SERVER_NAME PALWORLD_SERVER_DESCRIPTION PALWORLD_PORT
-  export PALWORLD_MAX_PLAYERS EXP_RATE COLLECTION_DROP_RATE ENEMY_DROP_ITEM_RATE
-  export BASE_CAMP_WORKER_MAX_NUM ALLOW_GLOBAL_PALBOX_EXPORT ALLOW_GLOBAL_PALBOX_IMPORT
+  export PALWORLD_MAX_PLAYERS EXP_RATE COLLECTION_DROP_RATE ENEMY_DROP_ITEM_RATE SUPPLY_DROP_SPAN
+  export BASE_CAMP_WORKER_MAX_NUM MONSTER_FARM_ACTION_SPEED_RATE
+  export ALLOW_GLOBAL_PALBOX_EXPORT ALLOW_GLOBAL_PALBOX_IMPORT
   export PAL_AUTO_HP_REGEN_RATE_IN_SLEEP PAL_EGG_DEFAULT_HATCHING_TIME
   export PAL_SPAWN_RATE DEATH_PENALTY
   export PAL_DAMAGE_ATTACK_RATE PAL_DAMAGE_DEFENSE_RATE PLAYER_DAMAGE_ATTACK_RATE
-  export PLAYER_DAMAGE_DEFENSE_RATE PAL_STAMINA_DECREASE_RATE
+  export PLAYER_DAMAGE_DEFENSE_RATE PAL_STAMINA_DECREASE_RATE PAL_STOMACH_DECREASE_RATE
   export PLAYER_STAMINA_DECREASE_RATE ITEM_WEIGHT_RATE REST_API_PORT REST_API_USERNAME
   export AUTOSTOP_CHECK_MINUTES AUTOSTOP_IDLE_MINUTES HEALTHCHECK_TIMEOUT_MINUTES
   export LOCAL_BACKUP_RETENTION_DAYS S3_BACKUP_URI

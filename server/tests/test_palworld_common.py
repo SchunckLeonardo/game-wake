@@ -15,7 +15,9 @@ BASE_CONFIG = {
     "exp_rate": 1.0,
     "collection_drop_rate": 1.0,
     "enemy_drop_item_rate": 1.0,
+    "supply_drop_span": 180,
     "base_camp_worker_max_num": 15,
+    "monster_farm_action_speed_rate": 1.0,
     "allow_global_palbox_export": False,
     "allow_global_palbox_import": False,
     "pal_auto_hp_regen_rate_in_sleep": 1.0,
@@ -27,6 +29,7 @@ BASE_CONFIG = {
     "player_damage_attack_rate": 1.0,
     "player_damage_defense_rate": 1.0,
     "pal_stamina_decrease_rate": 1.0,
+    "pal_stomach_decrease_rate": 1.0,
     "player_stamina_decrease_rate": 1.0,
     "item_weight_rate": 1.0,
     "rest_api_port": 8212,
@@ -65,6 +68,10 @@ printf '|%s|%s|%s|%s|%s' \
   \"$ALLOW_GLOBAL_PALBOX_IMPORT\" \
   \"$PAL_AUTO_HP_REGEN_RATE_IN_SLEEP\" \
   \"$PAL_EGG_DEFAULT_HATCHING_TIME\"
+printf '|%s|%s|%s' \
+  \"$MONSTER_FARM_ACTION_SPEED_RATE\" \
+  \"$PAL_STOMACH_DECREASE_RATE\" \
+  \"$SUPPLY_DROP_SPAN\"
 """
     return subprocess.run(
         ["bash", "-c", script],
@@ -92,11 +99,14 @@ def test_load_palworld_config_merges_discord_overrides() -> None:
             "allow_global_palbox_import": True,
             "pal_auto_hp_regen_rate_in_sleep": 2.0,
             "pal_egg_default_hatching_time": 0,
+            "monster_farm_action_speed_rate": 2.0,
+            "pal_stomach_decrease_rate": 0.5,
+            "supply_drop_span": 60,
         }
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert completed.stdout == "Discord Server|1.5|2.5|None|50|true|true|2.0|0"
+    assert completed.stdout == "Discord Server|1.5|2.5|None|50|true|true|2.0|0|2.0|0.5|60"
 
 
 def test_load_palworld_config_rejects_unknown_override_keys() -> None:
@@ -121,6 +131,10 @@ def test_load_palworld_config_rejects_invalid_new_override_values() -> None:
         {"pal_auto_hp_regen_rate_in_sleep": 0},
         {"pal_egg_default_hatching_time": -1},
         {"pal_egg_default_hatching_time": False},
+        {"monster_farm_action_speed_rate": 0},
+        {"pal_stomach_decrease_rate": 0},
+        {"supply_drop_span": 0},
+        {"supply_drop_span": 1.5},
     ):
         completed = run_load(overrides)
         assert completed.returncode != 0
@@ -137,3 +151,7 @@ def test_configure_script_maps_supported_settings_to_official_ini_keys() -> None
     assert "bAllowGlobalPalboxImport:$allow_global_palbox_import" in script
     assert "PalAutoHpRegeneRateInSleep:$pal_auto_hp_regen_rate_in_sleep" in script
     assert "PalEggDefaultHatchingTime:$pal_egg_default_hatching_time" in script
+    assert "MonsterFarmActionSpeedRate:$monster_farm_action_speed_rate" in script
+    assert "PalStaminaDecreaceRate:$pal_stamina_decrease_rate" in script
+    assert "PalStomachDecreaceRate:$pal_stomach_decrease_rate" in script
+    assert "SupplyDropSpan:$supply_drop_span" in script

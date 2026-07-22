@@ -25,7 +25,9 @@ updates=$(jq -cn \
   --argjson exp_rate "$EXP_RATE" \
   --argjson collection_drop_rate "$COLLECTION_DROP_RATE" \
   --argjson enemy_drop_item_rate "$ENEMY_DROP_ITEM_RATE" \
+  --argjson supply_drop_span "$SUPPLY_DROP_SPAN" \
   --argjson base_camp_worker_max_num "$BASE_CAMP_WORKER_MAX_NUM" \
+  --argjson monster_farm_action_speed_rate "$MONSTER_FARM_ACTION_SPEED_RATE" \
   --argjson allow_global_palbox_export "$ALLOW_GLOBAL_PALBOX_EXPORT" \
   --argjson allow_global_palbox_import "$ALLOW_GLOBAL_PALBOX_IMPORT" \
   --argjson pal_auto_hp_regen_rate_in_sleep "$PAL_AUTO_HP_REGEN_RATE_IN_SLEEP" \
@@ -37,6 +39,7 @@ updates=$(jq -cn \
   --argjson player_damage_attack_rate "$PLAYER_DAMAGE_ATTACK_RATE" \
   --argjson player_damage_defense_rate "$PLAYER_DAMAGE_DEFENSE_RATE" \
   --argjson pal_stamina_decrease_rate "$PAL_STAMINA_DECREASE_RATE" \
+  --argjson pal_stomach_decrease_rate "$PAL_STOMACH_DECREASE_RATE" \
   --argjson player_stamina_decrease_rate "$PLAYER_STAMINA_DECREASE_RATE" \
   --argjson item_weight_rate "$ITEM_WEIGHT_RATE" \
   --argjson rest_api_port "$REST_API_PORT" \
@@ -50,7 +53,9 @@ updates=$(jq -cn \
     ExpRate:$exp_rate,
     CollectionDropRate:$collection_drop_rate,
     EnemyDropItemRate:$enemy_drop_item_rate,
+    SupplyDropSpan:$supply_drop_span,
     BaseCampWorkerMaxNum:$base_camp_worker_max_num,
+    MonsterFarmActionSpeedRate:$monster_farm_action_speed_rate,
     bAllowGlobalPalboxExport:$allow_global_palbox_export,
     bAllowGlobalPalboxImport:$allow_global_palbox_import,
     PalAutoHpRegeneRateInSleep:$pal_auto_hp_regen_rate_in_sleep,
@@ -62,6 +67,7 @@ updates=$(jq -cn \
     PlayerDamageRateAttack:$player_damage_attack_rate,
     PlayerDamageRateDefense:$player_damage_defense_rate,
     PalStaminaDecreaceRate:$pal_stamina_decrease_rate,
+    PalStomachDecreaceRate:$pal_stomach_decrease_rate,
     PlayerStaminaDecreaceRate:$player_stamina_decrease_rate,
     ItemWeightRate:$item_weight_rate,
     bAllowEnhanceStat_Stamina:true,

@@ -104,11 +104,26 @@ def test_parameter_service_validates_new_numeric_limits() -> None:
         ]
         == 0.0
     )
+    assert (
+        service.set_override("monster_farm_action_speed_rate", "2,5").effective[
+            "monster_farm_action_speed_rate"
+        ]
+        == 2.5
+    )
+    assert (
+        service.set_override("pal_stomach_decrease_rate", "0,5").effective[
+            "pal_stomach_decrease_rate"
+        ]
+        == 0.5
+    )
+    assert service.set_override("supply_drop_span", "60").effective["supply_drop_span"] == 60
 
     with pytest.raises(SettingsValidationError):
         service.set_override("base_camp_worker_max_num", 51)
     with pytest.raises(SettingsValidationError):
         service.set_override("pal_egg_default_hatching_time", -1)
+    with pytest.raises(SettingsValidationError):
+        service.set_override("supply_drop_span", 0)
 
 
 def test_parameter_service_rejects_unknown_or_invalid_values() -> None:

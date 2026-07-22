@@ -14,7 +14,9 @@ BASE_SETTINGS: dict[str, str | int | float | bool] = {
     "exp_rate": 1.0,
     "collection_drop_rate": 1.0,
     "enemy_drop_item_rate": 1.0,
+    "supply_drop_span": 180,
     "base_camp_worker_max_num": 15,
+    "monster_farm_action_speed_rate": 1.0,
     "allow_global_palbox_export": False,
     "allow_global_palbox_import": False,
     "pal_auto_hp_regen_rate_in_sleep": 1.0,
@@ -26,6 +28,7 @@ BASE_SETTINGS: dict[str, str | int | float | bool] = {
     "player_damage_attack_rate": 1.0,
     "player_damage_defense_rate": 1.0,
     "pal_stamina_decrease_rate": 1.0,
+    "pal_stomach_decrease_rate": 1.0,
     "player_stamina_decrease_rate": 1.0,
     "item_weight_rate": 1.0,
 }
@@ -82,6 +85,22 @@ def test_new_fields_use_official_keys_and_document_their_constraints() -> None:
     assert FIELDS_BY_KEY["pal_auto_hp_regen_rate_in_sleep"].ini_key == "PalAutoHpRegeneRateInSleep"
     assert FIELDS_BY_KEY["pal_egg_default_hatching_time"].ini_key == "PalEggDefaultHatchingTime"
     assert "0" in FIELDS_BY_KEY["pal_egg_default_hatching_time"].allowed_values_pt
+
+
+def test_requested_farm_survival_and_supply_fields_use_official_keys() -> None:
+    expected_ini_keys = {
+        "monster_farm_action_speed_rate": "MonsterFarmActionSpeedRate",
+        "pal_stamina_decrease_rate": "PalStaminaDecreaceRate",
+        "pal_stomach_decrease_rate": "PalStomachDecreaceRate",
+        "supply_drop_span": "SupplyDropSpan",
+    }
+
+    assert {key: FIELDS_BY_KEY[key].ini_key for key in expected_ini_keys} == expected_ini_keys
+    assert "minutos" in FIELDS_BY_KEY["supply_drop_span"].allowed_values_pt
+    assert (
+        "Pocketpair não publica"
+        in FIELDS_BY_KEY["monster_farm_action_speed_rate"].allowed_values_pt
+    )
 
 
 def test_configurar_opens_ephemeral_panel_with_every_setting_and_official_docs(
