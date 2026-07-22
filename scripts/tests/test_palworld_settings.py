@@ -20,6 +20,11 @@ DEFAULT_DOCUMENT = {
         "exp_rate": 1.0,
         "collection_drop_rate": 1.0,
         "enemy_drop_item_rate": 1.0,
+        "base_camp_worker_max_num": 15,
+        "allow_global_palbox_export": False,
+        "allow_global_palbox_import": False,
+        "pal_auto_hp_regen_rate_in_sleep": 1.0,
+        "pal_egg_default_hatching_time": 72.0,
         "pal_spawn_rate": 1.0,
         "death_penalty": "Item",
         "pal_damage_attack_rate": 1.0,
@@ -62,6 +67,8 @@ def test_bootstrap_imports_supported_values_from_legacy_tfvars(tmp_path: Path) -
                 "palworld_max_players = 10",
                 "palworld_exp_rate = 1.75",
                 "palworld_enemy_drop_item_rate = 2.5",
+                "palworld_base_camp_worker_max_num = 20",
+                "palworld_allow_global_palbox_export = true",
                 'palworld_death_penalty = "None"',
             ]
         ),
@@ -78,6 +85,8 @@ def test_bootstrap_imports_supported_values_from_legacy_tfvars(tmp_path: Path) -
     assert document.values["max_players"] == 10
     assert document.values["exp_rate"] == 1.75
     assert document.values["enemy_drop_item_rate"] == 2.5
+    assert document.values["base_camp_worker_max_num"] == 20
+    assert document.values["allow_global_palbox_export"] is True
     assert document.values["death_penalty"] == "None"
 
 
@@ -115,6 +124,10 @@ def test_update_validates_and_persists_a_canonical_document(tmp_path: Path) -> N
     [
         ("max_players", 0, "must be at least 1"),
         ("exp_rate", 0, "must be greater than 0"),
+        ("base_camp_worker_max_num", 51, "must be at most 50"),
+        ("allow_global_palbox_export", "yes", "must be True or False"),
+        ("pal_auto_hp_regen_rate_in_sleep", 0, "must be greater than 0"),
+        ("pal_egg_default_hatching_time", -1, "must be at least 0"),
         ("death_penalty", "Inventory", "must be one of"),
         ("ServerPassword", "do-not-store-here", "unknown setting"),
         ("server_name", "x" * 101, "must be at most 100 characters"),
@@ -165,13 +178,15 @@ def test_default_command_runs_wizard_and_saves_only_confirmed_changes(tmp_path: 
     write_json(settings)
     answers = iter(
         [
-            "2",  # Gameplay
+            "3",  # Gameplay
             "1.5",  # Experience
             "",  # Collection drops
             "",  # Enemy/Pal drops
             "",  # Pal spawn
             "",  # Death penalty
-            "5",  # Review and save
+            "",  # Pal HP regeneration while sleeping
+            "",  # Egg hatching time
+            "6",  # Review and save
             "y",
         ]
     )

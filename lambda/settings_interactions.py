@@ -25,6 +25,7 @@ LOGGER = logging.getLogger(__name__)
 
 SECTION_LABELS = {
     "Server": "Servidor",
+    "Base and Palbox": "Base e Palbox",
     "Gameplay": "Jogabilidade",
     "Damage": "Dano",
     "Stamina and inventory": "Stamina e inventário",
@@ -108,7 +109,7 @@ def _choice_input(field: SettingField, current_value: object) -> dict[str, Any]:
             "label": choice,
             "value": choice,
             "description": help_by_choice[choice],
-            "default": choice == current_value,
+            "default": choice.casefold() == str(current_value).casefold(),
         }
         for choice in field.choices
     ]
@@ -237,7 +238,7 @@ class SettingsInteractionController:
         )
         value_component = (
             _choice_input(field, snapshot.effective[key])
-            if field.value_type == "choice"
+            if field.value_type in {"choice", "boolean"}
             else _text_input(field, snapshot.effective[key])
         )
         return modal(

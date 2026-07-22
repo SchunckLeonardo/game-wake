@@ -72,6 +72,45 @@ def test_parameter_service_persists_enemy_drop_rate_override() -> None:
     assert json.loads(ssm.puts[-1]["Value"]) == {"enemy_drop_item_rate": 2.5}
 
 
+def test_parameter_service_parses_and_persists_boolean_override() -> None:
+    ssm = FakeSSM(BASE_SETTINGS, {})
+    service = ParameterSettingsService(
+        lambda: ssm,
+        "/palworld/config",
+        "/palworld/settings-overrides",
+    )
+
+    snapshot = service.set_override("allow_global_palbox_export", "true")
+
+    assert snapshot.effective["allow_global_palbox_export"] is True
+    assert json.loads(ssm.puts[-1]["Value"]) == {"allow_global_palbox_export": True}
+
+
+def test_parameter_service_validates_new_numeric_limits() -> None:
+    ssm = FakeSSM(BASE_SETTINGS, {})
+    service = ParameterSettingsService(
+        lambda: ssm,
+        "/palworld/config",
+        "/palworld/settings-overrides",
+    )
+
+    assert (
+        service.set_override("base_camp_worker_max_num", "50").effective["base_camp_worker_max_num"]
+        == 50
+    )
+    assert (
+        service.set_override("pal_egg_default_hatching_time", "0").effective[
+            "pal_egg_default_hatching_time"
+        ]
+        == 0.0
+    )
+
+    with pytest.raises(SettingsValidationError):
+        service.set_override("base_camp_worker_max_num", 51)
+    with pytest.raises(SettingsValidationError):
+        service.set_override("pal_egg_default_hatching_time", -1)
+
+
 def test_parameter_service_rejects_unknown_or_invalid_values() -> None:
     ssm = FakeSSM(BASE_SETTINGS, {})
     service = ParameterSettingsService(

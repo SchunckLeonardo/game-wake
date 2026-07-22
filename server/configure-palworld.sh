@@ -25,6 +25,11 @@ updates=$(jq -cn \
   --argjson exp_rate "$EXP_RATE" \
   --argjson collection_drop_rate "$COLLECTION_DROP_RATE" \
   --argjson enemy_drop_item_rate "$ENEMY_DROP_ITEM_RATE" \
+  --argjson base_camp_worker_max_num "$BASE_CAMP_WORKER_MAX_NUM" \
+  --argjson allow_global_palbox_export "$ALLOW_GLOBAL_PALBOX_EXPORT" \
+  --argjson allow_global_palbox_import "$ALLOW_GLOBAL_PALBOX_IMPORT" \
+  --argjson pal_auto_hp_regen_rate_in_sleep "$PAL_AUTO_HP_REGEN_RATE_IN_SLEEP" \
+  --argjson pal_egg_default_hatching_time "$PAL_EGG_DEFAULT_HATCHING_TIME" \
   --argjson pal_spawn_rate "$PAL_SPAWN_RATE" \
   --arg death_penalty "$DEATH_PENALTY" \
   --argjson pal_damage_attack_rate "$PAL_DAMAGE_ATTACK_RATE" \
@@ -45,6 +50,11 @@ updates=$(jq -cn \
     ExpRate:$exp_rate,
     CollectionDropRate:$collection_drop_rate,
     EnemyDropItemRate:$enemy_drop_item_rate,
+    BaseCampWorkerMaxNum:$base_camp_worker_max_num,
+    bAllowGlobalPalboxExport:$allow_global_palbox_export,
+    bAllowGlobalPalboxImport:$allow_global_palbox_import,
+    PalAutoHpRegeneRateInSleep:$pal_auto_hp_regen_rate_in_sleep,
+    PalEggDefaultHatchingTime:$pal_egg_default_hatching_time,
     PalSpawnNumRate:$pal_spawn_rate,
     DeathPenalty:$death_penalty,
     PalDamageRateAttack:$pal_damage_attack_rate,

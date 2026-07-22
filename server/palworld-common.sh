@@ -66,6 +66,11 @@ load_palworld_config() {
         "exp_rate",
         "collection_drop_rate",
         "enemy_drop_item_rate",
+        "base_camp_worker_max_num",
+        "allow_global_palbox_export",
+        "allow_global_palbox_import",
+        "pal_auto_hp_regen_rate_in_sleep",
+        "pal_egg_default_hatching_time",
         "pal_spawn_rate",
         "death_penalty",
         "pal_damage_attack_rate",
@@ -79,10 +84,17 @@ load_palworld_config() {
       ((.server_name // "valid") | type == "string" and length > 0 and length <= 100) and
       ((.server_description // "") | type == "string" and length <= 500) and
       ((.max_players // 1) | type == "number" and . >= 1 and floor == .) and
+      ([.base_camp_worker_max_num?] |
+        all(. == null or (type == "number" and . >= 1 and . <= 50 and floor == .))) and
+      ([
+        .allow_global_palbox_export?,
+        .allow_global_palbox_import?
+      ] | all(. == null or type == "boolean")) and
       ([
         .exp_rate?,
         .collection_drop_rate?,
         .enemy_drop_item_rate?,
+        .pal_auto_hp_regen_rate_in_sleep?,
         .pal_spawn_rate?,
         .pal_damage_attack_rate?,
         .pal_damage_defense_rate?,
@@ -92,6 +104,8 @@ load_palworld_config() {
         .player_stamina_decrease_rate?,
         .item_weight_rate?
       ] | all(. == null or (type == "number" and . > 0))) and
+      ([.pal_egg_default_hatching_time?] |
+        all(. == null or (type == "number" and . >= 0))) and
       ((.death_penalty // "Item") as $death |
         ["None", "Item", "ItemAndEquipment", "All"] | index($death) != null)
     ' >/dev/null <<<"$overrides" || {
@@ -110,6 +124,19 @@ load_palworld_config() {
   EXP_RATE=$(jq -er '.exp_rate | numbers' <<<"$config")
   COLLECTION_DROP_RATE=$(jq -er '.collection_drop_rate | numbers' <<<"$config")
   ENEMY_DROP_ITEM_RATE=$(jq -er '.enemy_drop_item_rate | numbers' <<<"$config")
+  BASE_CAMP_WORKER_MAX_NUM=$(jq -er '.base_camp_worker_max_num | numbers' <<<"$config")
+  ALLOW_GLOBAL_PALBOX_EXPORT=$(jq -r '
+    .allow_global_palbox_export |
+    if type == "boolean" then . else error("expected boolean") end
+  ' <<<"$config")
+  ALLOW_GLOBAL_PALBOX_IMPORT=$(jq -r '
+    .allow_global_palbox_import |
+    if type == "boolean" then . else error("expected boolean") end
+  ' <<<"$config")
+  PAL_AUTO_HP_REGEN_RATE_IN_SLEEP=$(jq -er \
+    '.pal_auto_hp_regen_rate_in_sleep | numbers' <<<"$config")
+  PAL_EGG_DEFAULT_HATCHING_TIME=$(jq -er \
+    '.pal_egg_default_hatching_time | numbers' <<<"$config")
   PAL_SPAWN_RATE=$(jq -er '.pal_spawn_rate | numbers' <<<"$config")
   DEATH_PENALTY=$(jq -er '.death_penalty | strings' <<<"$config")
   PAL_DAMAGE_ATTACK_RATE=$(jq -er '.pal_damage_attack_rate | numbers' <<<"$config")
@@ -129,6 +156,8 @@ load_palworld_config() {
 
   export PALWORLD_SERVER_NAME PALWORLD_SERVER_DESCRIPTION PALWORLD_PORT
   export PALWORLD_MAX_PLAYERS EXP_RATE COLLECTION_DROP_RATE ENEMY_DROP_ITEM_RATE
+  export BASE_CAMP_WORKER_MAX_NUM ALLOW_GLOBAL_PALBOX_EXPORT ALLOW_GLOBAL_PALBOX_IMPORT
+  export PAL_AUTO_HP_REGEN_RATE_IN_SLEEP PAL_EGG_DEFAULT_HATCHING_TIME
   export PAL_SPAWN_RATE DEATH_PENALTY
   export PAL_DAMAGE_ATTACK_RATE PAL_DAMAGE_DEFENSE_RATE PLAYER_DAMAGE_ATTACK_RATE
   export PLAYER_DAMAGE_DEFENSE_RATE PAL_STAMINA_DECREASE_RATE

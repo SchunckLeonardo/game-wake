@@ -15,6 +15,11 @@ BASE_CONFIG = {
     "exp_rate": 1.0,
     "collection_drop_rate": 1.0,
     "enemy_drop_item_rate": 1.0,
+    "base_camp_worker_max_num": 15,
+    "allow_global_palbox_export": False,
+    "allow_global_palbox_import": False,
+    "pal_auto_hp_regen_rate_in_sleep": 1.0,
+    "pal_egg_default_hatching_time": 72.0,
     "pal_spawn_rate": 1.0,
     "death_penalty": "Item",
     "pal_damage_attack_rate": 1.0,
@@ -54,6 +59,12 @@ printf '%s|%s|%s|%s' \\
   \"$EXP_RATE\" \\
   \"$ENEMY_DROP_ITEM_RATE\" \\
   \"$DEATH_PENALTY\"
+printf '|%s|%s|%s|%s|%s' \
+  \"$BASE_CAMP_WORKER_MAX_NUM\" \
+  \"$ALLOW_GLOBAL_PALBOX_EXPORT\" \
+  \"$ALLOW_GLOBAL_PALBOX_IMPORT\" \
+  \"$PAL_AUTO_HP_REGEN_RATE_IN_SLEEP\" \
+  \"$PAL_EGG_DEFAULT_HATCHING_TIME\"
 """
     return subprocess.run(
         ["bash", "-c", script],
@@ -76,11 +87,16 @@ def test_load_palworld_config_merges_discord_overrides() -> None:
             "exp_rate": 1.5,
             "enemy_drop_item_rate": 2.5,
             "death_penalty": "None",
+            "base_camp_worker_max_num": 50,
+            "allow_global_palbox_export": True,
+            "allow_global_palbox_import": True,
+            "pal_auto_hp_regen_rate_in_sleep": 2.0,
+            "pal_egg_default_hatching_time": 0,
         }
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert completed.stdout == "Discord Server|1.5|2.5|None"
+    assert completed.stdout == "Discord Server|1.5|2.5|None|50|true|true|2.0|0"
 
 
 def test_load_palworld_config_rejects_unknown_override_keys() -> None:
@@ -97,8 +113,27 @@ def test_load_palworld_config_rejects_invalid_override_values() -> None:
     assert "invalidas ou desconhecidas" in completed.stderr
 
 
-def test_configure_script_maps_enemy_drop_rate_to_official_ini_key() -> None:
+def test_load_palworld_config_rejects_invalid_new_override_values() -> None:
+    for overrides in (
+        {"base_camp_worker_max_num": 51},
+        {"base_camp_worker_max_num": False},
+        {"allow_global_palbox_export": "true"},
+        {"pal_auto_hp_regen_rate_in_sleep": 0},
+        {"pal_egg_default_hatching_time": -1},
+        {"pal_egg_default_hatching_time": False},
+    ):
+        completed = run_load(overrides)
+        assert completed.returncode != 0
+        assert "invalidas ou desconhecidas" in completed.stderr
+
+
+def test_configure_script_maps_supported_settings_to_official_ini_keys() -> None:
     script = CONFIGURE_SCRIPT.read_text(encoding="utf-8")
 
     assert '--argjson enemy_drop_item_rate "$ENEMY_DROP_ITEM_RATE"' in script
     assert "EnemyDropItemRate:$enemy_drop_item_rate" in script
+    assert "BaseCampWorkerMaxNum:$base_camp_worker_max_num" in script
+    assert "bAllowGlobalPalboxExport:$allow_global_palbox_export" in script
+    assert "bAllowGlobalPalboxImport:$allow_global_palbox_import" in script
+    assert "PalAutoHpRegeneRateInSleep:$pal_auto_hp_regen_rate_in_sleep" in script
+    assert "PalEggDefaultHatchingTime:$pal_egg_default_hatching_time" in script
