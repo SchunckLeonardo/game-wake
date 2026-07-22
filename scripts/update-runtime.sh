@@ -4,6 +4,24 @@ set -Eeuo pipefail
 project_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$project_root"
 
+activate=false
+case ${1:-} in
+  "") ;;
+  --activate) activate=true ;;
+  *)
+    printf 'Usage: %s [--activate]\n' "$0" >&2
+    exit 64
+    ;;
+esac
+
+ssm_bash_command() {
+  local script=$1
+  local payload
+
+  payload=$(printf '%s' "$script" | base64 | tr -d '\n')
+  printf "printf '%%s' '%s' | base64 --decode | sudo bash" "$payload"
+}
+
 if [[ -f .env ]]; then
   set -a
   # shellcheck disable=SC1091
@@ -50,36 +68,125 @@ if [[ $ssm_online != true ]]; then
   exit 1
 fi
 
-common_payload=$(base64 <server/palworld-common.sh | tr -d '\n')
-install_command=$(printf '%s' \
-  "printf '%s' '$common_payload' | base64 --decode | sudo tee /usr/local/lib/palworld/palworld-common.sh >/dev/null
-sudo chown root:root /usr/local/lib/palworld/palworld-common.sh
-sudo chmod 0644 /usr/local/lib/palworld/palworld-common.sh")
+runtime_sources=(
+  server/palworld-common.sh
+  server/render_settings.py
+  server/install-palworld.sh
+  server/configure-palworld.sh
+  server/start-palworld.sh
+  server/stop-palworld.sh
+  server/backup-palworld.sh
+  server/autostop.sh
+  server/notify-discord.sh
+  server/healthcheck.sh
+  server/palworld.service
+  server/palworld-notify.service
+  server/palworld-autostop.service
+  server/palworld-autostop.timer
+  server/palworld-backup.service
+  server/palworld-backup.timer
+)
+runtime_archive=$(mktemp)
+trap 'rm -f "$runtime_archive"' EXIT
+tar -czf "$runtime_archive" "${runtime_sources[@]}"
+runtime_payload=$(base64 <"$runtime_archive" | tr -d '\n')
+# shellcheck disable=SC2016 # $runtime_dir expands on the remote host.
+install_script=$(printf '%s\n' \
+  'set -Eeuo pipefail' \
+  'runtime_dir=$(mktemp -d)' \
+  'trap '\''rm -rf "$runtime_dir"'\'' EXIT' \
+  "printf '%s' '$runtime_payload' | base64 --decode | tar -xz -C \"\$runtime_dir\"" \
+  'install -d -m 0755 /usr/local/lib/palworld /usr/local/sbin' \
+  'install -m 0644 "$runtime_dir/server/palworld-common.sh" /usr/local/lib/palworld/palworld-common.sh' \
+  'install -m 0755 "$runtime_dir/server/render_settings.py" /usr/local/lib/palworld/render_settings.py' \
+  'install -m 0755 "$runtime_dir/server/install-palworld.sh" /usr/local/sbin/install-palworld.sh' \
+  'install -m 0755 "$runtime_dir/server/configure-palworld.sh" /usr/local/sbin/configure-palworld.sh' \
+  'install -m 0755 "$runtime_dir/server/start-palworld.sh" /usr/local/sbin/start-palworld.sh' \
+  'install -m 0755 "$runtime_dir/server/stop-palworld.sh" /usr/local/sbin/stop-palworld.sh' \
+  'install -m 0755 "$runtime_dir/server/backup-palworld.sh" /usr/local/sbin/backup-palworld.sh' \
+  'install -m 0755 "$runtime_dir/server/autostop.sh" /usr/local/sbin/autostop.sh' \
+  'install -m 0755 "$runtime_dir/server/notify-discord.sh" /usr/local/sbin/notify-discord.sh' \
+  'install -m 0755 "$runtime_dir/server/healthcheck.sh" /usr/local/sbin/healthcheck.sh' \
+  'install -m 0644 "$runtime_dir/server/palworld.service" /etc/systemd/system/palworld.service' \
+  'install -m 0644 "$runtime_dir/server/palworld-notify.service" /etc/systemd/system/palworld-notify.service' \
+  'install -m 0644 "$runtime_dir/server/palworld-autostop.service" /etc/systemd/system/palworld-autostop.service' \
+  'install -m 0644 "$runtime_dir/server/palworld-autostop.timer" /etc/systemd/system/palworld-autostop.timer' \
+  'install -m 0644 "$runtime_dir/server/palworld-backup.service" /etc/systemd/system/palworld-backup.service' \
+  'install -m 0644 "$runtime_dir/server/palworld-backup.timer" /etc/systemd/system/palworld-backup.timer' \
+  'chown root:root /usr/local/lib/palworld/palworld-common.sh /usr/local/lib/palworld/render_settings.py' \
+  'chown root:root /usr/local/sbin/{install,configure,start,stop,backup}-palworld.sh' \
+  'chown root:root /usr/local/sbin/{autostop,notify-discord,healthcheck}.sh' \
+  'chown root:root /etc/systemd/system/palworld*.service /etc/systemd/system/palworld*.timer' \
+  'systemctl daemon-reload')
+install_command=$(ssm_bash_command "$install_script")
 parameters=$(jq -cn --arg command "$install_command" \
   '{commands:[$command],executionTimeout:["120"]}')
 command_id=$(aws ssm send-command \
   --region "$region" \
   --instance-ids "$instance_id" \
   --document-name AWS-RunShellScript \
-  --comment 'Update Palworld runtime configuration loader' \
+  --comment 'Update Palworld runtime files' \
   --parameters "$parameters" \
   --query 'Command.CommandId' \
   --output text)
-aws ssm wait command-executed \
+if ! aws ssm wait command-executed \
   --region "$region" \
   --command-id "$command_id" \
-  --instance-id "$instance_id"
-printf 'Runtime configuration loader updated (%s).\n' "${command_id:0:8}"
+  --instance-id "$instance_id"; then
+  aws ssm get-command-invocation \
+    --region "$region" \
+    --command-id "$command_id" \
+    --instance-id "$instance_id" \
+    --query '{Status:Status,Output:StandardOutputContent,Error:StandardErrorContent}' \
+    --output json >&2 || true
+  exit 2
+fi
+printf 'Palworld runtime files updated (%s).\n' "${command_id:0:8}"
+
+if [[ $started_for_update == false && $activate == true ]]; then
+  activation_script='set -Eeuo pipefail
+/usr/local/sbin/stop-palworld.sh
+systemctl start palworld.service
+systemctl restart palworld-notify.service'
+  activation_command=$(ssm_bash_command "$activation_script")
+  activation_parameters=$(jq -cn --arg command "$activation_command" \
+    '{commands:[$command],executionTimeout:["360"]}')
+  activation_id=$(aws ssm send-command \
+    --region "$region" \
+    --instance-ids "$instance_id" \
+    --document-name AWS-RunShellScript \
+    --comment 'Activate updated Palworld runtime and settings' \
+    --parameters "$activation_parameters" \
+    --query 'Command.CommandId' \
+    --output text)
+  if ! aws ssm wait command-executed \
+    --region "$region" \
+    --command-id "$activation_id" \
+    --instance-id "$instance_id"; then
+    aws ssm get-command-invocation \
+      --region "$region" \
+      --command-id "$activation_id" \
+      --instance-id "$instance_id" \
+      --query '{Status:Status,Output:StandardOutputContent,Error:StandardErrorContent}' \
+      --output json >&2 || true
+    exit 2
+  fi
+  printf 'Updated runtime and settings activated safely (%s).\n' "${activation_id:0:8}"
+elif [[ $started_for_update == false ]]; then
+  printf 'Runtime updated. Use --activate to restart safely now, or wait for the next start.\n'
+fi
 
 if [[ $started_for_update == true ]]; then
   printf 'Returning the temporarily started server to stopped state through the safe flow...\n'
-  shutdown_command='for _ in {1..150}; do
+  shutdown_script='set -Eeuo pipefail
+for _ in {1..150}; do
   sudo test -e /run/palworld/ready && break
   sudo systemctl is-active --quiet palworld.service || exit 1
   sleep 2
 done
 sudo test -e /run/palworld/ready
 sudo /usr/local/sbin/stop-palworld.sh --shutdown'
+  shutdown_command=$(ssm_bash_command "$shutdown_script")
   shutdown_parameters=$(jq -cn --arg command "$shutdown_command" \
     '{commands:[$command],executionTimeout:["360"]}')
   shutdown_id=$(aws ssm send-command \

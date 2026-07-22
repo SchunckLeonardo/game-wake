@@ -742,14 +742,16 @@ this Terraform change:
 ```bash
 ./scripts/deploy.sh plan
 ./scripts/deploy.sh apply
-./scripts/update-runtime.sh
+./scripts/update-runtime.sh --activate
 ./scripts/register-discord-commands.sh
 ```
 
 `update-runtime.sh` uses Session Manager and never requires SSH. If the instance was stopped, the
-script starts it temporarily, installs the loader, and returns it to `stopped` through the safe
-player/save/backup flow. If players connect or the safety check fails, it leaves the instance
-running and reports the condition instead of forcing a shutdown.
+script starts it temporarily, synchronizes every installed runtime script and unit, and returns it
+to `stopped` through the safe player/save/backup flow. On a running instance, `--activate` performs
+the same safe player check before restarting with the new runtime and settings. If players connect
+or the safety check fails, it leaves the instance running and reports the condition instead of
+forcing a shutdown.
 
 ## Backups
 

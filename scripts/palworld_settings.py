@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import re
@@ -313,6 +314,11 @@ def _terraform_output(name: str) -> str:
     return completed.stdout.strip()
 
 
+def _bash_ssm_command(script: str) -> str:
+    encoded = base64.b64encode(script.encode()).decode()
+    return f"printf '%s' '{encoded}' | base64 --decode | sudo bash"
+
+
 def _activate_when_empty(output_fn: Callable[[str], None]) -> int:
     instance_id = _terraform_output("instance_id")
     region = _terraform_output("aws_region")
@@ -347,14 +353,15 @@ def _activate_when_empty(output_fn: Callable[[str], None]) -> int:
         output_fn(f"Settings published, but the instance state is {state}; activation was skipped.")
         return 0
 
-    remote_script = "\n".join(
+    activation_script = "\n".join(
         [
             "set -Eeuo pipefail",
-            "sudo /usr/local/sbin/stop-palworld.sh",
-            "sudo systemctl start palworld.service",
-            "sudo systemctl restart palworld-notify.service",
+            "/usr/local/sbin/stop-palworld.sh",
+            "systemctl start palworld.service",
+            "systemctl restart palworld-notify.service",
         ]
     )
+    remote_script = _bash_ssm_command(activation_script)
     send_result = _run_capture(
         [
             "aws",
