@@ -1,7 +1,17 @@
+import base64
 import json
+import subprocess
 from datetime import UTC, datetime
 
-from ec2_service import EC2Service, human_uptime
+from ec2_service import EC2Service, _bash_ssm_command, human_uptime
+
+
+def _decode_bash_ssm_command(command: str) -> str:
+    prefix = "printf '%s' '"
+    suffix = "' | base64 --decode | sudo bash"
+    assert command.startswith(prefix)
+    assert command.endswith(suffix)
+    return base64.b64decode(command[len(prefix) : -len(suffix)]).decode()
 
 
 class FakeEC2Client:
@@ -77,10 +87,28 @@ def test_settings_activation_uses_fail_closed_stop_before_restart() -> None:
     command_id = service.request_settings_activation()
 
     command = ssm.sent["Parameters"]["commands"][0]
-    assert command.startswith("set -Eeuo pipefail")
-    assert command.index("stop-palworld.sh") < command.index("systemctl start palworld.service")
-    assert "--force" not in command
+    assert command.startswith("printf '%s' '")
+    assert command.endswith("| base64 --decode | sudo bash")
+    decoded_script = _decode_bash_ssm_command(command)
+    assert decoded_script.index("stop-palworld.sh") < decoded_script.index(
+        "systemctl start palworld.service"
+    )
+    assert "--force" not in decoded_script
     assert command_id == "command-id"
+
+
+def test_bash_ssm_command_runs_strict_bash_script_through_posix_shell() -> None:
+    command = _bash_ssm_command("set -Eeuo pipefail\nprintf 'compatible'")
+
+    completed = subprocess.run(
+        ["/bin/sh", "-c", command.replace("sudo bash", "bash")],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout == "compatible"
 
 
 def test_human_uptime_formats_hours_and_minutes() -> None:

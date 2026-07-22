@@ -1,10 +1,17 @@
 """Operacoes estritamente limitadas a uma unica instancia Palworld."""
 
+import base64
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
+
+
+def _bash_ssm_command(script: str) -> str:
+    """Run a strict Bash script through AWS-RunShellScript's POSIX shell."""
+    encoded = base64.b64encode(script.encode()).decode()
+    return f"printf '%s' '{encoded}' | base64 --decode | sudo bash"
 
 
 @dataclass(frozen=True)
@@ -76,18 +83,19 @@ class EC2Service:
         return str(response["Command"]["CommandId"])
 
     def request_settings_activation(self) -> str:
+        activation_script = (
+            "set -Eeuo pipefail\n"
+            "/usr/local/sbin/stop-palworld.sh\n"
+            "systemctl start palworld.service\n"
+            "systemctl restart palworld-notify.service"
+        )
         response = self._get_ssm_client().send_command(
             InstanceIds=[self.instance_id],
             DocumentName="AWS-RunShellScript",
             Comment="Apply Palworld settings after a safe player check",
             TimeoutSeconds=360,
             Parameters={
-                "commands": [
-                    "set -Eeuo pipefail\n"
-                    "sudo /usr/local/sbin/stop-palworld.sh\n"
-                    "sudo systemctl start palworld.service\n"
-                    "sudo systemctl restart palworld-notify.service"
-                ],
+                "commands": [_bash_ssm_command(activation_script)],
                 "executionTimeout": ["360"],
             },
         )

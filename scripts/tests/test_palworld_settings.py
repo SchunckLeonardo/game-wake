@@ -1,4 +1,6 @@
+import base64
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -10,6 +12,15 @@ from palworld_settings import (
     SettingsValidationError,
     run_settings_cli,
 )
+
+
+def _decode_bash_ssm_command(command: str) -> str:
+    prefix = "printf '%s' '"
+    suffix = "' | base64 --decode | sudo bash"
+    assert command.startswith(prefix)
+    assert command.endswith(suffix)
+    return base64.b64decode(command[len(prefix) : -len(suffix)]).decode()
+
 
 DEFAULT_DOCUMENT = {
     "schema_version": 1,
@@ -259,10 +270,11 @@ def test_safe_activation_stops_before_restart_and_reports_success(
         if "send-command" in command:
             parameters = json.loads(command[command.index("--parameters") + 1])
             remote_script = parameters["commands"][0]
-            assert remote_script.index("stop-palworld.sh") < remote_script.index(
+            decoded_script = _decode_bash_ssm_command(remote_script)
+            assert decoded_script.index("stop-palworld.sh") < decoded_script.index(
                 "systemctl start palworld.service"
             )
-            assert remote_script.startswith("set -Eeuo pipefail")
+            assert decoded_script.startswith("set -Eeuo pipefail")
             return subprocess.CompletedProcess(command, 0, stdout="command-123\n", stderr="")
         if "get-command-invocation" in command:
             return subprocess.CompletedProcess(
@@ -337,6 +349,18 @@ def test_root_command_exposes_settings_help() -> None:
     assert "show" in completed.stdout
     assert "plan" in completed.stdout
     assert "apply" in completed.stdout
+
+
+def test_runtime_updater_syncs_every_installed_server_file_through_bash() -> None:
+    project_root = Path(__file__).resolve().parents[2]
+    update_script = (project_root / "scripts" / "update-runtime.sh").read_text(encoding="utf-8")
+    user_data = (project_root / "terraform" / "user-data.sh.tpl").read_text(encoding="utf-8")
+
+    installed_files = set(re.findall(r"install_payload '[^']+' (/[^ ]+)", user_data))
+
+    assert installed_files
+    assert all(destination in update_script for destination in installed_files)
+    assert update_script.count("ssm_bash_command") >= 3
 
 
 def test_discord_registration_exposes_guided_settings_panel() -> None:
