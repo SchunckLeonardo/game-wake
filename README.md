@@ -421,8 +421,13 @@ fields, while the passwords continue to be read independently from `SecureString
 | Experience rate | `ExpRate` |
 | Collection drop rate | `CollectionDropRate` |
 | Enemy/Pal drop rate | `EnemyDropItemRate` |
+| Maximum Pals working per base | `BaseCampWorkerMaxNum` |
+| Allow saving to the Global Palbox | `bAllowGlobalPalboxExport` |
+| Allow loading from the Global Palbox | `bAllowGlobalPalboxImport` |
 | Pal spawn rate | `PalSpawnNumRate` |
 | Death penalty | `DeathPenalty` |
+| Pal HP regeneration while resting in the Palbox | `PalAutoHpRegeneRateInSleep` |
+| Huge Egg hatching time | `PalEggDefaultHatchingTime` |
 | Pal attack/received damage | `PalDamageRateAttack` / `PalDamageRateDefense` |
 | Player attack/received damage | `PlayerDamageRateAttack` / `PlayerDamageRateDefense` |
 | Pal/player stamina depletion | `PalStaminaDecreaceRate` / `PlayerStaminaDecreaceRate` |
@@ -431,7 +436,8 @@ fields, while the passwords continue to be read independently from `SecureString
 `DeathPenalty` accepts `None`, `Item`, `ItemAndEquipment`, or `All`. The official spelling really is
 `Decreace`. `CollectionDropRate` changes gatherable resources, while `EnemyDropItemRate` changes the
 quantity of items dropped by defeated enemies and Pals. High `PalSpawnNumRate` values can affect
-performance.
+performance. Pocketpair caps `BaseCampWorkerMaxNum` at `50` and warns that higher worker counts
+increase server processing load.
 
 The project also enforces `bAllowEnhanceStat_Stamina=True`,
 `bAllowEnhanceStat_Weight=True`, `bIsUseBackupSaveData=True`, `RESTAPIEnabled=True`,
@@ -462,19 +468,22 @@ The accepted values are deliberately honest about what Pocketpair publishes:
 | `ServerName` | Non-empty text, up to the project's 100-character safety limit | Pocketpair publishes no own length limit |
 | `ServerDescription` | Text or empty text, up to the project's 500-character safety limit | Pocketpair publishes no own length limit |
 | `ServerPlayerMaxNum` | Integer greater than or equal to `1` | Pocketpair publishes no maximum |
-| All exposed rate/multiplier settings | Decimal greater than `0`; dot or comma is accepted | Pocketpair publishes no supported range or maximum |
+| `BaseCampWorkerMaxNum` | Integer from `1` through `50` | Pocketpair publishes `50` as the maximum |
+| `bAllowGlobalPalboxExport` / `bAllowGlobalPalboxImport` | `True` or `False`, selected from a dropdown | Boolean values documented by Pocketpair |
+| Exposed rate/multiplier settings | Decimal greater than `0`; dot or comma is accepted | Pocketpair publishes no supported range or maximum |
+| `PalEggDefaultHatchingTime` | Hours greater than or equal to `0`; `0` makes incubation instant | Pocketpair publishes no supported range or maximum |
 | `DeathPenalty` | `None`, `Item`, `ItemAndEquipment`, or `All` | Closed list documented by Pocketpair |
 
 For example, set `EnemyDropItemRate` to `2` for twice the normal quantity of drops from defeated
 enemies and Pals. This does not change resource gathering, which uses `CollectionDropRate`.
 
 `None` drops nothing. `Item` drops items except equipment. `ItemAndEquipment` drops items and
-equipment. `All` also drops the Pals in the player's team. The modal presents these four values as
-a dropdown instead of free text.
+equipment. `All` also drops the Pals in the player's team. Death penalty and Global Palbox boolean
+settings use dropdowns instead of free text.
 
-Enter `PADRAO` in a text modal, or choose **Padrão do repositório** in the death-penalty dropdown,
-to remove that Discord override. Passwords, ports, IAM settings, and other infrastructure values do
-not appear in the panel.
+Enter `PADRAO` in a text modal, or choose **Padrão do repositório** in a dropdown, to remove that
+Discord override. Passwords, ports, IAM settings, and other infrastructure values do not appear in
+the panel.
 
 When the server is stopped, a change is applied on the next start. When it is running, Lambda
 requests the existing fail-closed stop/save/backup/restart flow. Connected players or an

@@ -25,12 +25,14 @@ class SettingField:
     menu_description_pt: str
     official_description_pt: str
     minimum: float | None = None
+    maximum: float | None = None
+    minimum_inclusive: bool = False
     max_length: int | None = None
     choices: tuple[str, ...] = ()
     choice_descriptions_pt: tuple[tuple[str, str], ...] = ()
     allow_empty: bool = False
 
-    def parse(self, value: object) -> str | int | float:
+    def parse(self, value: object) -> str | int | float | bool:
         if self.value_type == "string":
             if not isinstance(value, str):
                 raise SettingsValidationError(f"{self.label} must be text")
@@ -56,6 +58,17 @@ class SettingField:
                     f"{self.label} must be one of: {', '.join(self.choices)}"
                 ) from error
 
+        if self.value_type == "boolean":
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, str):
+                normalized = value.strip().casefold()
+                if normalized == "true":
+                    return True
+                if normalized == "false":
+                    return False
+            raise SettingsValidationError(f"{self.label} must be True or False")
+
         if isinstance(value, bool):
             raise SettingsValidationError(f"{self.label} must be a number")
 
@@ -71,6 +84,8 @@ class SettingField:
                 raise SettingsValidationError(f"{self.label} must be a whole number")
             if self.minimum is not None and parsed_number < self.minimum:
                 raise SettingsValidationError(f"{self.label} must be at least {int(self.minimum)}")
+            if self.maximum is not None and parsed_number > self.maximum:
+                raise SettingsValidationError(f"{self.label} must be at most {int(self.maximum)}")
             return parsed_number
 
         if self.value_type == "number":
@@ -86,8 +101,19 @@ class SettingField:
                 raise SettingsValidationError(f"{self.label} must be a number")
             if not math.isfinite(parsed_float):
                 raise SettingsValidationError(f"{self.label} must be a finite number")
-            if self.minimum is not None and parsed_float <= self.minimum:
-                raise SettingsValidationError(f"{self.label} must be greater than {self.minimum:g}")
+            if self.minimum is not None:
+                below_minimum = (
+                    parsed_float < self.minimum
+                    if self.minimum_inclusive
+                    else parsed_float <= self.minimum
+                )
+                if below_minimum:
+                    comparison = "at least" if self.minimum_inclusive else "greater than"
+                    raise SettingsValidationError(
+                        f"{self.label} must be {comparison} {self.minimum:g}"
+                    )
+            if self.maximum is not None and parsed_float > self.maximum:
+                raise SettingsValidationError(f"{self.label} must be at most {self.maximum:g}")
             return parsed_float
 
         raise RuntimeError(f"unsupported field type: {self.value_type}")
@@ -148,6 +174,45 @@ FIELDS: tuple[SettingField, ...] = (
         "Inteiro ≥ 1; a Pocketpair não publica máximo.",
         "Número máximo de jogadores que podem entrar.",
         minimum=1,
+    ),
+    SettingField(
+        "base_camp_worker_max_num",
+        "BaseCampWorkerMaxNum",
+        "Maximum base workers",
+        "Pals trabalhadores por base",
+        "Base and Palbox",
+        "integer",
+        "número inteiro entre 1 e 50. Valores altos aumentam a carga do servidor.",
+        "Inteiro de 1 a 50; valores altos aumentam a carga.",
+        "Número máximo de Pals trabalhadores por base; o máximo oficial é 50.",
+        minimum=1,
+        maximum=50,
+    ),
+    SettingField(
+        "allow_global_palbox_export",
+        "bAllowGlobalPalboxExport",
+        "Allow Global Palbox export",
+        "Exportar para a Palbox Global",
+        "Base and Palbox",
+        "boolean",
+        "True (permitir) ou False (bloquear).",
+        "True permite salvar; False bloqueia.",
+        "Permite salvar Pals na Palbox Global.",
+        choices=("True", "False"),
+        choice_descriptions_pt=(("True", "Permitir."), ("False", "Bloquear.")),
+    ),
+    SettingField(
+        "allow_global_palbox_import",
+        "bAllowGlobalPalboxImport",
+        "Allow Global Palbox import",
+        "Importar da Palbox Global",
+        "Base and Palbox",
+        "boolean",
+        "True (permitir) ou False (bloquear).",
+        "True permite carregar; False bloqueia.",
+        "Permite carregar Pals da Palbox Global.",
+        choices=("True", "False"),
+        choice_descriptions_pt=(("True", "Permitir."), ("False", "Bloquear.")),
     ),
     SettingField(
         "exp_rate",
@@ -214,6 +279,31 @@ FIELDS: tuple[SettingField, ...] = (
             ("ItemAndEquipment", "Derruba itens e equipamentos."),
             ("All", "Derruba itens, equipamentos e Pals da equipe."),
         ),
+    ),
+    SettingField(
+        "pal_auto_hp_regen_rate_in_sleep",
+        "PalAutoHpRegeneRateInSleep",
+        "Pal HP regeneration in Palbox",
+        "Regeneração de HP na Palbox",
+        "Gameplay",
+        "number",
+        _POSITIVE_RATE,
+        _RATE_MENU,
+        "Multiplicador de regeneração de HP dos Pals enquanto descansam na Palbox.",
+        minimum=0,
+    ),
+    SettingField(
+        "pal_egg_default_hatching_time",
+        "PalEggDefaultHatchingTime",
+        "Huge Egg hatching time",
+        "Tempo de incubação dos ovos",
+        "Gameplay",
+        "number",
+        "número decimal maior ou igual a 0, em horas; 0 torna a incubação instantânea.",
+        "Horas ≥ 0; 0 torna a incubação instantânea.",
+        "Tempo, em horas, para incubar um Ovo Enorme; os outros ovos também levam tempo.",
+        minimum=0,
+        minimum_inclusive=True,
     ),
     SettingField(
         "pal_damage_attack_rate",
@@ -309,7 +399,7 @@ def normalize_settings(
     *,
     require_all: bool = True,
     allow_extra: bool = False,
-) -> dict[str, str | int | float]:
+) -> dict[str, str | int | float | bool]:
     if not isinstance(raw_settings, dict):
         raise SettingsValidationError("settings must be a JSON object")
 

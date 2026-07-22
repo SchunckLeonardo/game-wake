@@ -38,6 +38,11 @@ locals {
     "exp_rate",
     "collection_drop_rate",
     "enemy_drop_item_rate",
+    "base_camp_worker_max_num",
+    "allow_global_palbox_export",
+    "allow_global_palbox_import",
+    "pal_auto_hp_regen_rate_in_sleep",
+    "pal_egg_default_hatching_time",
     "pal_spawn_rate",
     "death_penalty",
     "pal_damage_attack_rate",
@@ -52,6 +57,7 @@ locals {
     "exp_rate",
     "collection_drop_rate",
     "enemy_drop_item_rate",
+    "pal_auto_hp_regen_rate_in_sleep",
     "pal_spawn_rate",
     "pal_damage_attack_rate",
     "pal_damage_defense_rate",
@@ -68,29 +74,34 @@ locals {
     allowed_role_ids = var.discord_allowed_role_ids
   })
   palworld_config_payload = jsonencode({
-    server_name                  = local.palworld_settings.server_name
-    server_description           = local.palworld_settings.server_description
-    port                         = var.palworld_port
-    max_players                  = local.palworld_settings.max_players
-    exp_rate                     = local.palworld_settings.exp_rate
-    collection_drop_rate         = local.palworld_settings.collection_drop_rate
-    enemy_drop_item_rate         = local.palworld_settings.enemy_drop_item_rate
-    pal_spawn_rate               = local.palworld_settings.pal_spawn_rate
-    death_penalty                = local.palworld_settings.death_penalty
-    pal_damage_attack_rate       = local.palworld_settings.pal_damage_attack_rate
-    pal_damage_defense_rate      = local.palworld_settings.pal_damage_defense_rate
-    player_damage_attack_rate    = local.palworld_settings.player_damage_attack_rate
-    player_damage_defense_rate   = local.palworld_settings.player_damage_defense_rate
-    pal_stamina_decrease_rate    = local.palworld_settings.pal_stamina_decrease_rate
-    player_stamina_decrease_rate = local.palworld_settings.player_stamina_decrease_rate
-    item_weight_rate             = local.palworld_settings.item_weight_rate
-    rest_api_port                = var.palworld_rest_api_port
-    rest_api_username            = var.palworld_rest_api_username
-    autostop_check_minutes       = var.autostop_check_minutes
-    autostop_idle_minutes        = var.autostop_idle_minutes
-    healthcheck_timeout_minutes  = var.healthcheck_timeout_minutes
-    local_backup_retention_days  = var.local_backup_retention_days
-    s3_backup_uri                = local.s3_backup_uri
+    server_name                     = local.palworld_settings.server_name
+    server_description              = local.palworld_settings.server_description
+    port                            = var.palworld_port
+    max_players                     = local.palworld_settings.max_players
+    exp_rate                        = local.palworld_settings.exp_rate
+    collection_drop_rate            = local.palworld_settings.collection_drop_rate
+    enemy_drop_item_rate            = local.palworld_settings.enemy_drop_item_rate
+    base_camp_worker_max_num        = local.palworld_settings.base_camp_worker_max_num
+    allow_global_palbox_export      = local.palworld_settings.allow_global_palbox_export
+    allow_global_palbox_import      = local.palworld_settings.allow_global_palbox_import
+    pal_auto_hp_regen_rate_in_sleep = local.palworld_settings.pal_auto_hp_regen_rate_in_sleep
+    pal_egg_default_hatching_time   = local.palworld_settings.pal_egg_default_hatching_time
+    pal_spawn_rate                  = local.palworld_settings.pal_spawn_rate
+    death_penalty                   = local.palworld_settings.death_penalty
+    pal_damage_attack_rate          = local.palworld_settings.pal_damage_attack_rate
+    pal_damage_defense_rate         = local.palworld_settings.pal_damage_defense_rate
+    player_damage_attack_rate       = local.palworld_settings.player_damage_attack_rate
+    player_damage_defense_rate      = local.palworld_settings.player_damage_defense_rate
+    pal_stamina_decrease_rate       = local.palworld_settings.pal_stamina_decrease_rate
+    player_stamina_decrease_rate    = local.palworld_settings.player_stamina_decrease_rate
+    item_weight_rate                = local.palworld_settings.item_weight_rate
+    rest_api_port                   = var.palworld_rest_api_port
+    rest_api_username               = var.palworld_rest_api_username
+    autostop_check_minutes          = var.autostop_check_minutes
+    autostop_idle_minutes           = var.autostop_idle_minutes
+    healthcheck_timeout_minutes     = var.healthcheck_timeout_minutes
+    local_backup_retention_days     = var.local_backup_retention_days
+    s3_backup_uri                   = local.s3_backup_uri
   })
 }
 
@@ -116,6 +127,12 @@ check "palworld_settings_document" {
       length(local.palworld_settings.server_description) <= 500 &&
       local.palworld_settings.max_players >= 1 &&
       floor(local.palworld_settings.max_players) == local.palworld_settings.max_players &&
+      local.palworld_settings.base_camp_worker_max_num >= 1 &&
+      local.palworld_settings.base_camp_worker_max_num <= 50 &&
+      floor(local.palworld_settings.base_camp_worker_max_num) == local.palworld_settings.base_camp_worker_max_num &&
+      contains(["true", "false"], jsonencode(local.palworld_settings.allow_global_palbox_export)) &&
+      contains(["true", "false"], jsonencode(local.palworld_settings.allow_global_palbox_import)) &&
+      local.palworld_settings.pal_egg_default_hatching_time >= 0 &&
       alltrue([
         for key in local.palworld_positive_number_keys : local.palworld_settings[key] > 0
       ]) &&

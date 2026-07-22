@@ -7,13 +7,18 @@ from settings_service import SettingsSnapshot
 
 from .conftest import FakeEC2Service, StaticConfigProvider, response_payload
 
-BASE_SETTINGS: dict[str, str | int | float] = {
+BASE_SETTINGS: dict[str, str | int | float | bool] = {
     "server_name": "Palworld Friends Server",
     "server_description": "Private server started through Discord",
     "max_players": 16,
     "exp_rate": 1.0,
     "collection_drop_rate": 1.0,
     "enemy_drop_item_rate": 1.0,
+    "base_camp_worker_max_num": 15,
+    "allow_global_palbox_export": False,
+    "allow_global_palbox_import": False,
+    "pal_auto_hp_regen_rate_in_sleep": 1.0,
+    "pal_egg_default_hatching_time": 72.0,
     "pal_spawn_rate": 1.0,
     "death_penalty": "Item",
     "pal_damage_attack_rate": 1.0,
@@ -27,7 +32,7 @@ BASE_SETTINGS: dict[str, str | int | float] = {
 
 
 class FakeSettingsService:
-    def __init__(self, overrides: dict[str, str | int | float] | None = None):
+    def __init__(self, overrides: dict[str, str | int | float | bool] | None = None):
         self.base = dict(BASE_SETTINGS)
         self.overrides = dict(overrides or {})
         self.updates: list[tuple[str, object]] = []
@@ -67,6 +72,16 @@ def test_enemy_drop_rate_uses_the_official_key_and_explains_its_effect() -> None
     assert "Pals" in field.label_pt
     assert "derrotados" in field.official_description_pt
     assert "maior que 0" in field.allowed_values_pt
+
+
+def test_new_fields_use_official_keys_and_document_their_constraints() -> None:
+    assert FIELDS_BY_KEY["base_camp_worker_max_num"].ini_key == "BaseCampWorkerMaxNum"
+    assert "50" in FIELDS_BY_KEY["base_camp_worker_max_num"].allowed_values_pt
+    assert FIELDS_BY_KEY["allow_global_palbox_export"].ini_key == "bAllowGlobalPalboxExport"
+    assert FIELDS_BY_KEY["allow_global_palbox_import"].ini_key == "bAllowGlobalPalboxImport"
+    assert FIELDS_BY_KEY["pal_auto_hp_regen_rate_in_sleep"].ini_key == "PalAutoHpRegeneRateInSleep"
+    assert FIELDS_BY_KEY["pal_egg_default_hatching_time"].ini_key == "PalEggDefaultHatchingTime"
+    assert "0" in FIELDS_BY_KEY["pal_egg_default_hatching_time"].allowed_values_pt
 
 
 def test_configurar_opens_ephemeral_panel_with_every_setting_and_official_docs(
@@ -150,6 +165,36 @@ def test_death_penalty_modal_uses_the_four_official_choices(make_event, config) 
         "__default__",
     ]
     assert all(choice.get("description") for choice in value_select["options"])
+
+
+def test_boolean_setting_modal_uses_true_false_dropdown(make_event, config) -> None:
+    event = make_event(
+        interaction_type=3,
+        interaction_data={
+            "component_type": 3,
+            "custom_id": "pwcfg:setting",
+            "values": ["allow_global_palbox_export"],
+        },
+    )
+
+    response = handler.process_event(
+        event,
+        StaticConfigProvider(config),
+        FakeEC2Service(),
+        FakeSettingsService(),
+    )
+
+    value_select = _modal_child(response_payload(response), "pwcfg:value")
+    assert value_select["type"] == 3
+    assert [choice["value"] for choice in value_select["options"]] == [
+        "True",
+        "False",
+        "__default__",
+    ]
+    assert (
+        next(choice for choice in value_select["options"] if choice["value"] == "False")["default"]
+        is True
+    )
 
 
 def test_modal_submit_persists_valid_value_and_requests_safe_activation(make_event, config) -> None:

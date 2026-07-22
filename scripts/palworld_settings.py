@@ -34,6 +34,11 @@ LEGACY_TFVARS_KEYS = {
     "palworld_exp_rate": "exp_rate",
     "palworld_collection_drop_rate": "collection_drop_rate",
     "palworld_enemy_drop_item_rate": "enemy_drop_item_rate",
+    "palworld_base_camp_worker_max_num": "base_camp_worker_max_num",
+    "palworld_allow_global_palbox_export": "allow_global_palbox_export",
+    "palworld_allow_global_palbox_import": "allow_global_palbox_import",
+    "palworld_pal_auto_hp_regen_rate_in_sleep": "pal_auto_hp_regen_rate_in_sleep",
+    "palworld_pal_egg_default_hatching_time": "pal_egg_default_hatching_time",
     "palworld_spawn_rate": "pal_spawn_rate",
     "palworld_death_penalty": "death_penalty",
     "palworld_pal_damage_attack_rate": "pal_damage_attack_rate",
@@ -50,8 +55,8 @@ LEGACY_TFVARS_KEYS = {
 class SettingChange:
     key: str
     label: str
-    before: str | int | float
-    after: str | int | float
+    before: str | int | float | bool
+    after: str | int | float | bool
 
 
 def _validate_document(raw_document: object) -> dict[str, Any]:
@@ -152,7 +157,7 @@ class SettingsDocument:
         return document
 
     @property
-    def values(self) -> Mapping[str, str | int | float]:
+    def values(self) -> Mapping[str, str | int | float | bool]:
         return dict(self._document["settings"])
 
     def copy(self) -> SettingsDocument:

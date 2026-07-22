@@ -13,7 +13,7 @@ from palworld_settings_catalog import (
     normalize_settings,
 )
 
-SettingValue = str | int | float
+SettingValue = str | int | float | bool
 DEFAULT_KEYWORDS = frozenset({"padrao", "padrão", "default", "__default__"})
 STANDARD_PARAMETER_MAX_BYTES = 4096
 
