@@ -422,6 +422,7 @@ fields, while the passwords continue to be read independently from `SecureString
 | Collection drop rate | `CollectionDropRate` |
 | Enemy/Pal drop rate | `EnemyDropItemRate` |
 | Maximum Pals working per base | `BaseCampWorkerMaxNum` |
+| Ranch item production speed | `MonsterFarmActionSpeedRate` |
 | Allow saving to the Global Palbox | `bAllowGlobalPalboxExport` |
 | Allow loading from the Global Palbox | `bAllowGlobalPalboxImport` |
 | Pal spawn rate | `PalSpawnNumRate` |
@@ -431,13 +432,15 @@ fields, while the passwords continue to be read independently from `SecureString
 | Pal attack/received damage | `PalDamageRateAttack` / `PalDamageRateDefense` |
 | Player attack/received damage | `PlayerDamageRateAttack` / `PlayerDamageRateDefense` |
 | Pal/player stamina depletion | `PalStaminaDecreaceRate` / `PlayerStaminaDecreaceRate` |
+| Pal hunger depletion | `PalStomachDecreaceRate` |
+| Meteorite and supply drop interval | `SupplyDropSpan` |
 | Item weight rate | `ItemWeightRate` |
 
 `DeathPenalty` accepts `None`, `Item`, `ItemAndEquipment`, or `All`. The official spelling really is
 `Decreace`. `CollectionDropRate` changes gatherable resources, while `EnemyDropItemRate` changes the
 quantity of items dropped by defeated enemies and Pals. High `PalSpawnNumRate` values can affect
-performance. Pocketpair caps `BaseCampWorkerMaxNum` at `50` and warns that higher worker counts
-increase server processing load.
+performance. `SupplyDropSpan` is measured in minutes. Pocketpair caps `BaseCampWorkerMaxNum` at `50`
+and warns that higher worker counts increase server processing load.
 
 The project also enforces `bAllowEnhanceStat_Stamina=True`,
 `bAllowEnhanceStat_Weight=True`, `bIsUseBackupSaveData=True`, `RESTAPIEnabled=True`,

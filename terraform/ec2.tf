@@ -14,7 +14,9 @@ locals {
     palworld_exp_rate                        = local.palworld_settings.exp_rate
     palworld_collection_drop_rate            = local.palworld_settings.collection_drop_rate
     palworld_enemy_drop_item_rate            = local.palworld_settings.enemy_drop_item_rate
+    palworld_supply_drop_span                = local.palworld_settings.supply_drop_span
     palworld_base_camp_worker_max_num        = local.palworld_settings.base_camp_worker_max_num
+    palworld_monster_farm_action_speed_rate  = local.palworld_settings.monster_farm_action_speed_rate
     palworld_allow_global_palbox_export      = local.palworld_settings.allow_global_palbox_export
     palworld_allow_global_palbox_import      = local.palworld_settings.allow_global_palbox_import
     palworld_pal_auto_hp_regen_rate_in_sleep = local.palworld_settings.pal_auto_hp_regen_rate_in_sleep
@@ -26,6 +28,7 @@ locals {
     palworld_player_damage_attack_rate       = local.palworld_settings.player_damage_attack_rate
     palworld_player_damage_defense_rate      = local.palworld_settings.player_damage_defense_rate
     palworld_pal_stamina_decrease_rate       = local.palworld_settings.pal_stamina_decrease_rate
+    palworld_pal_stomach_decrease_rate       = local.palworld_settings.pal_stomach_decrease_rate
     palworld_player_stamina_decrease_rate    = local.palworld_settings.player_stamina_decrease_rate
     palworld_item_weight_rate                = local.palworld_settings.item_weight_rate
     autostop_check_minutes                   = var.autostop_check_minutes

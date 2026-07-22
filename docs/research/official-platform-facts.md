@@ -1,6 +1,6 @@
 # Fatos oficiais de plataforma para `palworld-cloud-server`
 
-Verificado em: **2026-07-19**. Escopo: somente documentação primária da Pocketpair, Valve/Ubuntu, Discord e AWS. Quando a documentação oficial não fecha uma questão, a lacuna está registrada explicitamente; nenhum comportamento comunitário foi promovido a fato.
+Verificado em: **2026-07-19**; novos parâmetros de gameplay rechecados em **2026-07-22**. Escopo: somente documentação primária da Pocketpair, Valve/Ubuntu, Discord e AWS. Quando a documentação oficial não fecha uma questão, a lacuna está registrada explicitamente; nenhum comportamento comunitário foi promovido a fato.
 
 ## 1. Palworld Dedicated Server
 
@@ -20,6 +20,9 @@ Parâmetros relevantes confirmados na documentação atual:
 | máximo de jogadores | `ServerPlayerMaxNum` | número máximo de jogadores; a página atual não publica faixa nem default |
 | experiência | `ExpRate` | multiplicador numérico |
 | coleta | `CollectionDropRate` | multiplicador numérico de itens coletáveis |
+| produção no rancho | `MonsterFarmActionSpeedRate` | multiplicador numérico da velocidade de produção de itens por pastoreio |
+| fome dos Pals | `PalStomachDecreaceRate` | multiplicador numérico do consumo de fome; a grafia oficial é mesmo `Decreace` |
+| meteoritos e suprimentos | `SupplyDropSpan` | intervalo numérico em minutos; a página atual não publica faixa nem default |
 | spawn de Pals | `PalSpawnNumRate` | multiplicador numérico; a Pocketpair alerta que afeta desempenho |
 | penalidade de morte | `DeathPenalty` | `None`, `Item`, `ItemAndEquipment` ou `All` |
 | dano de Pals | `PalDamageRateAttack`, `PalDamageRateDefense` | multiplicadores de dano causado/recebido |

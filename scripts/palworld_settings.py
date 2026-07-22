@@ -35,7 +35,9 @@ LEGACY_TFVARS_KEYS = {
     "palworld_exp_rate": "exp_rate",
     "palworld_collection_drop_rate": "collection_drop_rate",
     "palworld_enemy_drop_item_rate": "enemy_drop_item_rate",
+    "palworld_supply_drop_span": "supply_drop_span",
     "palworld_base_camp_worker_max_num": "base_camp_worker_max_num",
+    "palworld_monster_farm_action_speed_rate": "monster_farm_action_speed_rate",
     "palworld_allow_global_palbox_export": "allow_global_palbox_export",
     "palworld_allow_global_palbox_import": "allow_global_palbox_import",
     "palworld_pal_auto_hp_regen_rate_in_sleep": "pal_auto_hp_regen_rate_in_sleep",
@@ -47,6 +49,7 @@ LEGACY_TFVARS_KEYS = {
     "palworld_player_damage_attack_rate": "player_damage_attack_rate",
     "palworld_player_damage_defense_rate": "player_damage_defense_rate",
     "palworld_pal_stamina_decrease_rate": "pal_stamina_decrease_rate",
+    "palworld_pal_stomach_decrease_rate": "pal_stomach_decrease_rate",
     "palworld_player_stamina_decrease_rate": "player_stamina_decrease_rate",
     "palworld_item_weight_rate": "item_weight_rate",
 }

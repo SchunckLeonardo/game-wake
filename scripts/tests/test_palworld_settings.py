@@ -31,7 +31,9 @@ DEFAULT_DOCUMENT = {
         "exp_rate": 1.0,
         "collection_drop_rate": 1.0,
         "enemy_drop_item_rate": 1.0,
+        "supply_drop_span": 180,
         "base_camp_worker_max_num": 15,
+        "monster_farm_action_speed_rate": 1.0,
         "allow_global_palbox_export": False,
         "allow_global_palbox_import": False,
         "pal_auto_hp_regen_rate_in_sleep": 1.0,
@@ -43,6 +45,7 @@ DEFAULT_DOCUMENT = {
         "player_damage_attack_rate": 1.0,
         "player_damage_defense_rate": 1.0,
         "pal_stamina_decrease_rate": 1.0,
+        "pal_stomach_decrease_rate": 1.0,
         "player_stamina_decrease_rate": 1.0,
         "item_weight_rate": 1.0,
     },
@@ -138,6 +141,9 @@ def test_update_validates_and_persists_a_canonical_document(tmp_path: Path) -> N
         ("base_camp_worker_max_num", 51, "must be at most 50"),
         ("allow_global_palbox_export", "yes", "must be True or False"),
         ("pal_auto_hp_regen_rate_in_sleep", 0, "must be greater than 0"),
+        ("monster_farm_action_speed_rate", 0, "must be greater than 0"),
+        ("pal_stomach_decrease_rate", 0, "must be greater than 0"),
+        ("supply_drop_span", 0, "must be at least 1"),
         ("pal_egg_default_hatching_time", -1, "must be at least 0"),
         ("death_penalty", "Inventory", "must be one of"),
         ("ServerPassword", "do-not-store-here", "unknown setting"),
@@ -193,6 +199,7 @@ def test_default_command_runs_wizard_and_saves_only_confirmed_changes(tmp_path: 
             "1.5",  # Experience
             "",  # Collection drops
             "",  # Enemy/Pal drops
+            "",  # Meteorite/supply interval
             "",  # Pal spawn
             "",  # Death penalty
             "",  # Pal HP regeneration while sleeping

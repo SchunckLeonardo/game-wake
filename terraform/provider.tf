@@ -38,7 +38,9 @@ locals {
     "exp_rate",
     "collection_drop_rate",
     "enemy_drop_item_rate",
+    "supply_drop_span",
     "base_camp_worker_max_num",
+    "monster_farm_action_speed_rate",
     "allow_global_palbox_export",
     "allow_global_palbox_import",
     "pal_auto_hp_regen_rate_in_sleep",
@@ -50,6 +52,7 @@ locals {
     "player_damage_attack_rate",
     "player_damage_defense_rate",
     "pal_stamina_decrease_rate",
+    "pal_stomach_decrease_rate",
     "player_stamina_decrease_rate",
     "item_weight_rate",
   ])
@@ -57,6 +60,7 @@ locals {
     "exp_rate",
     "collection_drop_rate",
     "enemy_drop_item_rate",
+    "monster_farm_action_speed_rate",
     "pal_auto_hp_regen_rate_in_sleep",
     "pal_spawn_rate",
     "pal_damage_attack_rate",
@@ -64,6 +68,7 @@ locals {
     "player_damage_attack_rate",
     "player_damage_defense_rate",
     "pal_stamina_decrease_rate",
+    "pal_stomach_decrease_rate",
     "player_stamina_decrease_rate",
     "item_weight_rate",
   ])
@@ -81,7 +86,9 @@ locals {
     exp_rate                        = local.palworld_settings.exp_rate
     collection_drop_rate            = local.palworld_settings.collection_drop_rate
     enemy_drop_item_rate            = local.palworld_settings.enemy_drop_item_rate
+    supply_drop_span                = local.palworld_settings.supply_drop_span
     base_camp_worker_max_num        = local.palworld_settings.base_camp_worker_max_num
+    monster_farm_action_speed_rate  = local.palworld_settings.monster_farm_action_speed_rate
     allow_global_palbox_export      = local.palworld_settings.allow_global_palbox_export
     allow_global_palbox_import      = local.palworld_settings.allow_global_palbox_import
     pal_auto_hp_regen_rate_in_sleep = local.palworld_settings.pal_auto_hp_regen_rate_in_sleep
@@ -93,6 +100,7 @@ locals {
     player_damage_attack_rate       = local.palworld_settings.player_damage_attack_rate
     player_damage_defense_rate      = local.palworld_settings.player_damage_defense_rate
     pal_stamina_decrease_rate       = local.palworld_settings.pal_stamina_decrease_rate
+    pal_stomach_decrease_rate       = local.palworld_settings.pal_stomach_decrease_rate
     player_stamina_decrease_rate    = local.palworld_settings.player_stamina_decrease_rate
     item_weight_rate                = local.palworld_settings.item_weight_rate
     rest_api_port                   = var.palworld_rest_api_port
@@ -130,6 +138,8 @@ check "palworld_settings_document" {
       local.palworld_settings.base_camp_worker_max_num >= 1 &&
       local.palworld_settings.base_camp_worker_max_num <= 50 &&
       floor(local.palworld_settings.base_camp_worker_max_num) == local.palworld_settings.base_camp_worker_max_num &&
+      local.palworld_settings.supply_drop_span >= 1 &&
+      floor(local.palworld_settings.supply_drop_span) == local.palworld_settings.supply_drop_span &&
       contains(["true", "false"], jsonencode(local.palworld_settings.allow_global_palbox_export)) &&
       contains(["true", "false"], jsonencode(local.palworld_settings.allow_global_palbox_import)) &&
       local.palworld_settings.pal_egg_default_hatching_time >= 0 &&
