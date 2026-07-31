@@ -5,7 +5,9 @@ import pytest
 from gamewake.accounts import (
     Accounts,
     InMemoryAccountRepository,
+    LastOwnerRemovalError,
     Permission,
+    PermissionDeniedError,
     PredefinedRole,
     SensitiveActionConfirmation,
     SensitiveActionConfirmationError,
@@ -230,3 +232,71 @@ def test_role_assignment_rejects_missing_step_up_confirmation():
             membership_id=membership.id,
             role=PredefinedRole.MANAGER,
         )
+
+
+def test_the_last_owner_assignment_cannot_be_removed():
+    accounts = Accounts(InMemoryAccountRepository())
+    account = accounts.create_account(name="Sexta com os amigos", owner_user_id="owner")
+    [owner] = accounts.list_memberships(account.id, viewer_user_id="owner")
+    [owner_assignment] = owner.assignments
+
+    with pytest.raises(LastOwnerRemovalError):
+        accounts.remove_role_assignment(
+            account.id,
+            actor_user_id="owner",
+            membership_id=owner.id,
+            role_assignment_id=owner_assignment.id,
+            confirmation=confirmed(account, "owner"),
+        )
+
+
+def test_removing_a_scoped_role_revokes_its_access_immediately():
+    accounts = Accounts(InMemoryAccountRepository())
+    account = accounts.create_account(name="Sexta com os amigos", owner_user_id="owner")
+    [invitation] = accounts.invite_members(
+        account.id,
+        inviter_user_id="owner",
+        invited_user_ids=["friend"],
+    )
+    membership = accounts.accept_invitation(
+        account.id,
+        invitation.id,
+        invited_user_id="friend",
+    )
+    membership = accounts.assign_predefined_role(
+        account.id,
+        actor_user_id="owner",
+        membership_id=membership.id,
+        role=PredefinedRole.MANAGER,
+        world_id="world-palworld",
+        confirmation=confirmed(account, "owner"),
+    )
+    manager_assignment = next(
+        assignment
+        for assignment in membership.assignments
+        if assignment.predefined_role is PredefinedRole.MANAGER
+    )
+
+    accounts.remove_role_assignment(
+        account.id,
+        actor_user_id="owner",
+        membership_id=membership.id,
+        role_assignment_id=manager_assignment.id,
+        confirmation=confirmed(account, "owner"),
+    )
+
+    assert not accounts.authorize(
+        account.id,
+        user_id="friend",
+        permission=Permission.EDIT_WORLD,
+        world_id="world-palworld",
+    )
+
+
+def test_a_user_from_another_account_cannot_list_memberships():
+    accounts = Accounts(InMemoryAccountRepository())
+    first = accounts.create_account(name="Primeiro grupo", owner_user_id="first-owner")
+    accounts.create_account(name="Segundo grupo", owner_user_id="second-owner")
+
+    with pytest.raises(PermissionDeniedError):
+        accounts.list_memberships(first.id, viewer_user_id="second-owner")

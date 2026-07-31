@@ -5,6 +5,7 @@ from gamewake.accounts import (
     DiscordGuildAlreadyLinkedError,
     IdentityProvider,
     InMemoryAccountRepository,
+    PermissionDeniedError,
 )
 
 
@@ -21,7 +22,10 @@ def test_discord_sign_in_resolves_a_stable_internal_user():
     )
 
     assert second_sign_in.id == first_sign_in.id
-    [identity] = accounts.list_linked_identities(first_sign_in.id)
+    [identity] = accounts.list_linked_identities(
+        first_sign_in.id,
+        viewer_user_id=first_sign_in.id,
+    )
     assert identity.provider is IdentityProvider.DISCORD
     assert identity.provider_user_id == "discord-123"
 
@@ -46,3 +50,18 @@ def test_a_discord_guild_can_belong_to_only_one_gamewake_account():
         )
 
     assert accounts.find_account_by_discord_guild("guild-123") == account
+
+
+def test_linked_identities_are_private_to_the_user():
+    accounts = Accounts(InMemoryAccountRepository())
+    first = accounts.sign_in_with_discord(
+        discord_user_id="discord-first",
+        display_name="First",
+    )
+    second = accounts.sign_in_with_discord(
+        discord_user_id="discord-second",
+        display_name="Second",
+    )
+
+    with pytest.raises(PermissionDeniedError):
+        accounts.list_linked_identities(first.id, viewer_user_id=second.id)

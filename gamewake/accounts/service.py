@@ -69,7 +69,14 @@ class Accounts:
         self._identities.create_user(user, identity)
         return user
 
-    def list_linked_identities(self, user_id: str) -> list[LinkedIdentity]:
+    def list_linked_identities(
+        self,
+        user_id: str,
+        *,
+        viewer_user_id: str,
+    ) -> list[LinkedIdentity]:
+        if viewer_user_id != user_id:
+            raise PermissionDeniedError("Linked Identities are private to their User")
         return list(self._identities.list_linked_identities(user_id))
 
     def enable_owner_recovery(
@@ -218,10 +225,34 @@ class Accounts:
         snapshot = self._repository.find_by_discord_guild(discord_guild_id)
         return snapshot.account if snapshot is not None else None
 
-    def list_memberships(self, account_id: str) -> list[Membership]:
-        return list(self._repository.get(account_id).memberships)
+    def list_memberships(
+        self,
+        account_id: str,
+        *,
+        viewer_user_id: str,
+    ) -> list[Membership]:
+        snapshot = self._repository.get(account_id)
+        if not any(
+            membership.user_id == viewer_user_id
+            for membership in snapshot.memberships
+        ):
+            raise PermissionDeniedError("memberships are visible only inside their account")
+        return list(snapshot.memberships)
 
-    def list_invitations(self, account_id: str) -> list[Invitation]:
+    def list_invitations(
+        self,
+        account_id: str,
+        *,
+        viewer_user_id: str,
+    ) -> list[Invitation]:
+        if not self.authorize(
+            account_id,
+            user_id=viewer_user_id,
+            permission=Permission.MANAGE_MEMBERSHIPS,
+        ):
+            raise PermissionDeniedError(
+                "invitations require membership management permission"
+            )
         return list(self._repository.get(account_id).invitations)
 
     def list_activity_events(
@@ -391,6 +422,77 @@ class Accounts:
         self._repository.save(
             replace(snapshot, memberships=memberships),
             expected_version=snapshot.version,
+        )
+        return updated
+
+    def remove_role_assignment(
+        self,
+        account_id: str,
+        *,
+        actor_user_id: str,
+        membership_id: str,
+        role_assignment_id: str,
+        confirmation: SensitiveActionConfirmation | None = None,
+    ) -> Membership:
+        if not self.authorize(
+            account_id,
+            user_id=actor_user_id,
+            permission=Permission.MANAGE_ROLES,
+        ):
+            raise PermissionDeniedError("removing roles requires role management permission")
+        snapshot = self._repository.get(account_id)
+        self._verify_sensitive_confirmation(
+            actor_user_id=actor_user_id,
+            expected_resource_name=snapshot.account.name,
+            confirmation=confirmation,
+        )
+        membership = next(
+            item for item in snapshot.memberships if item.id == membership_id
+        )
+        assignment = next(
+            item
+            for item in membership.assignments
+            if item.id == role_assignment_id
+        )
+        if (
+            assignment.predefined_role is PredefinedRole.OWNER
+            and assignment.scope.world_id is None
+            and self._owner_count(snapshot) == 1
+        ):
+            raise LastOwnerRemovalError("an account must retain at least one Owner")
+
+        updated = replace(
+            membership,
+            assignments=tuple(
+                item
+                for item in membership.assignments
+                if item.id != role_assignment_id
+            ),
+        )
+        memberships = tuple(
+            updated if item.id == membership_id else item
+            for item in snapshot.memberships
+        )
+        event = ActivityEvent(
+            id=str(uuid4()),
+            account_id=account_id,
+            actor_user_id=actor_user_id,
+            action=ActivityAction.ROLE_ASSIGNMENT_REVOKED,
+            subject_id=role_assignment_id,
+            occurred_at=self._clock(),
+        )
+        self._repository.save(
+            replace(
+                snapshot,
+                memberships=memberships,
+                activity_events=(*snapshot.activity_events, event),
+            ),
+            expected_version=snapshot.version,
+        )
+        self._security_notifier.notify_owners(
+            self._owner_user_ids(snapshot),
+            ActivityAction.ROLE_ASSIGNMENT_REVOKED,
+            role_assignment_id,
         )
         return updated
 

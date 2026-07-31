@@ -18,7 +18,7 @@ def test_creating_an_account_makes_the_creator_its_owner():
 
     account = accounts.create_account(name="Sexta com os amigos", owner_user_id="user-owner")
 
-    memberships = accounts.list_memberships(account.id)
+    memberships = accounts.list_memberships(account.id, viewer_user_id="user-owner")
     assert [(membership.user_id, membership.roles) for membership in memberships] == [
         ("user-owner", frozenset({PredefinedRole.OWNER}))
     ]
@@ -27,7 +27,7 @@ def test_creating_an_account_makes_the_creator_its_owner():
 def test_the_last_owner_cannot_be_removed_from_an_account():
     accounts = Accounts(InMemoryAccountRepository())
     account = accounts.create_account(name="Sexta com os amigos", owner_user_id="user-owner")
-    [owner] = accounts.list_memberships(account.id)
+    [owner] = accounts.list_memberships(account.id, viewer_user_id="user-owner")
     now = datetime.now(UTC)
 
     with pytest.raises(LastOwnerRemovalError):
@@ -42,7 +42,7 @@ def test_the_last_owner_cannot_be_removed_from_an_account():
             ),
         )
 
-    assert accounts.list_memberships(account.id) == [owner]
+    assert accounts.list_memberships(account.id, viewer_user_id="user-owner") == [owner]
 
 
 def test_batch_invitations_stay_independent_and_require_explicit_acceptance():
@@ -62,7 +62,13 @@ def test_batch_invitations_stay_independent_and_require_explicit_acceptance():
         "friend-three",
     ]
     assert all(invitation.status is InvitationStatus.PENDING for invitation in invitations)
-    assert [membership.user_id for membership in accounts.list_memberships(account.id)] == [
+    assert [
+        membership.user_id
+        for membership in accounts.list_memberships(
+            account.id,
+            viewer_user_id="user-owner",
+        )
+    ] == [
         "user-owner"
     ]
 
@@ -74,7 +80,13 @@ def test_batch_invitations_stay_independent_and_require_explicit_acceptance():
 
     assert membership.user_id == "friend-two"
     assert membership.roles == frozenset({PredefinedRole.PLAYER})
-    assert [invitation.status for invitation in accounts.list_invitations(account.id)] == [
+    assert [
+        invitation.status
+        for invitation in accounts.list_invitations(
+            account.id,
+            viewer_user_id="user-owner",
+        )
+    ] == [
         InvitationStatus.PENDING,
         InvitationStatus.ACCEPTED,
         InvitationStatus.PENDING,
@@ -102,7 +114,13 @@ def test_a_player_cannot_invite_members():
             invited_user_ids=["friend-two"],
         )
 
-    assert [item.invited_user_id for item in accounts.list_invitations(account.id)] == [
+    assert [
+        item.invited_user_id
+        for item in accounts.list_invitations(
+            account.id,
+            viewer_user_id="user-owner",
+        )
+    ] == [
         "friend-one"
     ]
 
@@ -123,7 +141,16 @@ def test_only_the_invited_user_can_accept_an_invitation():
             invited_user_id="someone-else",
         )
 
-    assert accounts.list_invitations(account.id) == [invitation]
-    assert [membership.user_id for membership in accounts.list_memberships(account.id)] == [
+    assert accounts.list_invitations(
+        account.id,
+        viewer_user_id="user-owner",
+    ) == [invitation]
+    assert [
+        membership.user_id
+        for membership in accounts.list_memberships(
+            account.id,
+            viewer_user_id="user-owner",
+        )
+    ] == [
         "user-owner"
     ]
