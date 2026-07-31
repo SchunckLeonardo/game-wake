@@ -24,12 +24,14 @@ from .model import (
     WorldBudgetExceeded,
     WorldBudgetStatus,
 )
+from .runtime import BillingRuntimeUsageRecorder
 from .service import Billing
 
 __all__ = [
     "BalanceGuardDecision",
     "BalanceGuardState",
     "Billing",
+    "BillingRuntimeUsageRecorder",
     "ContributionCheckoutRequest",
     "ContributionPackage",
     "ContributionStatus",

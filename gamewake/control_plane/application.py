@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from gamewake.accounts import Account, Accounts, Invitation, User
 from gamewake.billing import Billing, Wallet, WalletContribution
 from gamewake.game_catalog import GameCatalog, GameTemplateDefinition
@@ -18,6 +20,7 @@ class GameWakeApplication:
         game_catalog: GameCatalog,
         connection_details_provider: ConnectionDetailsProvider | None = None,
         operation_dispatcher: OperationDispatcher | None = None,
+        runtime_profile_hourly_rates: dict[str, Decimal] | None = None,
     ) -> None:
         self.accounts = accounts
         self.worlds = worlds
@@ -25,6 +28,7 @@ class GameWakeApplication:
         self.game_catalog = game_catalog
         self._connection_details_provider = connection_details_provider
         self._operation_dispatcher = operation_dispatcher
+        self._runtime_profile_hourly_rates = dict(runtime_profile_hourly_rates or {})
 
     def resolve_discord_principal(
         self,
@@ -156,6 +160,54 @@ class GameWakeApplication:
             actor_user_id=actor_user_id,
             idempotency_key=idempotency_key,
         )
+        rate = self._runtime_profile_hourly_rates.get(
+            self.worlds.get_world(
+                account_id,
+                world_id,
+                viewer_user_id=actor_user_id,
+            ).runtime_profile_id
+        )
+        if (
+            rate is not None
+            and operation.idempotency_key != idempotency_key
+            and operation.session_quote_id is None
+        ):
+            return operation
+        if (
+            rate is not None
+            and operation.idempotency_key == idempotency_key
+            and operation.session_quote_id is None
+        ):
+            reservation = None
+            try:
+                world = self.worlds.get_world(
+                    account_id,
+                    world_id,
+                    viewer_user_id=actor_user_id,
+                )
+                quote = self.billing.create_session_quote(
+                    account_id,
+                    world_id=world.id,
+                    runtime_profile_id=world.runtime_profile_id,
+                    hourly_rate=rate,
+                    idempotency_key=f"{idempotency_key}:quote",
+                )
+                reservation = self.billing.reserve_for_wake(
+                    account_id,
+                    quote.id,
+                    idempotency_key=f"{idempotency_key}:reservation",
+                )
+                operation = self.worlds.attach_billing_session(
+                    account_id,
+                    operation.id,
+                    session_quote_id=quote.id,
+                    usage_reservation_id=reservation.id,
+                )
+            except Exception:
+                if reservation is not None:
+                    self.billing.release_reservation(account_id, reservation.id)
+                self.worlds.fail_wake_preflight(account_id, operation.id)
+                raise
         if self._operation_dispatcher is not None:
             self._operation_dispatcher.start(account_id, operation.id)
         return operation

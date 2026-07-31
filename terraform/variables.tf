@@ -203,6 +203,22 @@ variable "abacatepay_packages" {
   ]
 }
 
+variable "runtime_profile_hourly_rates" {
+  description = "Preco final por hora em BRL de cada Runtime Profile oferecido no MVP."
+  type        = map(number)
+  default = {
+    palworld-small = 3.60
+  }
+
+  validation {
+    condition = (
+      length(var.runtime_profile_hourly_rates) > 0 &&
+      alltrue([for rate in values(var.runtime_profile_hourly_rates) : rate > 0])
+    )
+    error_message = "Todo Runtime Profile deve ter preco final positivo."
+  }
+}
+
 variable "discord_allowed_user_ids" {
   description = "IDs de usuarios autorizados. Lista vazia nao autoriza usuarios diretamente."
   type        = list(string)

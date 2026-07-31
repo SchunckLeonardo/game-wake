@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Protocol
 
 from gamewake.accounts import Permission
@@ -102,6 +103,20 @@ class RuntimeProvider(Protocol):
     def provision(self, world: World, *, idempotency_key: str) -> Runtime: ...
 
     def release(self, runtime: Runtime, *, idempotency_key: str) -> None: ...
+
+
+class RuntimeUsageRecorder(Protocol):
+    def protect(self, world: World, *, observed_at: datetime) -> object: ...
+
+    def cancel(self, operation: WorldOperation) -> object: ...
+
+    def record_release(
+        self,
+        operation: WorldOperation,
+        *,
+        runtime_released_at: datetime,
+        reached_online: bool,
+    ) -> object: ...
 
 
 class WorldStateStore(Protocol):

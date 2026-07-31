@@ -144,6 +144,7 @@ resource "aws_lambda_function" "gamewake_api" {
       GAMEWAKE_CONSOLE_URL                     = var.gamewake_console_url
       GAMEWAKE_WORLD_PARAMETER_PREFIX          = "${local.parameter_path}/gamewake/worlds"
       PALWORLD_PORT                            = tostring(var.palworld_port)
+      RUNTIME_PROFILE_HOURLY_RATES_JSON        = jsonencode(var.runtime_profile_hourly_rates)
       SESSION_KMS_KEY_ID                       = aws_kms_key.sessions.key_id
       WORLD_OPERATION_STATE_MACHINE_ARN        = aws_sfn_state_machine.world_operation.arn
     }

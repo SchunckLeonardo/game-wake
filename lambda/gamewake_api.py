@@ -64,6 +64,13 @@ def _packages() -> tuple[ContributionPackage, ...]:
     )
 
 
+def _runtime_profile_rates() -> dict[str, Decimal]:
+    raw = json.loads(_required("RUNTIME_PROFILE_HOURLY_RATES_JSON"))
+    if not isinstance(raw, dict) or not raw:
+        raise RuntimeError("RUNTIME_PROFILE_HOURLY_RATES_JSON must be an object")
+    return {str(profile): Decimal(str(rate)) for profile, rate in raw.items()}
+
+
 def build_handler(*, client_factory: Any = boto3.client) -> GameWakeHttpHandler:
     ssm = client_factory("ssm")
     database = AuroraDataApi(
@@ -102,6 +109,7 @@ def build_handler(*, client_factory: Any = boto3.client) -> GameWakeHttpHandler:
             ssm_client=ssm,
             port=int(_required("PALWORLD_PORT")),
         ),
+        runtime_profile_hourly_rates=_runtime_profile_rates(),
     )
     discord = DiscordInteractionAdapter(
         DiscordCommandController(

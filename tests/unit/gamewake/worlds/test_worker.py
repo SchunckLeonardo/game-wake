@@ -20,6 +20,9 @@ class RecordingRuntimeProvider:
         self.events.append(("provision", idempotency_key))
         return Runtime(id="runtime-123", provider_reference="i-123")
 
+    def release(self, runtime, *, idempotency_key):
+        self.events.append(("release", idempotency_key))
+
 
 class RecordingWorldStateStore:
     def __init__(self, events):
@@ -42,6 +45,9 @@ class HealthyPalworldTemplate:
     def is_healthy(self, world, runtime):
         self.events.append(("health", None))
         return True
+
+    def stop(self, world, runtime, *, idempotency_key):
+        self.events.append(("stop", idempotency_key))
 
 
 class SingleTemplateCatalog:
@@ -70,6 +76,9 @@ class IdempotentRuntimeProvider:
             idempotency_key,
             Runtime(id=f"runtime-{len(self.created) + 1}", provider_reference="i-123"),
         )
+
+    def release(self, runtime, *, idempotency_key):
+        self.calls.append(idempotency_key)
 
 
 class FailFirstRuntimePersistence(InMemoryWorldRepository):
@@ -162,6 +171,7 @@ def test_failed_health_check_never_marks_the_world_online():
     completed = worker.run_to_completion(account.id, operation.id)
 
     assert completed.status is OperationStatus.NEEDS_ATTENTION
+    assert [event[0] for event in events][-3:] == ["health", "stop", "release"]
     assert (
         worlds.get_world(
             account.id,
@@ -248,6 +258,60 @@ def test_worker_marks_a_non_terminal_operation_as_needing_attention():
         ).status
         is WorldStatus.NEEDS_ATTENTION
     )
+
+
+def test_worker_failure_cleanup_releases_allocated_compute_and_billing_hold():
+    accounts = Accounts(InMemoryAccountRepository())
+    account = accounts.create_account(name="Grupo", owner_user_id="owner")
+    repository = InMemoryWorldRepository()
+    worlds = Worlds(repository, access=accounts)
+    world = worlds.create_world(
+        account.id,
+        actor_user_id="owner",
+        name="Palpagos",
+        game_template_id="palworld:1",
+        region="sa-east-1",
+        runtime_profile_id="palworld-small",
+    )
+    operation = worlds.request_wake(
+        account.id,
+        world.id,
+        actor_user_id="owner",
+        idempotency_key="wake-1",
+    )
+    operation = worlds.attach_billing_session(
+        account.id,
+        operation.id,
+        session_quote_id="quote-1",
+        usage_reservation_id="reservation-1",
+    )
+    events = []
+
+    class Usage:
+        def cancel(self, operation):
+            events.append(("cancel", operation.id))
+
+        def record_release(self, operation, *, runtime_released_at, reached_online):
+            events.append(("usage", reached_online))
+
+    provider = RecordingRuntimeProvider(events)
+    worker = WorldOperationWorker(
+        repository,
+        runtime_provider=provider,
+        state_store=RecordingWorldStateStore(events),
+        game_templates=SingleTemplateCatalog(HealthyPalworldTemplate(events)),
+        usage_recorder=Usage(),
+    )
+    worker.advance(account.id, operation.id)
+    worker.advance(account.id, operation.id)
+
+    failed = worker.mark_needs_attention(account.id, operation.id)
+
+    assert failed.status is OperationStatus.NEEDS_ATTENTION
+    assert [event[0] for event in events][-2:] == ["release", "usage"]
+    current = worlds.get_world(account.id, world.id, viewer_user_id="owner")
+    assert current.runtime_id is None
+    assert current.usage_reservation_id is None
 
 
 def test_marking_an_already_terminal_operation_is_idempotent():

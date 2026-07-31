@@ -14,6 +14,7 @@ from gamewake.aws import (
     SsmCommandRunner,
     SsmPalworldTemplate,
 )
+from gamewake.billing import Billing, BillingRuntimeUsageRecorder
 from gamewake.orchestration import (
     StepFunctionsOperationOrchestrator,
     advance_operation,
@@ -21,6 +22,7 @@ from gamewake.orchestration import (
 from gamewake.persistence import (
     AuroraDataApi,
     MigrationRunner,
+    PostgresBillingRepository,
     PostgresWorldRepository,
 )
 from gamewake.worlds import WorldOperationWorker
@@ -89,6 +91,7 @@ def build_services(
             )
         ),
         backup_store=archive,
+        usage_recorder=BillingRuntimeUsageRecorder(Billing(PostgresBillingRepository(database))),
     )
     step_functions_client = client_factory("stepfunctions")
     return _Services(
@@ -122,6 +125,32 @@ def handle_event(event: dict[str, Any], *, services: Any) -> dict[str, Any]:
         for operation in operations:
             orchestrator.ensure_running(str(operation["account_id"]), str(operation["id"]))
         return {"reconciled": len(operations)}
+    if action == "monitor_sessions":
+        state_machine_arn = event.get("state_machine_arn")
+        if not isinstance(state_machine_arn, str) or not state_machine_arn:
+            raise ValueError("state_machine_arn is required for session monitoring")
+        idle_minutes = int(event.get("idle_minutes", 20))
+        with services.database.transaction() as transaction:
+            worlds = transaction.fetch_all(
+                """
+                SELECT account_id, id
+                FROM worlds
+                WHERE status = 'online'
+                ORDER BY account_id, id
+                """
+            )
+        orchestrator = services.orchestrator_factory(state_machine_arn)
+        sleep_operations = 0
+        for world in worlds:
+            operation = services.worker.monitor_session(
+                str(world["account_id"]),
+                str(world["id"]),
+                idle_minutes=idle_minutes,
+            )
+            if operation is not None:
+                orchestrator.ensure_running(str(world["account_id"]), operation.id)
+                sleep_operations += 1
+        return {"monitored": len(worlds), "sleep_operations": sleep_operations}
     if action not in {"advance", "record_failure"}:
         raise ValueError(f"unsupported operation worker action: {action}")
     return advance_operation(event, worker=services.worker)

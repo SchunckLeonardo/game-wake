@@ -1,3 +1,6 @@
+from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+
 from gamewake.accounts import Accounts, InMemoryAccountRepository
 from gamewake.worlds import (
     Backup,
@@ -20,6 +23,21 @@ class RuntimeProvider:
 
     def release(self, runtime, *, idempotency_key):
         self.events.append("release")
+
+
+class UsageRecorder:
+    def __init__(self, events, *, should_sleep=False):
+        self.events = events
+        self.calls = []
+        self.should_sleep = should_sleep
+
+    def record_release(self, operation, *, runtime_released_at, reached_online):
+        self.events.append("usage")
+        self.calls.append((operation, runtime_released_at, reached_online))
+
+    def protect(self, world, *, observed_at):
+        self.calls.append((world, observed_at, "protect"))
+        return SimpleNamespace(should_sleep=self.should_sleep)
 
 
 class StateStore:
@@ -114,12 +132,14 @@ def test_safe_sleep_releases_runtime_only_after_validated_state_and_backup():
     state_store = StateStore(events)
     template = PalworldTemplate(events)
     backup_store = BackupStore(events)
+    usage = UsageRecorder(events)
     worker = WorldOperationWorker(
         repository,
         runtime_provider=runtime_provider,
         state_store=state_store,
         game_templates=TemplateCatalog(template),
         backup_store=backup_store,
+        usage_recorder=usage,
     )
     wake = worlds.request_wake(
         account.id,
@@ -138,7 +158,8 @@ def test_safe_sleep_releases_runtime_only_after_validated_state_and_backup():
     )
     worker.run_to_completion(account.id, sleep.id)
 
-    assert events == ["players", "save", "stop", "persist", "backup", "release"]
+    assert events == ["players", "save", "stop", "persist", "backup", "release", "usage"]
+    assert usage.calls[0][2] is True
     assert len(backup_store.backups) == 1
     sleeping = worlds.get_world(
         account.id,
@@ -256,3 +277,86 @@ def test_non_forced_sleep_is_cancelled_when_players_are_online():
         ).status
         is WorldStatus.ONLINE
     )
+
+
+def test_session_monitor_starts_safe_sleep_after_the_world_is_empty_for_the_limit():
+    now = datetime(2026, 7, 31, 20, 0, tzinfo=UTC)
+    events = []
+    accounts = Accounts(InMemoryAccountRepository())
+    account = accounts.create_account(name="Grupo", owner_user_id="owner")
+    repository = InMemoryWorldRepository()
+    worlds = Worlds(repository, access=accounts)
+    world = worlds.create_world(
+        account.id,
+        actor_user_id="owner",
+        name="Palpagos",
+        game_template_id="palworld:1",
+        region="sa-east-1",
+        runtime_profile_id="palworld-small",
+    )
+    worker = WorldOperationWorker(
+        repository,
+        runtime_provider=RuntimeProvider(events),
+        state_store=StateStore(events),
+        game_templates=TemplateCatalog(PalworldTemplate(events)),
+        backup_store=BackupStore(events),
+        clock=lambda: now,
+    )
+    wake = worlds.request_wake(
+        account.id,
+        world.id,
+        actor_user_id="owner",
+        idempotency_key="wake-1",
+    )
+    worker.run_to_completion(account.id, wake.id)
+
+    first = worker.monitor_session(account.id, world.id, observed_at=now)
+    sleep = worker.monitor_session(
+        account.id,
+        world.id,
+        observed_at=now + timedelta(minutes=20),
+    )
+
+    assert first is None
+    assert sleep is not None
+    assert sleep.operation_type.value == "sleep"
+    assert sleep.force is False
+
+
+def test_balance_guard_can_force_safe_sleep_even_while_players_are_connected():
+    now = datetime(2026, 7, 31, 20, 0, tzinfo=UTC)
+    events = []
+    accounts = Accounts(InMemoryAccountRepository())
+    account = accounts.create_account(name="Grupo", owner_user_id="owner")
+    repository = InMemoryWorldRepository()
+    worlds = Worlds(repository, access=accounts)
+    world = worlds.create_world(
+        account.id,
+        actor_user_id="owner",
+        name="Palpagos",
+        game_template_id="palworld:1",
+        region="sa-east-1",
+        runtime_profile_id="palworld-small",
+    )
+    usage = UsageRecorder(events, should_sleep=True)
+    worker = WorldOperationWorker(
+        repository,
+        runtime_provider=RuntimeProvider(events),
+        state_store=StateStore(events),
+        game_templates=TemplateCatalog(BusyPalworldTemplate(events)),
+        backup_store=BackupStore(events),
+        usage_recorder=usage,
+        clock=lambda: now,
+    )
+    wake = worlds.request_wake(
+        account.id,
+        world.id,
+        actor_user_id="owner",
+        idempotency_key="wake-1",
+    )
+    worker.run_to_completion(account.id, wake.id)
+
+    sleep = worker.monitor_session(account.id, world.id, observed_at=now)
+
+    assert sleep is not None
+    assert sleep.force is True

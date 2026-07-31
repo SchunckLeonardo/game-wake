@@ -72,3 +72,34 @@ resource "aws_scheduler_schedule" "reconciliation" {
 
   depends_on = [aws_iam_role_policy.scheduler]
 }
+
+resource "aws_scheduler_schedule" "session_monitor" {
+  name                = "${local.name_prefix}-monitor-sessions"
+  schedule_expression = "rate(1 minute)"
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.operation_worker.arn
+    role_arn = aws_iam_role.scheduler.arn
+    input = jsonencode({
+      action            = "monitor_sessions"
+      idle_minutes      = var.autostop_idle_minutes
+      state_machine_arn = aws_sfn_state_machine.world_operation.arn
+    })
+
+    dead_letter_config {
+      arn = aws_sqs_queue.operations_dead_letter.arn
+    }
+
+    retry_policy {
+      maximum_event_age_in_seconds = 300
+      maximum_retry_attempts       = 2
+    }
+  }
+
+  depends_on = [aws_iam_role_policy.scheduler]
+}

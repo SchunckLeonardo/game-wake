@@ -89,3 +89,22 @@ def test_disposable_world_configuration_is_isolated_under_a_tenant_path():
     assert expected_path in runtime
     assert expected_path in api
     assert "PALWORLD_BASE_CONFIG_JSON" in orchestration
+
+
+def test_runtime_pricing_is_injected_into_api_and_usage_meter_worker():
+    variables = source("variables.tf")
+    orchestration = source("gamewake-orchestration.tf")
+    api = source("gamewake-api.tf")
+
+    assert 'variable "runtime_profile_hourly_rates"' in variables
+    assert "RUNTIME_PROFILE_HOURLY_RATES_JSON" in api
+    assert "PostgresBillingRepository" not in orchestration
+    assert "AURORA_CLUSTER_ARN" in orchestration
+
+
+def test_online_session_monitor_runs_every_minute_for_auto_sleep_and_balance_guard():
+    schedules = source("gamewake-schedules.tf")
+
+    assert 'resource "aws_scheduler_schedule" "session_monitor"' in schedules
+    assert 'schedule_expression = "rate(1 minute)"' in schedules
+    assert 'action            = "monitor_sessions"' in schedules

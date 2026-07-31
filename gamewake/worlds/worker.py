@@ -1,9 +1,13 @@
+from collections.abc import Callable
 from dataclasses import replace
+from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 from .contracts import (
     BackupStore,
     GameTemplateResolver,
     RuntimeProvider,
+    RuntimeUsageRecorder,
     WorldRepository,
     WorldStateStore,
 )
@@ -27,12 +31,16 @@ class WorldOperationWorker:
         state_store: WorldStateStore,
         game_templates: GameTemplateResolver,
         backup_store: BackupStore | None = None,
+        usage_recorder: RuntimeUsageRecorder | None = None,
+        clock: Callable[[], datetime] | None = None,
     ) -> None:
         self._repository = repository
         self._runtime_provider = runtime_provider
         self._state_store = state_store
         self._game_templates = game_templates
         self._backup_store = backup_store
+        self._usage_recorder = usage_recorder
+        self._clock = clock or (lambda: datetime.now(UTC))
 
     def run_to_completion(
         self,
@@ -49,6 +57,74 @@ class WorldOperationWorker:
             }:
                 return operation
             self.advance(account_id, operation_id)
+
+    def monitor_session(
+        self,
+        account_id: str,
+        world_id: str,
+        *,
+        observed_at: datetime | None = None,
+        idle_minutes: int = 20,
+    ) -> WorldOperation | None:
+        if idle_minutes <= 0:
+            raise ValueError("idle minutes must be positive")
+        now = observed_at or self._clock()
+        world = self._repository.get(account_id, world_id)
+        if world.status is not WorldStatus.ONLINE:
+            return None
+        runtime = Runtime(
+            id=world.runtime_id or "",
+            provider_reference=world.runtime_provider_reference or "",
+        )
+        if not runtime.id or not runtime.provider_reference:
+            raise RuntimeError("Online World does not have an active Runtime")
+        template = self._game_templates.resolve(world.game_template_id)
+        players = template.player_count(world, runtime)
+        empty_since = (world.empty_since or now) if players == 0 else None
+        balance_decision = (
+            self._usage_recorder.protect(world, observed_at=now)
+            if self._usage_recorder is not None
+            else None
+        )
+        balance_requires_sleep = bool(getattr(balance_decision, "should_sleep", False))
+        idle_requires_sleep = empty_since is not None and now - empty_since >= timedelta(
+            minutes=idle_minutes
+        )
+        if not balance_requires_sleep and not idle_requires_sleep:
+            if empty_since != world.empty_since:
+                self._repository.save(
+                    replace(world, empty_since=empty_since, version=world.version + 1),
+                    expected_version=world.version,
+                )
+            return None
+        reason = "balance" if balance_requires_sleep else "idle"
+        operation = WorldOperation(
+            id=str(uuid4()),
+            account_id=account_id,
+            world_id=world.id,
+            operation_type=OperationType.SLEEP,
+            status=OperationStatus.PENDING,
+            phase=OperationPhase.REQUESTED,
+            idempotency_key=(f"monitor:{world.id}:{reason}:{int(now.timestamp() // 60)}"),
+            created_at=now,
+            version=1,
+            runtime_id=world.runtime_id,
+            runtime_provider_reference=world.runtime_provider_reference,
+            force=balance_requires_sleep,
+            session_quote_id=world.session_quote_id,
+            usage_reservation_id=world.usage_reservation_id,
+            runtime_started_at=world.runtime_started_at,
+        )
+        return self._repository.begin_operation(
+            replace(
+                world,
+                status=WorldStatus.GOING_TO_SLEEP,
+                empty_since=empty_since,
+                version=world.version + 1,
+            ),
+            operation,
+            expected_world_version=world.version,
+        )
 
     def advance(self, account_id: str, operation_id: str) -> WorldOperation:
         operation = self._repository.get_operation(account_id, operation_id)
@@ -68,17 +144,20 @@ class WorldOperationWorker:
                 world,
                 idempotency_key=self._effect_key(operation, "provision"),
             )
+            runtime_started_at = self._clock()
             updated_operation = replace(
                 operation,
                 phase=OperationPhase.RESTORING_WORLD,
                 runtime_id=runtime.id,
                 runtime_provider_reference=runtime.provider_reference,
+                runtime_started_at=runtime_started_at,
                 version=operation.version + 1,
             )
             updated_world = replace(
                 world,
                 runtime_id=runtime.id,
                 runtime_provider_reference=runtime.provider_reference,
+                runtime_started_at=runtime_started_at,
                 version=world.version + 1,
             )
             self._repository.save_operation(
@@ -136,15 +215,17 @@ class WorldOperationWorker:
 
         if operation.phase is OperationPhase.CHECKING_GAME_HEALTH:
             healthy = template.is_healthy(world, runtime)
+            if not healthy:
+                return self._move_to_phase(operation, OperationPhase.STOPPING_GAME)
             completed = replace(
                 operation,
-                status=(OperationStatus.SUCCEEDED if healthy else OperationStatus.NEEDS_ATTENTION),
-                phase=(OperationPhase.COMPLETE if healthy else OperationPhase.CHECKING_GAME_HEALTH),
+                status=OperationStatus.SUCCEEDED,
+                phase=OperationPhase.COMPLETE,
                 version=operation.version + 1,
             )
             updated_world = replace(
                 world,
-                status=(WorldStatus.ONLINE if healthy else WorldStatus.NEEDS_ATTENTION),
+                status=WorldStatus.ONLINE,
                 version=world.version + 1,
             )
             self._repository.save_operation(
@@ -154,6 +235,49 @@ class WorldOperationWorker:
                 expected_world_version=world.version,
             )
             return completed
+
+        if operation.phase is OperationPhase.STOPPING_GAME:
+            template.stop(
+                world,
+                runtime,
+                idempotency_key=self._effect_key(operation, "failed-wake-stop"),
+            )
+            return self._move_to_phase(operation, OperationPhase.RELEASING_RUNTIME)
+
+        if operation.phase is OperationPhase.RELEASING_RUNTIME:
+            self._runtime_provider.release(
+                runtime,
+                idempotency_key=self._effect_key(operation, "failed-wake-release"),
+            )
+            if self._usage_recorder is not None:
+                self._usage_recorder.record_release(
+                    operation,
+                    runtime_released_at=self._clock(),
+                    reached_online=False,
+                )
+            failed = replace(
+                operation,
+                status=OperationStatus.NEEDS_ATTENTION,
+                phase=OperationPhase.COMPLETE,
+                version=operation.version + 1,
+            )
+            attention = replace(
+                world,
+                status=WorldStatus.NEEDS_ATTENTION,
+                runtime_id=None,
+                runtime_provider_reference=None,
+                session_quote_id=None,
+                usage_reservation_id=None,
+                runtime_started_at=None,
+                version=world.version + 1,
+            )
+            self._repository.save_operation(
+                failed,
+                expected_operation_version=operation.version,
+                world=attention,
+                expected_world_version=world.version,
+            )
+            return failed
 
         raise RuntimeError(f"unsupported operation phase: {operation.phase}")
 
@@ -171,6 +295,45 @@ class WorldOperationWorker:
         }:
             return operation
         world = self._repository.get(account_id, operation.world_id)
+        if operation.operation_type is OperationType.WAKE:
+            if (
+                operation.runtime_id is not None
+                and operation.runtime_provider_reference is not None
+            ):
+                self._runtime_provider.release(
+                    self._runtime_for(operation),
+                    idempotency_key=self._effect_key(operation, "failure-cleanup"),
+                )
+                if self._usage_recorder is not None:
+                    self._usage_recorder.record_release(
+                        operation,
+                        runtime_released_at=self._clock(),
+                        reached_online=False,
+                    )
+            elif self._usage_recorder is not None:
+                self._usage_recorder.cancel(operation)
+            failed = replace(
+                operation,
+                status=OperationStatus.NEEDS_ATTENTION,
+                version=operation.version + 1,
+            )
+            attention = replace(
+                world,
+                status=WorldStatus.NEEDS_ATTENTION,
+                runtime_id=None,
+                runtime_provider_reference=None,
+                session_quote_id=None,
+                usage_reservation_id=None,
+                runtime_started_at=None,
+                version=world.version + 1,
+            )
+            self._repository.save_operation(
+                failed,
+                expected_operation_version=operation.version,
+                world=attention,
+                expected_world_version=world.version,
+            )
+            return failed
         return self._needs_attention(operation, world)
 
     def _advance_sleep(self, operation, world, template) -> WorldOperation:
@@ -262,6 +425,12 @@ class WorldOperationWorker:
                 runtime,
                 idempotency_key=self._effect_key(operation, "release"),
             )
+            if self._usage_recorder is not None:
+                self._usage_recorder.record_release(
+                    operation,
+                    runtime_released_at=self._clock(),
+                    reached_online=True,
+                )
             completed = replace(
                 operation,
                 status=OperationStatus.SUCCEEDED,
@@ -275,6 +444,9 @@ class WorldOperationWorker:
                 runtime_provider_reference=None,
                 stored_state_id=operation.stored_state_id,
                 stored_state_checksum=operation.stored_state_checksum,
+                session_quote_id=None,
+                usage_reservation_id=None,
+                runtime_started_at=None,
                 version=world.version + 1,
             )
             self._repository.save_operation(

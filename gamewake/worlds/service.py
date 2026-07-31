@@ -284,6 +284,83 @@ class Worlds:
             expected_world_version=world.version,
         )
 
+    def attach_billing_session(
+        self,
+        account_id: str,
+        operation_id: str,
+        *,
+        session_quote_id: str,
+        usage_reservation_id: str,
+    ) -> WorldOperation:
+        operation = self._repository.get_operation(account_id, operation_id)
+        if operation.operation_type is not OperationType.WAKE:
+            raise ValueError("billing session can be attached only to a wake operation")
+        if operation.session_quote_id is not None:
+            if (
+                operation.session_quote_id == session_quote_id
+                and operation.usage_reservation_id == usage_reservation_id
+            ):
+                return operation
+            raise ValueError("wake operation already has a different billing session")
+        if operation.phase is not OperationPhase.REQUESTED:
+            raise ValueError("billing must be reserved before wake dispatch")
+        world = self._repository.get(account_id, operation.world_id)
+        attached = replace(
+            operation,
+            session_quote_id=session_quote_id,
+            usage_reservation_id=usage_reservation_id,
+            version=operation.version + 1,
+        )
+        session_world = replace(
+            world,
+            session_quote_id=session_quote_id,
+            usage_reservation_id=usage_reservation_id,
+            version=world.version + 1,
+        )
+        try:
+            self._repository.save_operation(
+                attached,
+                expected_operation_version=operation.version,
+                world=session_world,
+                expected_world_version=world.version,
+            )
+        except RuntimeError:
+            current = self._repository.get_operation(account_id, operation_id)
+            if (
+                current.session_quote_id == session_quote_id
+                and current.usage_reservation_id == usage_reservation_id
+            ):
+                return current
+            raise
+        return attached
+
+    def fail_wake_preflight(self, account_id: str, operation_id: str) -> WorldOperation:
+        operation = self._repository.get_operation(account_id, operation_id)
+        if operation.status not in {OperationStatus.PENDING, OperationStatus.RUNNING}:
+            return operation
+        world = self._repository.get(account_id, operation.world_id)
+        failed = replace(
+            operation,
+            status=OperationStatus.FAILED,
+            phase=OperationPhase.COMPLETE,
+            version=operation.version + 1,
+        )
+        sleeping = replace(
+            world,
+            status=WorldStatus.SLEEPING,
+            session_quote_id=None,
+            usage_reservation_id=None,
+            runtime_started_at=None,
+            version=world.version + 1,
+        )
+        self._repository.save_operation(
+            failed,
+            expected_operation_version=operation.version,
+            world=sleeping,
+            expected_world_version=world.version,
+        )
+        return failed
+
     def request_sleep(
         self,
         account_id: str,
@@ -317,6 +394,9 @@ class Worlds:
             runtime_id=world.runtime_id,
             runtime_provider_reference=world.runtime_provider_reference,
             force=force,
+            session_quote_id=world.session_quote_id,
+            usage_reservation_id=world.usage_reservation_id,
+            runtime_started_at=world.runtime_started_at,
         )
         return self._repository.begin_operation(
             replace(

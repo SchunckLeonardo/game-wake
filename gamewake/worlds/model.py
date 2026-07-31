@@ -69,6 +69,10 @@ class World:
     stored_state_id: str | None
     stored_state_checksum: str | None
     version: int
+    session_quote_id: str | None = None
+    usage_reservation_id: str | None = None
+    runtime_started_at: datetime | None = None
+    empty_since: datetime | None = None
     deletion_scheduled_for: datetime | None = None
     final_backup_id: str | None = None
     applied_data_operations: tuple[str, ...] = ()
@@ -174,3 +178,6 @@ class WorldOperation:
     stored_state_checksum: str | None = None
     backup_id: str | None = None
     attempt_number: int = 0
+    session_quote_id: str | None = None
+    usage_reservation_id: str | None = None
+    runtime_started_at: datetime | None = None

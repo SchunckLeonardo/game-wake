@@ -25,6 +25,11 @@ abacatepay_packages = [
   { id = "credits-100", amount = 100, product_id = "prod_ghi789" },
 ]
 
+# Preco de beta ilustrativo: valide custo, impostos e margem antes de publicar.
+runtime_profile_hourly_rates = {
+  palworld-small = 3.60
+}
+
 # Pelo menos uma das listas deve autorizar alguem.
 discord_allowed_user_ids = [
   "123456789012345678",

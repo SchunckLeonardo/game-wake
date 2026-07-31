@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from pathlib import Path
 from types import SimpleNamespace
 
 import gamewake_worker
@@ -13,6 +14,11 @@ class Migrations:
 
 class Transaction:
     def fetch_all(self, sql):
+        if "FROM worlds" in sql:
+            return (
+                {"account_id": "account-1", "id": "operation-1"},
+                {"account_id": "account-2", "id": "operation-2"},
+            )
         assert "status IN ('pending', 'running')" in sql
         return (
             {"account_id": "account-1", "id": "operation-1"},
@@ -40,6 +46,17 @@ class Worker:
             status=OperationStatus.RUNNING,
             phase=OperationPhase.STARTING_GAME,
         )
+
+    def monitor_session(self, account_id, world_id, **kwargs):
+        assert kwargs["idle_minutes"] == 20
+        return SimpleNamespace(id=f"sleep-{world_id}")
+
+
+def test_worker_composition_source_includes_persistent_runtime_usage_billing():
+    source = Path(gamewake_worker.__file__).read_text()
+
+    assert "BillingRuntimeUsageRecorder" in source
+    assert "PostgresBillingRepository" in source
 
 
 def services(orchestrator=None):
@@ -89,3 +106,20 @@ def test_default_action_advances_exactly_one_world_operation_phase():
         "phase": "starting_game",
         "terminal": False,
     }
+
+
+def test_monitor_sessions_dispatches_safe_sleep_operations():
+    orchestrator = Orchestrator()
+    result = gamewake_worker.handle_event(
+        {
+            "action": "monitor_sessions",
+            "state_machine_arn": "arn:aws:states:us-east-1:123:stateMachine:worlds",
+        },
+        services=services(orchestrator),
+    )
+
+    assert result == {"monitored": 2, "sleep_operations": 2}
+    assert orchestrator.calls == [
+        ("account-1", "sleep-operation-1"),
+        ("account-2", "sleep-operation-2"),
+    ]
