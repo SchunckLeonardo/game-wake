@@ -162,11 +162,14 @@ def test_failed_health_check_never_marks_the_world_online():
     completed = worker.run_to_completion(account.id, operation.id)
 
     assert completed.status is OperationStatus.NEEDS_ATTENTION
-    assert worlds.get_world(
-        account.id,
-        world.id,
-        viewer_user_id="owner",
-    ).status is WorldStatus.NEEDS_ATTENTION
+    assert (
+        worlds.get_world(
+            account.id,
+            world.id,
+            viewer_user_id="owner",
+        ).status
+        is WorldStatus.NEEDS_ATTENTION
+    )
 
 
 def test_worker_retry_reuses_the_same_runtime_effect_key_after_interruption():
@@ -206,3 +209,74 @@ def test_worker_retry_reuses_the_same_runtime_effect_key_after_interruption():
     assert completed.status is OperationStatus.SUCCEEDED
     assert len(provider.created) == 1
     assert provider.calls == [provider.calls[0], provider.calls[0]]
+
+
+def test_worker_marks_a_non_terminal_operation_as_needing_attention():
+    accounts = Accounts(InMemoryAccountRepository())
+    account = accounts.create_account(name="Sexta com os amigos", owner_user_id="owner")
+    repository = InMemoryWorldRepository()
+    worlds = Worlds(repository, access=accounts)
+    world = worlds.create_world(
+        account.id,
+        actor_user_id="owner",
+        name="Palpagos",
+        game_template_id="palworld:1",
+        region="br-sao-paulo",
+        runtime_profile_id="palworld-small",
+    )
+    operation = worlds.request_wake(
+        account.id,
+        world.id,
+        actor_user_id="owner",
+        idempotency_key="discord-command-1",
+    )
+    worker = WorldOperationWorker(
+        repository,
+        runtime_provider=RecordingRuntimeProvider([]),
+        state_store=RecordingWorldStateStore([]),
+        game_templates=SingleTemplateCatalog(HealthyPalworldTemplate([])),
+    )
+
+    failed = worker.mark_needs_attention(account.id, operation.id)
+
+    assert failed.status is OperationStatus.NEEDS_ATTENTION
+    assert (
+        worlds.get_world(
+            account.id,
+            world.id,
+            viewer_user_id="owner",
+        ).status
+        is WorldStatus.NEEDS_ATTENTION
+    )
+
+
+def test_marking_an_already_terminal_operation_is_idempotent():
+    accounts = Accounts(InMemoryAccountRepository())
+    account = accounts.create_account(name="Sexta com os amigos", owner_user_id="owner")
+    repository = InMemoryWorldRepository()
+    worlds = Worlds(repository, access=accounts)
+    world = worlds.create_world(
+        account.id,
+        actor_user_id="owner",
+        name="Palpagos",
+        game_template_id="palworld:1",
+        region="br-sao-paulo",
+        runtime_profile_id="palworld-small",
+    )
+    operation = worlds.request_wake(
+        account.id,
+        world.id,
+        actor_user_id="owner",
+        idempotency_key="discord-command-1",
+    )
+    worker = WorldOperationWorker(
+        repository,
+        runtime_provider=RecordingRuntimeProvider([]),
+        state_store=RecordingWorldStateStore([]),
+        game_templates=SingleTemplateCatalog(HealthyPalworldTemplate([])),
+    )
+    completed = worker.run_to_completion(account.id, operation.id)
+
+    unchanged = worker.mark_needs_attention(account.id, operation.id)
+
+    assert unchanged == completed

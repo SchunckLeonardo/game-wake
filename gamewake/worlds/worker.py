@@ -138,16 +138,8 @@ class WorldOperationWorker:
             healthy = template.is_healthy(world, runtime)
             completed = replace(
                 operation,
-                status=(
-                    OperationStatus.SUCCEEDED
-                    if healthy
-                    else OperationStatus.NEEDS_ATTENTION
-                ),
-                phase=(
-                    OperationPhase.COMPLETE
-                    if healthy
-                    else OperationPhase.CHECKING_GAME_HEALTH
-                ),
+                status=(OperationStatus.SUCCEEDED if healthy else OperationStatus.NEEDS_ATTENTION),
+                phase=(OperationPhase.COMPLETE if healthy else OperationPhase.CHECKING_GAME_HEALTH),
                 version=operation.version + 1,
             )
             updated_world = replace(
@@ -164,6 +156,22 @@ class WorldOperationWorker:
             return completed
 
         raise RuntimeError(f"unsupported operation phase: {operation.phase}")
+
+    def mark_needs_attention(
+        self,
+        account_id: str,
+        operation_id: str,
+    ) -> WorldOperation:
+        operation = self._repository.get_operation(account_id, operation_id)
+        if operation.status in {
+            OperationStatus.SUCCEEDED,
+            OperationStatus.CANCELLED,
+            OperationStatus.FAILED,
+            OperationStatus.NEEDS_ATTENTION,
+        }:
+            return operation
+        world = self._repository.get(account_id, operation.world_id)
+        return self._needs_attention(operation, world)
 
     def _advance_sleep(self, operation, world, template) -> WorldOperation:
         runtime = self._runtime_for(operation)
@@ -300,11 +308,7 @@ class WorldOperationWorker:
                 status=(
                     OperationStatus.SUCCEEDED
                     if healthy
-                    else (
-                        OperationStatus.NEEDS_ATTENTION
-                        if exhausted
-                        else OperationStatus.FAILED
-                    )
+                    else (OperationStatus.NEEDS_ATTENTION if exhausted else OperationStatus.FAILED)
                 ),
                 phase=OperationPhase.COMPLETE,
                 version=operation.version + 1,
@@ -314,11 +318,7 @@ class WorldOperationWorker:
                 status=(
                     WorldStatus.ONLINE
                     if healthy
-                    else (
-                        WorldStatus.NEEDS_ATTENTION
-                        if exhausted
-                        else WorldStatus.WAKING
-                    )
+                    else (WorldStatus.NEEDS_ATTENTION if exhausted else WorldStatus.WAKING)
                 ),
                 version=world.version + 1,
             )
