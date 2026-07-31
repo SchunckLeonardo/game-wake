@@ -2,6 +2,8 @@
 
 from .in_memory import InMemoryBillingRepository
 from .model import (
+    BalanceGuardDecision,
+    BalanceGuardState,
     ContributionCheckoutRequest,
     ContributionPackage,
     ContributionStatus,
@@ -17,10 +19,16 @@ from .model import (
     UsageReservation,
     Wallet,
     WalletContribution,
+    WorldBudget,
+    WorldBudgetAlertState,
+    WorldBudgetExceeded,
+    WorldBudgetStatus,
 )
 from .service import Billing
 
 __all__ = [
+    "BalanceGuardDecision",
+    "BalanceGuardState",
     "Billing",
     "ContributionCheckoutRequest",
     "ContributionPackage",
@@ -38,4 +46,8 @@ __all__ = [
     "UsageReservation",
     "Wallet",
     "WalletContribution",
+    "WorldBudget",
+    "WorldBudgetAlertState",
+    "WorldBudgetExceeded",
+    "WorldBudgetStatus",
 ]

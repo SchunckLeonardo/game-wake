@@ -7,6 +7,8 @@ from uuid import uuid4
 
 from .contracts import BillingRepository, PaymentProvider
 from .model import (
+    BalanceGuardDecision,
+    BalanceGuardState,
     ConcurrentBillingUpdate,
     ContributionCheckoutRequest,
     ContributionPackage,
@@ -23,6 +25,10 @@ from .model import (
     Wallet,
     WalletContribution,
     WalletSnapshot,
+    WorldBudget,
+    WorldBudgetAlertState,
+    WorldBudgetExceeded,
+    WorldBudgetStatus,
 )
 
 _CENT = Decimal("0.01")
@@ -442,6 +448,83 @@ class Billing:
             purpose=f"wake:{quote.world_id}",
             idempotency_key=idempotency_key,
             quote_id=quote.id,
+            world_id=quote.world_id,
+        )
+
+    def set_world_budget(
+        self,
+        account_id: str,
+        *,
+        world_id: str,
+        monthly_limit: Decimal,
+        idempotency_key: str,
+    ) -> WorldBudget:
+        limit = self._positive_money(monthly_limit)
+        for _ in range(100):
+            snapshot = self._repository.get(account_id)
+            existing_command = next(
+                (
+                    budget
+                    for budget in snapshot.world_budgets
+                    if budget.idempotency_key == idempotency_key
+                ),
+                None,
+            )
+            if existing_command is not None:
+                return existing_command
+            current = next(
+                (budget for budget in snapshot.world_budgets if budget.world_id == world_id),
+                None,
+            )
+            budget = WorldBudget(
+                id=current.id if current is not None else str(uuid4()),
+                account_id=account_id,
+                world_id=world_id,
+                monthly_limit=limit,
+                idempotency_key=idempotency_key,
+                updated_at=self._clock(),
+            )
+            budgets = tuple(
+                budget if item.world_id == world_id else item
+                for item in snapshot.world_budgets
+            )
+            if current is None:
+                budgets = (*budgets, budget)
+            if self._try_save(
+                replace(snapshot, world_budgets=budgets),
+                expected_version=snapshot.version,
+            ):
+                return budget
+        raise ConcurrentBillingUpdate("could not set World Budget after retries")
+
+    def get_world_budget_status(
+        self,
+        account_id: str,
+        world_id: str,
+        *,
+        observed_at: datetime | None = None,
+    ) -> WorldBudgetStatus | None:
+        snapshot = self._repository.get(account_id)
+        budget = self._world_budget(snapshot, world_id)
+        if budget is None:
+            return None
+        now = observed_at or self._clock()
+        spent = self._world_budget_spent(snapshot, world_id, now)
+        reserved = self._world_budget_reserved(snapshot, world_id)
+        committed = spent + reserved
+        percentage = (committed / budget.monthly_limit * Decimal(100)).quantize(
+            _CENT,
+            rounding=ROUND_HALF_UP,
+        )
+        return WorldBudgetStatus(
+            world_id=world_id,
+            period=self._month_key(now),
+            monthly_limit=budget.monthly_limit,
+            spent=spent,
+            reserved=reserved,
+            committed=committed,
+            percentage=percentage,
+            wake_allowed=committed < budget.monthly_limit,
         )
 
     def credit_wallet(
@@ -489,6 +572,7 @@ class Billing:
         purpose: str,
         idempotency_key: str,
         quote_id: str | None = None,
+        world_id: str | None = None,
     ) -> UsageReservation:
         normalized = self._positive_money(amount)
         for _ in range(100):
@@ -505,6 +589,12 @@ class Billing:
                 return existing
             if self._available_balance(snapshot) < normalized:
                 raise InsufficientFundsError("Wallet has insufficient available balance")
+            if (
+                world_id is not None
+                and self._world_budget_available(snapshot, world_id, self._clock())
+                < normalized
+            ):
+                raise WorldBudgetExceeded("World Budget cannot fund this reservation")
             reservation = UsageReservation(
                 id=str(uuid4()),
                 account_id=account_id,
@@ -514,6 +604,7 @@ class Billing:
                 status=ReservationStatus.ACTIVE,
                 created_at=self._clock(),
                 quote_id=quote_id,
+                world_id=world_id,
             )
             if self._try_save(
                 replace(
@@ -524,6 +615,327 @@ class Billing:
             ):
                 return reservation
         raise ConcurrentBillingUpdate("could not reserve Wallet after concurrent retries")
+
+    def protect_active_session(
+        self,
+        account_id: str,
+        *,
+        quote_id: str,
+        reservation_id: str,
+        runtime_started_at: datetime,
+        observed_at: datetime,
+        safe_sleep_seconds: int = 5 * 60,
+        guard_interval_seconds: int = 60,
+    ) -> BalanceGuardDecision:
+        elapsed = (observed_at - runtime_started_at).total_seconds()
+        if elapsed < 0:
+            raise ValueError("Balance Guard observation cannot precede Runtime start")
+        if safe_sleep_seconds <= 0 or guard_interval_seconds <= 0:
+            raise ValueError("Balance Guard intervals must be positive")
+        for _ in range(100):
+            snapshot = self._repository.get(account_id)
+            quote = next(item for item in snapshot.quotes if item.id == quote_id)
+            reservation = next(
+                item for item in snapshot.reservations if item.id == reservation_id
+            )
+            if reservation.quote_id != quote.id:
+                raise ValueError("Usage Reservation does not belong to Session Quote")
+            if reservation.status is not ReservationStatus.ACTIVE:
+                raise ValueError("Balance Guard requires an active Usage Reservation")
+            guard = next(
+                (
+                    item
+                    for item in snapshot.balance_guards
+                    if item.reservation_id == reservation.id
+                ),
+                BalanceGuardState(
+                    reservation_id=reservation.id,
+                    notified_alert_minutes=(),
+                ),
+            )
+            elapsed_seconds = ceil(elapsed)
+            required_amount = (
+                quote.hourly_rate
+                * Decimal(elapsed_seconds + safe_sleep_seconds)
+                / Decimal(3600)
+            ).quantize(_CENT, rounding=ROUND_UP)
+            additional_hold = max(Decimal("0.00"), required_amount - reservation.amount)
+            wallet_available = self._available_balance(snapshot)
+            budget = self._world_budget(snapshot, quote.world_id)
+            budget_available = (
+                self._world_budget_available(snapshot, quote.world_id, observed_at)
+                if budget is not None
+                else None
+            )
+            can_extend_wallet = additional_hold <= wallet_available
+            can_extend_budget = (
+                budget_available is None or additional_hold <= budget_available
+            )
+            can_extend = can_extend_wallet and can_extend_budget
+            reserved_amount = required_amount if can_extend else reservation.amount
+            wallet_after = (
+                wallet_available - additional_hold if can_extend else Decimal("0.00")
+            )
+            budget_after = (
+                budget_available - additional_hold
+                if can_extend and budget_available is not None
+                else None
+            )
+            available_after = (
+                min(wallet_after, budget_after)
+                if budget_after is not None
+                else wallet_after
+            )
+            rate_per_minute = quote.hourly_rate / Decimal(60)
+            remaining_minutes_decimal = (
+                available_after / rate_per_minute
+                if rate_per_minute > 0
+                else Decimal("0.00")
+            )
+            remaining_minutes = max(0, int(remaining_minutes_decimal))
+            eligible = {
+                threshold
+                for threshold in (30, 10, 5)
+                if remaining_minutes_decimal <= threshold
+            }
+            already_notified = set(guard.notified_alert_minutes)
+            newly_eligible = eligible - already_notified
+            new_alerts = (min(newly_eligible),) if newly_eligible else ()
+            notified = tuple(sorted(already_notified | eligible, reverse=True))
+            budget_alert_state = None
+            budget_new_alerts: tuple[int, ...] = ()
+            if budget is not None:
+                period = self._month_key(observed_at)
+                budget_alert_state = next(
+                    (
+                        item
+                        for item in snapshot.world_budget_alerts
+                        if item.world_id == quote.world_id and item.period == period
+                    ),
+                    WorldBudgetAlertState(
+                        world_id=quote.world_id,
+                        period=period,
+                        notified_percentages=(),
+                    ),
+                )
+                committed = (
+                    self._world_budget_spent(snapshot, quote.world_id, observed_at)
+                    + self._world_budget_reserved(snapshot, quote.world_id)
+                    + (additional_hold if can_extend else Decimal("0.00"))
+                )
+                percentage = committed / budget.monthly_limit * Decimal(100)
+                eligible_budget_alerts = {
+                    threshold for threshold in (50, 80, 100) if percentage >= threshold
+                }
+                notified_budget_alerts = set(
+                    budget_alert_state.notified_percentages
+                )
+                new_budget_eligible = eligible_budget_alerts - notified_budget_alerts
+                budget_new_alerts = (
+                    (max(new_budget_eligible),) if new_budget_eligible else ()
+                )
+                budget_alert_state = replace(
+                    budget_alert_state,
+                    notified_percentages=tuple(
+                        sorted(notified_budget_alerts | eligible_budget_alerts)
+                    ),
+                )
+            safe_sleep_reserved = can_extend
+            should_sleep = not can_extend or (
+                available_after
+                < quote.hourly_rate
+                * Decimal(guard_interval_seconds)
+                / Decimal(3600)
+            )
+            if should_sleep:
+                budget_is_limiter = budget_after is not None and budget_after <= wallet_after
+                reason = (
+                    "world_budget_exhausted"
+                    if budget_is_limiter or not can_extend_budget
+                    else "insufficient_wallet_balance"
+                )
+            else:
+                reason = None
+            decision = BalanceGuardDecision(
+                reservation_id=reservation.id,
+                reserved_amount=reserved_amount,
+                remaining_minutes=remaining_minutes,
+                new_alert_minutes=new_alerts,
+                new_budget_alert_percentages=budget_new_alerts,
+                safe_sleep_reserved=safe_sleep_reserved,
+                should_sleep=should_sleep,
+                reason=reason,
+            )
+            extended = replace(reservation, amount=reserved_amount)
+            reservations = tuple(
+                extended if item.id == reservation.id else item
+                for item in snapshot.reservations
+            )
+            updated_guard = replace(guard, notified_alert_minutes=notified)
+            balance_guards = tuple(
+                updated_guard if item.reservation_id == reservation.id else item
+                for item in snapshot.balance_guards
+            )
+            if not any(
+                item.reservation_id == reservation.id for item in snapshot.balance_guards
+            ):
+                balance_guards = (*balance_guards, updated_guard)
+            budget_alerts = snapshot.world_budget_alerts
+            if budget_alert_state is not None:
+                budget_alerts = tuple(
+                    budget_alert_state
+                    if item.world_id == budget_alert_state.world_id
+                    and item.period == budget_alert_state.period
+                    else item
+                    for item in snapshot.world_budget_alerts
+                )
+                if not any(
+                    item.world_id == budget_alert_state.world_id
+                    and item.period == budget_alert_state.period
+                    for item in snapshot.world_budget_alerts
+                ):
+                    budget_alerts = (*budget_alerts, budget_alert_state)
+            if (
+                reservations == snapshot.reservations
+                and balance_guards == snapshot.balance_guards
+                and budget_alerts == snapshot.world_budget_alerts
+            ):
+                return decision
+            if self._try_save(
+                replace(
+                    snapshot,
+                    reservations=reservations,
+                    balance_guards=balance_guards,
+                    world_budget_alerts=budget_alerts,
+                ),
+                expected_version=snapshot.version,
+            ):
+                return decision
+        raise ConcurrentBillingUpdate("could not apply Balance Guard after retries")
+
+    def release_reservation(
+        self,
+        account_id: str,
+        reservation_id: str,
+    ) -> UsageReservation:
+        for _ in range(100):
+            snapshot = self._repository.get(account_id)
+            reservation = next(
+                item for item in snapshot.reservations if item.id == reservation_id
+            )
+            if reservation.status is ReservationStatus.RELEASED:
+                return reservation
+            if reservation.status is ReservationStatus.CAPTURED:
+                raise ValueError("captured Usage Reservation cannot be released")
+            released = replace(reservation, status=ReservationStatus.RELEASED)
+            reservations = tuple(
+                released if item.id == reservation_id else item
+                for item in snapshot.reservations
+            )
+            if self._try_save(
+                replace(snapshot, reservations=reservations),
+                expected_version=snapshot.version,
+            ):
+                return released
+        raise ConcurrentBillingUpdate("could not release Usage Reservation after retries")
+
+    def apply_wake_guarantee(
+        self,
+        account_id: str,
+        usage_id: str,
+        *,
+        reached_online: bool,
+        idempotency_key: str,
+    ) -> LedgerEntry:
+        if reached_online:
+            raise ValueError("Wake Guarantee applies only before a World reaches Online")
+        for _ in range(100):
+            snapshot = self._repository.get(account_id)
+            usage = next(item for item in snapshot.usages if item.id == usage_id)
+            existing = next(
+                (
+                    entry
+                    for entry in snapshot.entries
+                    if entry.entry_type is LedgerEntryType.WAKE_GUARANTEE
+                    and entry.reference == usage.id
+                ),
+                None,
+            )
+            if existing is not None:
+                return existing
+            entry = LedgerEntry(
+                id=str(uuid4()),
+                account_id=account_id,
+                entry_type=LedgerEntryType.WAKE_GUARANTEE,
+                amount=usage.amount,
+                reference=usage.id,
+                idempotency_key=idempotency_key,
+                occurred_at=self._clock(),
+            )
+            if self._try_save(
+                replace(snapshot, entries=(*snapshot.entries, entry)),
+                expected_version=snapshot.version,
+            ):
+                return entry
+        raise ConcurrentBillingUpdate("could not apply Wake Guarantee after retries")
+
+    def apply_availability_credit(
+        self,
+        account_id: str,
+        usage_id: str,
+        *,
+        unavailable_at: datetime,
+        recovered_at: datetime,
+        idempotency_key: str,
+    ) -> LedgerEntry | None:
+        elapsed = (recovered_at - unavailable_at).total_seconds()
+        if elapsed <= 120:
+            return None
+        reference = (
+            f"{usage_id}:{unavailable_at.isoformat()}:{recovered_at.isoformat()}"
+        )
+        for _ in range(100):
+            snapshot = self._repository.get(account_id)
+            usage = next(item for item in snapshot.usages if item.id == usage_id)
+            if (
+                unavailable_at < usage.runtime_started_at
+                or recovered_at > usage.runtime_released_at
+            ):
+                raise ValueError("Availability interval must be inside Runtime Usage")
+            existing = next(
+                (
+                    entry
+                    for entry in snapshot.entries
+                    if entry.entry_type is LedgerEntryType.AVAILABILITY_CREDIT
+                    and entry.reference == reference
+                ),
+                None,
+            )
+            if existing is not None:
+                return existing
+            quote = next(item for item in snapshot.quotes if item.id == usage.quote_id)
+            unavailable_seconds = ceil(elapsed)
+            amount = (
+                quote.hourly_rate * Decimal(unavailable_seconds) / Decimal(3600)
+            ).quantize(_CENT, rounding=ROUND_HALF_UP)
+            amount = min(amount, usage.amount)
+            if amount <= 0:
+                return None
+            entry = LedgerEntry(
+                id=str(uuid4()),
+                account_id=account_id,
+                entry_type=LedgerEntryType.AVAILABILITY_CREDIT,
+                amount=amount,
+                reference=reference,
+                idempotency_key=idempotency_key,
+                occurred_at=self._clock(),
+            )
+            if self._try_save(
+                replace(snapshot, entries=(*snapshot.entries, entry)),
+                expected_version=snapshot.version,
+            ):
+                return entry
+        raise ConcurrentBillingUpdate("could not apply Availability Credit after retries")
 
     def capture_reservation(
         self,
@@ -677,6 +1089,73 @@ class Billing:
             start=Decimal("0.00"),
         )
         return balance - reserved
+
+    @staticmethod
+    def _world_budget(snapshot: WalletSnapshot, world_id: str) -> WorldBudget | None:
+        return next(
+            (budget for budget in snapshot.world_budgets if budget.world_id == world_id),
+            None,
+        )
+
+    def _world_budget_available(
+        self,
+        snapshot: WalletSnapshot,
+        world_id: str,
+        observed_at: datetime,
+    ) -> Decimal:
+        budget = self._world_budget(snapshot, world_id)
+        if budget is None:
+            return Decimal("Infinity")
+        committed = self._world_budget_spent(snapshot, world_id, observed_at) + (
+            self._world_budget_reserved(snapshot, world_id)
+        )
+        return max(Decimal("0.00"), budget.monthly_limit - committed)
+
+    @staticmethod
+    def _world_budget_reserved(snapshot: WalletSnapshot, world_id: str) -> Decimal:
+        return sum(
+            (
+                reservation.amount
+                for reservation in snapshot.reservations
+                if reservation.world_id == world_id
+                and reservation.status is ReservationStatus.ACTIVE
+            ),
+            start=Decimal("0.00"),
+        )
+
+    def _world_budget_spent(
+        self,
+        snapshot: WalletSnapshot,
+        world_id: str,
+        observed_at: datetime,
+    ) -> Decimal:
+        period = self._month_key(observed_at)
+        spent = Decimal("0.00")
+        for usage in snapshot.usages:
+            if usage.world_id != world_id or self._month_key(usage.runtime_released_at) != period:
+                continue
+            credits = sum(
+                (
+                    entry.amount
+                    for entry in snapshot.entries
+                    if entry.entry_type
+                    in {
+                        LedgerEntryType.WAKE_GUARANTEE,
+                        LedgerEntryType.AVAILABILITY_CREDIT,
+                    }
+                    and (
+                        entry.reference == usage.id
+                        or entry.reference.startswith(f"{usage.id}:")
+                    )
+                ),
+                start=Decimal("0.00"),
+            )
+            spent += max(Decimal("0.00"), usage.amount - credits)
+        return spent
+
+    @staticmethod
+    def _month_key(value: datetime) -> str:
+        return f"{value.year:04d}-{value.month:02d}"
 
     @staticmethod
     def _positive_money(amount: Decimal) -> Decimal:

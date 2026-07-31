@@ -19,6 +19,9 @@ class InMemoryBillingRepository:
                 usages=(),
                 contributions=(),
                 payment_events=(),
+                balance_guards=(),
+                world_budgets=(),
+                world_budget_alerts=(),
                 version=0,
             ),
         )
@@ -36,6 +39,9 @@ class InMemoryBillingRepository:
                 usages=snapshot.usages,
                 contributions=snapshot.contributions,
                 payment_events=snapshot.payment_events,
+                balance_guards=snapshot.balance_guards,
+                world_budgets=snapshot.world_budgets,
+                world_budget_alerts=snapshot.world_budget_alerts,
                 version=expected_version + 1,
             )
 

@@ -12,6 +12,10 @@ class ConcurrentBillingUpdate(RuntimeError):
     """Signals optimistic concurrency so Billing can reload and retry."""
 
 
+class WorldBudgetExceeded(ValueError):
+    """Raised before a reservation could exceed a World's monthly limit."""
+
+
 class LedgerEntryType(StrEnum):
     CONTRIBUTION = "contribution"
     RUNTIME_CHARGE = "runtime_charge"
@@ -96,6 +100,53 @@ class ProcessedPaymentEvent:
 
 
 @dataclass(frozen=True)
+class BalanceGuardState:
+    reservation_id: str
+    notified_alert_minutes: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class BalanceGuardDecision:
+    reservation_id: str
+    reserved_amount: Decimal
+    remaining_minutes: int
+    new_alert_minutes: tuple[int, ...]
+    new_budget_alert_percentages: tuple[int, ...]
+    safe_sleep_reserved: bool
+    should_sleep: bool
+    reason: str | None
+
+
+@dataclass(frozen=True)
+class WorldBudget:
+    id: str
+    account_id: str
+    world_id: str
+    monthly_limit: Decimal
+    idempotency_key: str
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
+class WorldBudgetAlertState:
+    world_id: str
+    period: str
+    notified_percentages: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class WorldBudgetStatus:
+    world_id: str
+    period: str
+    monthly_limit: Decimal
+    spent: Decimal
+    reserved: Decimal
+    committed: Decimal
+    percentage: Decimal
+    wake_allowed: bool
+
+
+@dataclass(frozen=True)
 class LedgerEntry:
     id: str
     account_id: str
@@ -116,6 +167,7 @@ class UsageReservation:
     status: ReservationStatus
     created_at: datetime
     quote_id: str | None = None
+    world_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -154,6 +206,9 @@ class WalletSnapshot:
     usages: tuple[RuntimeUsage, ...]
     contributions: tuple[WalletContribution, ...]
     payment_events: tuple[ProcessedPaymentEvent, ...]
+    balance_guards: tuple[BalanceGuardState, ...]
+    world_budgets: tuple[WorldBudget, ...]
+    world_budget_alerts: tuple[WorldBudgetAlertState, ...]
     version: int
 
 
