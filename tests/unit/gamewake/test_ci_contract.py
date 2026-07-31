@@ -66,6 +66,18 @@ def test_terraform_workflows_receive_the_production_gamewake_configuration():
             assert variable in workflow
 
 
+def test_terraform_workflows_use_the_node_24_action_runtime():
+    workflows = (
+        read(".github/workflows/tests.yml"),
+        read(".github/workflows/terraform-plan.yml"),
+        read(".github/workflows/terraform-apply.yml"),
+    )
+
+    for workflow in workflows:
+        assert "hashicorp/setup-terraform@v4" in workflow
+        assert "hashicorp/setup-terraform@v3" not in workflow
+
+
 def test_local_quality_commands_cover_the_gamewake_backend_and_web_console():
     makefile = read("Makefile")
     validation = read("scripts/validate.sh")
