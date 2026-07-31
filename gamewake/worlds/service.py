@@ -82,6 +82,8 @@ class Worlds:
             runtime_provider_reference=None,
             configuration_revision_id=initial_configuration.id,
             pending_configuration_revision_id=None,
+            stored_state_id=None,
+            stored_state_checksum=None,
             version=1,
         )
         self._repository.create(world, initial_configuration)

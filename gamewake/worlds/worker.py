@@ -265,6 +265,8 @@ class WorldOperationWorker:
                 status=WorldStatus.SLEEPING,
                 runtime_id=None,
                 runtime_provider_reference=None,
+                stored_state_id=operation.stored_state_id,
+                stored_state_checksum=operation.stored_state_checksum,
                 version=world.version + 1,
             )
             self._repository.save_operation(

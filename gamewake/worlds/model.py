@@ -56,6 +56,8 @@ class World:
     runtime_provider_reference: str | None
     configuration_revision_id: str
     pending_configuration_revision_id: str | None
+    stored_state_id: str | None
+    stored_state_checksum: str | None
     version: int
 
 

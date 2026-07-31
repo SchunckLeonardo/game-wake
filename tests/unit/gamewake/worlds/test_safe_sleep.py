@@ -147,6 +147,8 @@ def test_safe_sleep_releases_runtime_only_after_validated_state_and_backup():
     )
     assert sleeping.status is WorldStatus.SLEEPING
     assert sleeping.runtime_id is None
+    assert sleeping.stored_state_id == "state-2"
+    assert sleeping.stored_state_checksum == "sha256:valid"
 
 
 def test_invalid_persisted_state_preserves_runtime_and_never_creates_backup():
