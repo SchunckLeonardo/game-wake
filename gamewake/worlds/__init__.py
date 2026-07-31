@@ -3,6 +3,9 @@
 from .in_memory import InMemoryWorldRepository
 from .model import (
     Backup,
+    ConfigurationChange,
+    ConfigurationChangePreview,
+    ConfigurationRevision,
     OperationPhase,
     OperationStatus,
     OperationType,
@@ -17,6 +20,9 @@ from .worker import WorldOperationWorker
 
 __all__ = [
     "Backup",
+    "ConfigurationChange",
+    "ConfigurationChangePreview",
+    "ConfigurationRevision",
     "InMemoryWorldRepository",
     "OperationPhase",
     "OperationStatus",

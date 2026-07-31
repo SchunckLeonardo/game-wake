@@ -4,9 +4,13 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from gamewake.accounts import Permission, PermissionDeniedError
+from gamewake.game_catalog import GameCatalog
 
-from .contracts import AccessControl, WorldRepository
+from .contracts import AccessControl, GameConfigurationCatalog, WorldRepository
 from .model import (
+    ConfigurationChange,
+    ConfigurationChangePreview,
+    ConfigurationRevision,
     OperationPhase,
     OperationStatus,
     OperationType,
@@ -23,10 +27,12 @@ class Worlds:
         *,
         access: AccessControl,
         clock: Callable[[], datetime] | None = None,
+        game_catalog: GameConfigurationCatalog | None = None,
     ) -> None:
         self._repository = repository
         self._access = access
         self._clock = clock or (lambda: datetime.now(UTC))
+        self._game_catalog = game_catalog or GameCatalog.with_palworld()
 
     def create_world(
         self,
@@ -44,8 +50,28 @@ class Worlds:
             permission=Permission.CREATE_WORLD,
         ):
             raise PermissionDeniedError("creating a World requires Owner permission")
-        world = World(
+        world_id = str(uuid4())
+        template = self._game_catalog.resolve(game_template_id)
+        defaults = {
+            field.key: field.default
+            for field in template.configuration_fields
+        }
+        validated_defaults = self._game_catalog.validate_configuration(
+            game_template_id,
+            defaults,
+        )
+        initial_configuration = ConfigurationRevision(
             id=str(uuid4()),
+            account_id=account_id,
+            world_id=world_id,
+            game_template_id=game_template_id,
+            number=1,
+            entries=tuple(validated_defaults.items()),
+            idempotency_key=f"world:{world_id}:initial-configuration",
+            created_at=self._clock(),
+        )
+        world = World(
+            id=world_id,
             account_id=account_id,
             name=name,
             game_template_id=game_template_id,
@@ -54,9 +80,11 @@ class Worlds:
             status=WorldStatus.SLEEPING,
             runtime_id=None,
             runtime_provider_reference=None,
+            configuration_revision_id=initial_configuration.id,
+            pending_configuration_revision_id=None,
             version=1,
         )
-        self._repository.create(world)
+        self._repository.create(world, initial_configuration)
         return world
 
     def get_world(
@@ -74,6 +102,123 @@ class Worlds:
         ):
             raise PermissionDeniedError("the User cannot view this World")
         return self._repository.get(account_id, world_id)
+
+    def get_configuration(
+        self,
+        account_id: str,
+        world_id: str,
+        *,
+        viewer_user_id: str,
+    ) -> ConfigurationRevision:
+        world = self.get_world(
+            account_id,
+            world_id,
+            viewer_user_id=viewer_user_id,
+        )
+        return self._repository.get_configuration(
+            account_id,
+            world_id,
+            world.configuration_revision_id,
+        )
+
+    def preview_configuration_change(
+        self,
+        account_id: str,
+        world_id: str,
+        *,
+        actor_user_id: str,
+        changes: object,
+    ) -> ConfigurationChangePreview:
+        if not self._access.authorize(
+            account_id,
+            user_id=actor_user_id,
+            permission=Permission.EDIT_WORLD,
+            world_id=world_id,
+        ):
+            raise PermissionDeniedError("the User cannot edit this World")
+        world = self._repository.get(account_id, world_id)
+        base_revision_id = (
+            world.pending_configuration_revision_id
+            or world.configuration_revision_id
+        )
+        base = self._repository.get_configuration(
+            account_id,
+            world_id,
+            base_revision_id,
+        )
+        normalized_changes = self._game_catalog.validate_configuration(
+            world.game_template_id,
+            changes,
+            partial=True,
+        )
+        proposed = {**base.values, **normalized_changes}
+        validated = self._game_catalog.validate_configuration(
+            world.game_template_id,
+            proposed,
+        )
+        fields = {
+            field.key: field
+            for field in self._game_catalog.resolve(
+                world.game_template_id
+            ).configuration_fields
+        }
+        diff = tuple(
+            ConfigurationChange(
+                key=key,
+                current=base.values[key],
+                proposed=value,
+                restart_required=fields[key].restart_required,
+            )
+            for key, value in normalized_changes.items()
+            if value != base.values[key]
+        )
+        return ConfigurationChangePreview(
+            world_id=world_id,
+            base_revision_id=base.id,
+            changes=diff,
+            proposed_entries=tuple(validated.items()),
+        )
+
+    def update_configuration(
+        self,
+        account_id: str,
+        world_id: str,
+        *,
+        actor_user_id: str,
+        changes: object,
+        idempotency_key: str,
+    ) -> ConfigurationRevision:
+        preview = self.preview_configuration_change(
+            account_id,
+            world_id,
+            actor_user_id=actor_user_id,
+            changes=changes,
+        )
+        world = self._repository.get(account_id, world_id)
+        base = self._repository.get_configuration(
+            account_id,
+            world_id,
+            preview.base_revision_id,
+        )
+        revision = ConfigurationRevision(
+            id=str(uuid4()),
+            account_id=account_id,
+            world_id=world_id,
+            game_template_id=world.game_template_id,
+            number=base.number + 1,
+            entries=preview.proposed_entries,
+            idempotency_key=idempotency_key,
+            created_at=self._clock(),
+        )
+        return self._repository.append_configuration(
+            replace(
+                world,
+                pending_configuration_revision_id=revision.id,
+                version=world.version + 1,
+            ),
+            revision,
+            expected_world_version=world.version,
+        )
 
     def request_wake(
         self,

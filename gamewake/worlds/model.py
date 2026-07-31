@@ -54,6 +54,8 @@ class World:
     status: WorldStatus
     runtime_id: str | None
     runtime_provider_reference: str | None
+    configuration_revision_id: str
+    pending_configuration_revision_id: str | None
     version: int
 
 
@@ -77,6 +79,41 @@ class Backup:
     world_id: str
     state_id: str
     checksum: str
+
+
+ConfigurationValue = str | int | float | bool
+
+
+@dataclass(frozen=True)
+class ConfigurationRevision:
+    id: str
+    account_id: str
+    world_id: str
+    game_template_id: str
+    number: int
+    entries: tuple[tuple[str, ConfigurationValue], ...]
+    idempotency_key: str
+    created_at: datetime
+
+    @property
+    def values(self) -> dict[str, ConfigurationValue]:
+        return dict(self.entries)
+
+
+@dataclass(frozen=True)
+class ConfigurationChange:
+    key: str
+    current: ConfigurationValue
+    proposed: ConfigurationValue
+    restart_required: bool
+
+
+@dataclass(frozen=True)
+class ConfigurationChangePreview:
+    world_id: str
+    base_revision_id: str
+    changes: tuple[ConfigurationChange, ...]
+    proposed_entries: tuple[tuple[str, ConfigurationValue], ...]
 
 
 @dataclass(frozen=True)

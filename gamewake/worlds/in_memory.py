@@ -1,18 +1,21 @@
 from threading import RLock
 
-from .model import OperationStatus, World, WorldOperation
+from .model import ConfigurationRevision, OperationStatus, World, WorldOperation
 
 
 class InMemoryWorldRepository:
     def __init__(self) -> None:
         self._worlds: dict[tuple[str, str], World] = {}
         self._operations: dict[str, WorldOperation] = {}
+        self._configurations: dict[str, ConfigurationRevision] = {}
+        self._configuration_idempotency: dict[tuple[str, str], str] = {}
         self._idempotency: dict[tuple[str, str], str] = {}
         self._active_operations: dict[tuple[str, str], str] = {}
         self._lock = RLock()
 
-    def create(self, world: World) -> None:
+    def create(self, world: World, initial_configuration: ConfigurationRevision) -> None:
         self._worlds[(world.account_id, world.id)] = world
+        self._configurations[initial_configuration.id] = initial_configuration
 
     def get(self, account_id: str, world_id: str) -> World:
         return self._worlds[(account_id, world_id)]
@@ -93,3 +96,35 @@ class InMemoryWorldRepository:
                 world_key = (operation.account_id, operation.world_id)
                 if self._active_operations.get(world_key) == operation.id:
                     del self._active_operations[world_key]
+
+    def get_configuration(
+        self,
+        account_id: str,
+        world_id: str,
+        revision_id: str,
+    ) -> ConfigurationRevision:
+        revision = self._configurations[revision_id]
+        if revision.account_id != account_id or revision.world_id != world_id:
+            raise KeyError(revision_id)
+        return revision
+
+    def append_configuration(
+        self,
+        world: World,
+        revision: ConfigurationRevision,
+        *,
+        expected_world_version: int,
+    ) -> ConfigurationRevision:
+        with self._lock:
+            idempotency_key = (revision.account_id, revision.idempotency_key)
+            existing_id = self._configuration_idempotency.get(idempotency_key)
+            if existing_id is not None:
+                return self._configurations[existing_id]
+            world_key = (world.account_id, world.id)
+            current = self._worlds[world_key]
+            if current.version != expected_world_version:
+                raise RuntimeError("World was changed concurrently")
+            self._worlds[world_key] = world
+            self._configurations[revision.id] = revision
+            self._configuration_idempotency[idempotency_key] = revision.id
+            return revision

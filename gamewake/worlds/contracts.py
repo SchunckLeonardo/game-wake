@@ -1,8 +1,17 @@
 from typing import Protocol
 
 from gamewake.accounts import Permission
+from gamewake.game_catalog import GameTemplateDefinition
+from gamewake.game_catalog.model import ConfigurationValue
 
-from .model import Backup, Runtime, StoredWorldState, World, WorldOperation
+from .model import (
+    Backup,
+    ConfigurationRevision,
+    Runtime,
+    StoredWorldState,
+    World,
+    WorldOperation,
+)
 
 
 class AccessControl(Protocol):
@@ -17,7 +26,7 @@ class AccessControl(Protocol):
 
 
 class WorldRepository(Protocol):
-    def create(self, world: World) -> None: ...
+    def create(self, world: World, initial_configuration: ConfigurationRevision) -> None: ...
 
     def get(self, account_id: str, world_id: str) -> World: ...
 
@@ -47,6 +56,33 @@ class WorldRepository(Protocol):
         world: World | None = None,
         expected_world_version: int | None = None,
     ) -> None: ...
+
+    def get_configuration(
+        self,
+        account_id: str,
+        world_id: str,
+        revision_id: str,
+    ) -> ConfigurationRevision: ...
+
+    def append_configuration(
+        self,
+        world: World,
+        revision: ConfigurationRevision,
+        *,
+        expected_world_version: int,
+    ) -> ConfigurationRevision: ...
+
+
+class GameConfigurationCatalog(Protocol):
+    def resolve(self, game_template_id: str) -> GameTemplateDefinition: ...
+
+    def validate_configuration(
+        self,
+        game_template_id: str,
+        values: object,
+        *,
+        partial: bool = False,
+    ) -> dict[str, ConfigurationValue]: ...
 
 
 class RuntimeProvider(Protocol):

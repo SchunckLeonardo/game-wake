@@ -104,6 +104,26 @@ class WorldOperationWorker:
                 runtime,
                 idempotency_key=self._effect_key(operation, "configure"),
             )
+            if world.pending_configuration_revision_id is not None:
+                configured = replace(
+                    operation,
+                    status=OperationStatus.RUNNING,
+                    phase=OperationPhase.STARTING_GAME,
+                    version=operation.version + 1,
+                )
+                updated_world = replace(
+                    world,
+                    configuration_revision_id=world.pending_configuration_revision_id,
+                    pending_configuration_revision_id=None,
+                    version=world.version + 1,
+                )
+                self._repository.save_operation(
+                    configured,
+                    expected_operation_version=operation.version,
+                    world=updated_world,
+                    expected_world_version=world.version,
+                )
+                return configured
             return self._move_to_phase(operation, OperationPhase.STARTING_GAME)
 
         if operation.phase is OperationPhase.STARTING_GAME:
