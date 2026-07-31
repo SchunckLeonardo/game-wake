@@ -1,0 +1,3 @@
+# Drive World Configuration from Game Templates
+
+Discord and Web UI build and validate the same World Configuration from the typed schema owned by each Game Template. The schema supplies current, default, and recommended values, allowed ranges or enumerations, impact text, official documentation, and restart requirements; changes are previewed and applied only on the next wake or after a safe backup and restart. Owner and Manager retain an advanced raw editor with syntax validation, diff, and a support warning, avoiding separate configuration logic in each interface while preserving an expert escape hatch.

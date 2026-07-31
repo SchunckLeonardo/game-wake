@@ -1,4 +1,10 @@
-# palworld-cloud-server
+# GameWake
+
+Este repositório contém o protótipo Palworld que deu origem ao GameWake: uma plataforma Discord-first para grupos de amigos acordarem Worlds persistentes sob demanda e pagarem somente pelo uso necessário. A implementação atual ainda é uma stack Palworld de conta única; a evolução multi-tenant está definida na [GameWake Foundation](docs/GAMEWAKE_FOUNDATION.md) e no [Delivery Roadmap](docs/ROADMAP.md).
+
+Consulte também o [Context Map](CONTEXT-MAP.md) e os [ADRs](docs/adr/) antes de alterar conceitos centrais.
+
+## Protótipo Palworld atual
 
 [![Continuous integration](https://github.com/SchunckLeonardo/palworld-server/actions/workflows/tests.yml/badge.svg)](https://github.com/SchunckLeonardo/palworld-server/actions/workflows/tests.yml)
 [![CodeQL](https://github.com/SchunckLeonardo/palworld-server/actions/workflows/codeql.yml/badge.svg)](https://github.com/SchunckLeonardo/palworld-server/actions/workflows/codeql.yml)
