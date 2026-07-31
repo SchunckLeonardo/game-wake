@@ -60,6 +60,47 @@ def test_start_command_bootstraps_the_guild_account_with_the_caller_as_owner():
     assert response.links[0][1].endswith(f"/accounts/{account.id}")
 
 
+def test_start_command_rebinds_an_existing_account_to_the_current_channel_for_notifications():
+    repository = InMemoryAccountRepository()
+    accounts = Accounts(repository)
+    owner = accounts.sign_in_with_discord(
+        discord_user_id="discord-owner",
+        display_name="Leonardo",
+    )
+    account = accounts.create_account(
+        name="Sexta com os amigos",
+        owner_user_id=owner.id,
+        discord_guild_id="guild-existing",
+        discord_channel_id="old-channel",
+    )
+    catalog = GameCatalog.with_palworld()
+    controller = DiscordCommandController(
+        GameWakeApplication(
+            accounts=accounts,
+            worlds=Worlds(InMemoryWorldRepository(), access=accounts, game_catalog=catalog),
+            billing=Billing(InMemoryBillingRepository()),
+            game_catalog=catalog,
+        ),
+        console_url="https://app.gamewake.example",
+    )
+
+    controller.handle(
+        DiscordInteraction(
+            id="start-rebind",
+            guild_id="guild-existing",
+            channel_id="new-channel",
+            discord_user_id="discord-owner",
+            display_name="Leonardo",
+            command="comecar",
+        )
+    )
+
+    rebound = accounts.find_account_by_discord_guild("guild-existing")
+    assert rebound is not None
+    assert rebound.id == account.id
+    assert rebound.discord_channel_id == "new-channel"
+
+
 def test_invite_command_creates_one_private_invitation_for_each_selected_friend():
     account_repository = InMemoryAccountRepository()
     accounts = Accounts(account_repository)

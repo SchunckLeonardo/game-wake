@@ -121,6 +121,40 @@ def test_a_player_cannot_invite_members():
     ] == ["friend-one"]
 
 
+def test_only_an_owner_can_rebind_the_discord_notification_channel():
+    accounts = Accounts(InMemoryAccountRepository())
+    account = accounts.create_account(
+        name="Sexta com os amigos",
+        owner_user_id="user-owner",
+        discord_guild_id="guild-1",
+        discord_channel_id="old-channel",
+    )
+    [invitation] = accounts.invite_members(
+        account.id,
+        inviter_user_id="user-owner",
+        invited_user_ids=["friend-one"],
+    )
+    accounts.accept_invitation(
+        account.id,
+        invitation.id,
+        invited_user_id="friend-one",
+    )
+
+    with pytest.raises(PermissionDeniedError):
+        accounts.configure_discord_notification_channel(
+            account.id,
+            actor_user_id="friend-one",
+            channel_id="untrusted-channel",
+        )
+
+    updated = accounts.configure_discord_notification_channel(
+        account.id,
+        actor_user_id="user-owner",
+        channel_id="new-channel",
+    )
+    assert updated.discord_channel_id == "new-channel"
+
+
 def test_only_the_invited_user_can_accept_an_invitation():
     accounts = Accounts(InMemoryAccountRepository())
     account = accounts.create_account(name="Sexta com os amigos", owner_user_id="user-owner")

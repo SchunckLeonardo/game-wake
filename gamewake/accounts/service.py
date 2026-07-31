@@ -225,6 +225,33 @@ class Accounts:
         snapshot = self._repository.find_by_discord_guild(discord_guild_id)
         return snapshot.account if snapshot is not None else None
 
+    def configure_discord_notification_channel(
+        self,
+        account_id: str,
+        *,
+        actor_user_id: str,
+        channel_id: str,
+    ) -> Account:
+        if not channel_id:
+            raise ValueError("Discord notification channel is required")
+        snapshot = self._repository.get(account_id)
+        if not self.authorize(
+            account_id,
+            user_id=actor_user_id,
+            permission=Permission.MANAGE_INTEGRATIONS,
+        ):
+            raise PermissionDeniedError(
+                "configuring Discord notifications requires integration management permission"
+            )
+        if snapshot.account.discord_channel_id == channel_id:
+            return snapshot.account
+        account = replace(snapshot.account, discord_channel_id=channel_id)
+        self._repository.save(
+            replace(snapshot, account=account),
+            expected_version=snapshot.version,
+        )
+        return account
+
     def list_accounts(self, user_id: str) -> list[Account]:
         return [snapshot.account for snapshot in self._repository.list_for_user(user_id)]
 

@@ -87,6 +87,12 @@ class GameWakeApplication:
                 discord_guild_id=discord_guild_id,
                 discord_channel_id=discord_channel_id,
             )
+        elif discord_channel_id is not None:
+            account = self.accounts.configure_discord_notification_channel(
+                account.id,
+                actor_user_id=user.id,
+                channel_id=discord_channel_id,
+            )
         return account, user
 
     def invite_discord_friends(
