@@ -1,10 +1,20 @@
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
-from gamewake.accounts import Account, Invitation
+from gamewake.accounts import (
+    Account,
+    ActivityEvent,
+    CustomRole,
+    Invitation,
+    Membership,
+    Permission,
+    PredefinedRole,
+    SensitiveActionConfirmation,
+)
 from gamewake.billing import Wallet, WalletContribution
 from gamewake.game_catalog import GameTemplateDefinition
-from gamewake.worlds import ConfigurationRevision, World, WorldOperation
+from gamewake.worlds import Backup, ConfigurationRevision, World, WorldExport, WorldOperation
 
 from .application import GameWakeApplication
 from .contracts import ConnectionDetails
@@ -16,6 +26,7 @@ class ApiRequest:
     path: str
     user_id: str
     body: dict[str, Any] = field(default_factory=dict)
+    authenticated_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -61,6 +72,92 @@ class GameWakeApi:
         if len(parts) < 4:
             raise KeyError(request.path)
         account_id = parts[3]
+        if request.method == "GET" and parts[4:] == ("memberships",):
+            memberships = self._application.list_memberships(
+                account_id,
+                viewer_user_id=request.user_id,
+            )
+            return ApiResponse(
+                200,
+                {"memberships": [self._membership(item) for item in memberships]},
+            )
+        if request.method == "GET" and parts[4:] == ("roles",):
+            roles = self._application.list_custom_roles(
+                account_id,
+                viewer_user_id=request.user_id,
+            )
+            return ApiResponse(
+                200,
+                {
+                    "predefinedRoles": ["owner", "manager", "player"],
+                    "customRoles": [self._custom_role(item) for item in roles],
+                    "permissions": sorted(permission.value for permission in Permission),
+                },
+            )
+        if request.method == "POST" and parts[4:] == ("roles",):
+            if request.authenticated_at is None:
+                raise PermissionError("creating roles requires recent Discord authentication")
+            raw_permissions = request.body.get("permissions")
+            if not isinstance(raw_permissions, list) or not raw_permissions:
+                raise ValueError("permissions must contain at least one permission")
+            role = self._application.create_custom_role(
+                account_id,
+                actor_user_id=request.user_id,
+                name=self._required_string(request.body, "name"),
+                permissions={Permission(str(value)) for value in raw_permissions},
+                confirmation=SensitiveActionConfirmation(
+                    actor_user_id=request.user_id,
+                    reauthenticated_at=request.authenticated_at,
+                    confirmed_resource_name=self._required_string(
+                        request.body, "confirmedResourceName"
+                    ),
+                ),
+            )
+            return ApiResponse(201, {"role": self._custom_role(role)})
+        if (
+            request.method == "POST"
+            and len(parts) == 7
+            and parts[4] == "memberships"
+            and parts[6] == "roles"
+        ):
+            if request.authenticated_at is None:
+                raise PermissionError("assigning roles requires recent Discord authentication")
+            confirmation = SensitiveActionConfirmation(
+                actor_user_id=request.user_id,
+                reauthenticated_at=request.authenticated_at,
+                confirmed_resource_name=self._required_string(
+                    request.body, "confirmedResourceName"
+                ),
+            )
+            custom_role_id = self._optional_string(request.body, "customRoleId")
+            predefined_role = self._optional_string(request.body, "predefinedRole")
+            if (custom_role_id is None) == (predefined_role is None):
+                raise ValueError("choose exactly one predefinedRole or customRoleId")
+            if custom_role_id is not None:
+                membership = self._application.assign_custom_role(
+                    account_id,
+                    actor_user_id=request.user_id,
+                    membership_id=parts[5],
+                    custom_role_id=custom_role_id,
+                    world_id=self._optional_string(request.body, "worldId"),
+                    confirmation=confirmation,
+                )
+            else:
+                membership = self._application.assign_predefined_role(
+                    account_id,
+                    actor_user_id=request.user_id,
+                    membership_id=parts[5],
+                    role=PredefinedRole(str(predefined_role)),
+                    world_id=self._optional_string(request.body, "worldId"),
+                    confirmation=confirmation,
+                )
+            return ApiResponse(200, {"membership": self._membership(membership)})
+        if request.method == "GET" and parts[4:] == ("activity",):
+            events = self._application.list_activity(
+                account_id,
+                viewer_user_id=request.user_id,
+            )
+            return ApiResponse(200, {"events": [self._activity(item) for item in events]})
         if request.method == "GET" and parts[4:] == ("wallet",):
             wallet = self._application.get_wallet(account_id, viewer_user_id=request.user_id)
             return ApiResponse(200, {"wallet": self._wallet(wallet)})
@@ -91,6 +188,18 @@ class GameWakeApi:
                 201,
                 {"invitations": [self._invitation(item) for item in invitations]},
             )
+        if (
+            request.method == "POST"
+            and len(parts) == 7
+            and parts[4] == "invitations"
+            and parts[6] == "accept"
+        ):
+            membership = self._application.accept_invitation(
+                account_id,
+                parts[5],
+                invited_user_id=request.user_id,
+            )
+            return ApiResponse(200, {"membership": self._membership(membership)})
         if request.method == "POST" and parts[4:] == ("worlds",):
             world = self._application.create_world(
                 account_id,
@@ -158,6 +267,43 @@ class GameWakeApi:
                 viewer_user_id=request.user_id,
             )
             return ApiResponse(200, {"revision": self._revision(revision)})
+        if request.method == "GET" and parts[6:] == ("backups",):
+            backups = self._application.list_backups(
+                account_id,
+                world_id,
+                viewer_user_id=request.user_id,
+            )
+            return ApiResponse(200, {"backups": [self._backup(item) for item in backups]})
+        if request.method == "POST" and parts[6:] == ("backups",):
+            backup = self._application.create_manual_backup(
+                account_id,
+                world_id,
+                actor_user_id=request.user_id,
+                idempotency_key=self._required_string(request.body, "idempotencyKey"),
+            )
+            return ApiResponse(201, {"backup": self._backup(backup)})
+        if (
+            request.method == "POST"
+            and len(parts) == 9
+            and parts[6] == "backups"
+            and parts[8] == "restore"
+        ):
+            world = self._application.restore_backup(
+                account_id,
+                world_id,
+                parts[7],
+                actor_user_id=request.user_id,
+                idempotency_key=self._required_string(request.body, "idempotencyKey"),
+            )
+            return ApiResponse(200, {"world": self._world(world)})
+        if request.method == "POST" and parts[6:] == ("exports",):
+            export = self._application.create_world_export(
+                account_id,
+                world_id,
+                actor_user_id=request.user_id,
+                idempotency_key=self._required_string(request.body, "idempotencyKey"),
+            )
+            return ApiResponse(201, {"export": self._export(export)})
         if request.method == "PATCH" and parts[6:] == ("configuration",):
             world, revision = self._application.update_configuration(
                 account_id,
@@ -218,6 +364,71 @@ class GameWakeApi:
             "status": world.status.value,
             "configurationRevisionId": world.configuration_revision_id,
             "pendingConfigurationRevisionId": world.pending_configuration_revision_id,
+            "storedStateId": world.stored_state_id,
+            "deletionScheduledFor": (
+                world.deletion_scheduled_for.isoformat()
+                if world.deletion_scheduled_for is not None
+                else None
+            ),
+        }
+
+    @staticmethod
+    def _membership(membership: Membership) -> dict[str, Any]:
+        return {
+            "id": membership.id,
+            "accountId": membership.account_id,
+            "userId": membership.user_id,
+            "roles": [
+                {
+                    "id": assignment.id,
+                    "role": (
+                        assignment.predefined_role.value
+                        if assignment.predefined_role is not None
+                        else assignment.custom_role_id
+                    ),
+                    "kind": ("predefined" if assignment.predefined_role is not None else "custom"),
+                    "worldId": assignment.scope.world_id,
+                }
+                for assignment in membership.assignments
+            ],
+        }
+
+    @staticmethod
+    def _custom_role(role: CustomRole) -> dict[str, Any]:
+        return {
+            "id": role.id,
+            "accountId": role.account_id,
+            "name": role.name,
+            "permissions": sorted(permission.value for permission in role.permissions),
+        }
+
+    @staticmethod
+    def _activity(event: ActivityEvent) -> dict[str, Any]:
+        return {
+            "id": event.id,
+            "actorUserId": event.actor_user_id,
+            "action": event.action.value,
+            "subjectId": event.subject_id,
+            "occurredAt": event.occurred_at.isoformat(),
+        }
+
+    @staticmethod
+    def _backup(backup: Backup) -> dict[str, Any]:
+        return {
+            "id": backup.id,
+            "kind": backup.kind.value,
+            "sizeBytes": backup.size_bytes,
+            "checksumVerified": bool(backup.checksum),
+            "createdAt": backup.created_at.isoformat() if backup.created_at else None,
+        }
+
+    @staticmethod
+    def _export(export: WorldExport) -> dict[str, Any]:
+        return {
+            "id": export.id,
+            "downloadUrl": export.download_url,
+            "createdAt": export.created_at.isoformat(),
+            "formatVersion": export.manifest.format_version,
         }
 
     @staticmethod

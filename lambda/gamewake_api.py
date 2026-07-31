@@ -10,7 +10,7 @@ from discord_signature import verify_discord_signature
 
 from gamewake.accounts import Accounts
 from gamewake.auth import DiscordOAuthClient, KmsSessionCodec
-from gamewake.aws import Ec2SsmConnectionDetailsProvider
+from gamewake.aws import Ec2SsmConnectionDetailsProvider, S3WorldArchiveStore
 from gamewake.billing import (
     AbacatePayPaymentProvider,
     AbacatePayWebhookHandler,
@@ -31,7 +31,7 @@ from gamewake.persistence import (
     PostgresBillingRepository,
     PostgresWorldRepository,
 )
-from gamewake.worlds import Worlds
+from gamewake.worlds import WorldData, Worlds
 
 
 def _required(name: str) -> str:
@@ -89,14 +89,24 @@ def build_handler(*, client_factory: Any = boto3.client) -> GameWakeHttpHandler:
         contribution_packages=_packages(),
     )
     catalog = GameCatalog.with_palworld()
+    world_repository = PostgresWorldRepository(database)
     worlds = Worlds(
-        PostgresWorldRepository(database),
+        world_repository,
         access=accounts,
         game_catalog=catalog,
+    )
+    world_data = WorldData(
+        world_repository,
+        access=accounts,
+        archive_store=S3WorldArchiveStore(
+            _required("WORLD_DATA_BUCKET"),
+            client=client_factory("s3"),
+        ),
     )
     application = GameWakeApplication(
         accounts=accounts,
         worlds=worlds,
+        world_data=world_data,
         billing=billing,
         game_catalog=catalog,
         operation_dispatcher=StepFunctionsOperationOrchestrator(

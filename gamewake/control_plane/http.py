@@ -110,6 +110,7 @@ class GameWakeHttpHandler:
                         path=path,
                         user_id=claims.subject,
                         body=body,
+                        authenticated_at=getattr(claims, "issued_at", None),
                     )
                 )
                 return self._response(response.status, response.body, headers=cors)

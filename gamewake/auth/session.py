@@ -16,6 +16,7 @@ class InvalidSession(ValueError):
 @dataclass(frozen=True)
 class SessionClaims:
     subject: str
+    issued_at: datetime
     expires_at: datetime
 
 
@@ -82,6 +83,7 @@ class KmsSessionCodec:
             )["MacValid"]
             claims = json.loads(payload)
             subject = claims["sub"]
+            issued_at = datetime.fromtimestamp(int(claims["iat"]), tz=UTC)
             expires_at = datetime.fromtimestamp(int(claims["exp"]), tz=UTC)
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
             raise InvalidSession("invalid GameWake session") from error
@@ -89,4 +91,8 @@ class KmsSessionCodec:
             raise InvalidSession("invalid GameWake session")
         if self._clock() >= expires_at:
             raise InvalidSession("GameWake session expired")
-        return SessionClaims(subject=str(subject), expires_at=expires_at)
+        return SessionClaims(
+            subject=str(subject),
+            issued_at=issued_at,
+            expires_at=expires_at,
+        )

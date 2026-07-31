@@ -201,3 +201,142 @@ test("authenticated Console loads and mutates the real World through bearer API"
   expect(wakeBody).toMatchObject({ idempotencyKey: expect.any(String) });
   await expect(page.getByRole("status")).toContainText("Restaurando World");
 });
+
+test("live Console reads members, custom roles, backups and redacted activity", async ({
+  page,
+}) => {
+  let invitationBody: unknown;
+  let roleBody: unknown;
+  let assignmentBody: unknown;
+  let backupBody: unknown;
+  await page.addInitScript(() => sessionStorage.setItem("gamewake_session", "signed-session"));
+  await page.route("**/api/v1/me/accounts", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ accounts: [{ id: "account-live", name: "Grupo real" }] }),
+    }),
+  );
+  await page.route("**/api/v1/accounts/account-live/worlds", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        worlds: [{ id: "world-live", name: "Mundo real", region: "sa-east-1", status: "sleeping" }],
+      }),
+    }),
+  );
+  await page.route("**/api/v1/accounts/account-live/wallet", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ wallet: { availableBalance: "18.50", statement: [] } }),
+    }),
+  );
+  await page.route("**/api/v1/accounts/account-live/memberships", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        memberships: [
+          { id: "member-owner", userId: "user-owner", roles: [{ role: "owner", kind: "predefined", worldId: null }] },
+          { id: "member-friend", userId: "user-friend", roles: [{ role: "player", kind: "predefined", worldId: null }] },
+        ],
+      }),
+    }),
+  );
+  await page.route("**/api/v1/accounts/account-live/memberships/member-friend/roles", (route) => {
+    assignmentBody = route.request().postDataJSON();
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        membership: {
+          id: "member-friend",
+          userId: "user-friend",
+          roles: [
+            { role: "player", kind: "predefined", worldId: null },
+            { role: "role-saves", kind: "custom", worldId: null },
+          ],
+        },
+      }),
+    });
+  });
+  await page.route("**/api/v1/accounts/account-live/roles", (route) => {
+    if (route.request().method() === "POST") {
+      roleBody = route.request().postDataJSON();
+      return route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ role: { id: "role-operator", name: "Operador", permissions: ["world:view", "backup:create"] } }),
+      });
+    }
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        predefinedRoles: ["owner", "manager", "player"],
+        customRoles: [{ id: "role-saves", name: "Guardião dos saves", permissions: ["backup:create"] }],
+        permissions: ["world:view", "backup:create", "backup:restore"],
+      }),
+    });
+  });
+  await page.route("**/api/v1/accounts/account-live/invitations", (route) => {
+    invitationBody = route.request().postDataJSON();
+    return route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({ invitations: [] }),
+    });
+  });
+  await page.route("**/api/v1/accounts/account-live/worlds/world-live/backups", (route) => {
+    if (route.request().method() === "POST") {
+      backupBody = route.request().postDataJSON();
+      return route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ backup: { id: "backup-2", kind: "manual", sizeBytes: 1200, checksumVerified: true, createdAt: "2026-07-31T18:01:00+00:00" } }),
+      });
+    }
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        backups: [{ id: "backup-1", kind: "manual", sizeBytes: 1200, checksumVerified: true, createdAt: "2026-07-31T18:00:00+00:00" }],
+      }),
+    });
+  });
+  await page.route("**/api/v1/accounts/account-live/activity", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        events: [{ id: "event-1", action: "role_assignment.revoked", actorUserId: "user-owner", subjectId: "assignment-1", occurredAt: "2026-07-31T18:00:00+00:00" }],
+      }),
+    }),
+  );
+
+  await page.goto("/accounts/account-live");
+  await navigation(page, "members").click();
+  await expect(page.getByText("user-friend")).toBeVisible();
+  await expect(page.locator(".advanced-roles strong", { hasText: "Guardião dos saves" })).toBeVisible();
+  await page.getByLabel("IDs dos amigos").fill("user-a, user-b");
+  await page.getByTestId("invite-friends").click();
+  expect(invitationBody).toEqual({ invitedUserIds: ["user-a", "user-b"] });
+  await page.getByLabel("Nome da Role personalizada").fill("Operador");
+  await page.getByLabel("Criar backups").check();
+  await page.getByLabel("Confirme o nome da conta").fill("Grupo real");
+  await page.getByRole("button", { name: "Criar Role personalizada" }).click();
+  await expect(page.locator(".advanced-roles strong", { hasText: "Operador" })).toBeVisible();
+  expect(roleBody).toEqual({
+    name: "Operador",
+    permissions: ["world:view", "backup:create"],
+    confirmedResourceName: "Grupo real",
+  });
+  await page.getByLabel("Nova Role para user-friend").selectOption("custom:role-saves");
+  await page.getByLabel("Confirme o nome da conta").fill("Grupo real");
+  await page.locator(".member-row", { hasText: "user-friend" }).getByRole("button", { name: "Atribuir" }).click();
+  expect(assignmentBody).toEqual({
+    customRoleId: "role-saves",
+    confirmedResourceName: "Grupo real",
+  });
+  await navigation(page, "backups").click();
+  await expect(page.locator(".backup-row strong", { hasText: "Backup manual" })).toBeVisible();
+  await page.getByRole("button", { name: "+ Backup manual" }).click();
+  await expect(page.getByText("2 cópias protegidas")).toBeVisible();
+  expect(backupBody).toMatchObject({ idempotencyKey: expect.any(String) });
+  await navigation(page, "activity").click();
+  await expect(page.getByText("Role removida")).toBeVisible();
+});

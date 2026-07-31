@@ -1,9 +1,28 @@
 from decimal import Decimal
 
-from gamewake.accounts import Account, Accounts, Invitation, User
+from gamewake.accounts import (
+    Account,
+    Accounts,
+    ActivityEvent,
+    CustomRole,
+    Invitation,
+    Membership,
+    Permission,
+    PredefinedRole,
+    SensitiveActionConfirmation,
+    User,
+)
 from gamewake.billing import Billing, Wallet, WalletContribution
 from gamewake.game_catalog import GameCatalog, GameTemplateDefinition
-from gamewake.worlds import ConfigurationRevision, World, WorldOperation, Worlds
+from gamewake.worlds import (
+    Backup,
+    ConfigurationRevision,
+    World,
+    WorldData,
+    WorldExport,
+    WorldOperation,
+    Worlds,
+)
 
 from .contracts import ConnectionDetails, ConnectionDetailsProvider, OperationDispatcher
 
@@ -16,6 +35,7 @@ class GameWakeApplication:
         *,
         accounts: Accounts,
         worlds: Worlds,
+        world_data: WorldData | None = None,
         billing: Billing,
         game_catalog: GameCatalog,
         connection_details_provider: ConnectionDetailsProvider | None = None,
@@ -24,6 +44,7 @@ class GameWakeApplication:
     ) -> None:
         self.accounts = accounts
         self.worlds = worlds
+        self.world_data = world_data
         self.billing = billing
         self.game_catalog = game_catalog
         self._connection_details_provider = connection_details_provider
@@ -82,6 +103,73 @@ class GameWakeApplication:
     def list_accounts(self, *, viewer_user_id: str) -> list[Account]:
         return self.accounts.list_accounts(viewer_user_id)
 
+    def list_memberships(self, account_id: str, *, viewer_user_id: str) -> list[Membership]:
+        return self.accounts.list_memberships(account_id, viewer_user_id=viewer_user_id)
+
+    def list_custom_roles(self, account_id: str, *, viewer_user_id: str) -> list[CustomRole]:
+        return self.accounts.list_custom_roles(account_id, viewer_user_id=viewer_user_id)
+
+    def create_custom_role(
+        self,
+        account_id: str,
+        *,
+        actor_user_id: str,
+        name: str,
+        permissions: set[Permission],
+        confirmation: SensitiveActionConfirmation,
+    ) -> CustomRole:
+        return self.accounts.create_custom_role(
+            account_id,
+            actor_user_id=actor_user_id,
+            name=name,
+            permissions=permissions,
+            confirmation=confirmation,
+        )
+
+    def assign_custom_role(
+        self,
+        account_id: str,
+        *,
+        actor_user_id: str,
+        membership_id: str,
+        custom_role_id: str,
+        world_id: str | None,
+        confirmation: SensitiveActionConfirmation,
+    ) -> Membership:
+        return self.accounts.assign_custom_role(
+            account_id,
+            actor_user_id=actor_user_id,
+            membership_id=membership_id,
+            custom_role_id=custom_role_id,
+            world_id=world_id,
+            confirmation=confirmation,
+        )
+
+    def assign_predefined_role(
+        self,
+        account_id: str,
+        *,
+        actor_user_id: str,
+        membership_id: str,
+        role: PredefinedRole,
+        world_id: str | None,
+        confirmation: SensitiveActionConfirmation,
+    ) -> Membership:
+        return self.accounts.assign_predefined_role(
+            account_id,
+            actor_user_id=actor_user_id,
+            membership_id=membership_id,
+            role=role,
+            world_id=world_id,
+            confirmation=confirmation,
+        )
+
+    def list_activity(self, account_id: str, *, viewer_user_id: str) -> list[ActivityEvent]:
+        return self.accounts.list_activity_events(
+            account_id,
+            viewer_user_id=viewer_user_id,
+        )
+
     def invite_friends(
         self,
         account_id: str,
@@ -93,6 +181,19 @@ class GameWakeApplication:
             account_id,
             inviter_user_id=actor_user_id,
             invited_user_ids=invited_user_ids,
+        )
+
+    def accept_invitation(
+        self,
+        account_id: str,
+        invitation_id: str,
+        *,
+        invited_user_id: str,
+    ) -> Membership:
+        return self.accounts.accept_invitation(
+            account_id,
+            invitation_id,
+            invited_user_id=invited_user_id,
         )
 
     def create_world(
@@ -307,3 +408,68 @@ class GameWakeApplication:
             viewer_user_id=actor_user_id,
         )
         return world, revision
+
+    def list_backups(
+        self,
+        account_id: str,
+        world_id: str,
+        *,
+        viewer_user_id: str,
+    ) -> tuple[Backup, ...]:
+        return self._world_data().list_backups(
+            account_id,
+            world_id,
+            viewer_user_id=viewer_user_id,
+        )
+
+    def create_manual_backup(
+        self,
+        account_id: str,
+        world_id: str,
+        *,
+        actor_user_id: str,
+        idempotency_key: str,
+    ) -> Backup:
+        return self._world_data().create_manual_backup(
+            account_id,
+            world_id,
+            actor_user_id=actor_user_id,
+            idempotency_key=idempotency_key,
+        )
+
+    def restore_backup(
+        self,
+        account_id: str,
+        world_id: str,
+        backup_id: str,
+        *,
+        actor_user_id: str,
+        idempotency_key: str,
+    ) -> World:
+        return self._world_data().restore_backup(
+            account_id,
+            world_id,
+            backup_id,
+            actor_user_id=actor_user_id,
+            idempotency_key=idempotency_key,
+        )
+
+    def create_world_export(
+        self,
+        account_id: str,
+        world_id: str,
+        *,
+        actor_user_id: str,
+        idempotency_key: str,
+    ) -> WorldExport:
+        return self._world_data().create_export(
+            account_id,
+            world_id,
+            actor_user_id=actor_user_id,
+            idempotency_key=idempotency_key,
+        )
+
+    def _world_data(self) -> WorldData:
+        if self.world_data is None:
+            raise ValueError("World data operations are not configured")
+        return self.world_data

@@ -40,6 +40,42 @@ type ApiWorld = {
   status: WorldStatus;
 };
 
+type WalletEntry = {
+  id: string;
+  type: string;
+  amount: string;
+  reference: string;
+  occurredAt: string;
+};
+
+type ApiMembership = {
+  id: string;
+  userId: string;
+  roles: Array<{ role: string; kind: "predefined" | "custom"; worldId: string | null }>;
+};
+
+type ApiCustomRole = {
+  id: string;
+  name: string;
+  permissions: string[];
+};
+
+type ApiBackup = {
+  id: string;
+  kind: "automatic" | "manual" | "restore_point" | "final";
+  sizeBytes: number;
+  checksumVerified: boolean;
+  createdAt: string | null;
+};
+
+type ApiActivityEvent = {
+  id: string;
+  action: string;
+  actorUserId: string;
+  subjectId: string;
+  occurredAt: string;
+};
+
 type ConfigurationField = {
   key: string;
   label: string;
@@ -58,6 +94,36 @@ const sections: Array<{ id: Section; label: string; symbol: string }> = [
   { id: "backups", label: "Backups", symbol: "↺" },
   { id: "activity", label: "Atividade", symbol: "⌁" },
 ];
+
+const permissionLabels: Record<string, string> = {
+  "world:view": "Ver Worlds",
+  "world:wake": "Acordar Worlds",
+  "world:sleep_when_empty": "Dormir Worlds vazios",
+  "world:edit": "Editar configurações",
+  "backup:create": "Criar backups",
+  "backup:restore": "Restaurar backups",
+  "world:logs:view": "Consultar logs",
+  "world:export": "Exportar Worlds",
+};
+
+const activityLabels: Record<string, string> = {
+  "membership.revoked": "Membro removido",
+  "owner.recovered": "Owner recuperado",
+  "role_assignment.revoked": "Role removida",
+};
+
+const backupLabels: Record<ApiBackup["kind"], string> = {
+  automatic: "Backup automático",
+  manual: "Backup manual",
+  restore_point: "Ponto antes da restauração",
+  final: "Backup final",
+};
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 const configurationFields = [
   {
@@ -114,9 +180,23 @@ export function ConsoleDashboard({
     isDemo ? "Sexta com os amigos" : "Seu grupo",
   );
   const [walletBalance, setWalletBalance] = useState("42.80");
+  const [walletStatement, setWalletStatement] = useState<WalletEntry[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(!isDemo);
   const [invites, setInvites] = useState(["Ana", "Bia"]);
+  const [inviteUserIds, setInviteUserIds] = useState("");
+  const [memberships, setMemberships] = useState<ApiMembership[]>([]);
+  const [customRoles, setCustomRoles] = useState<ApiCustomRole[]>([]);
+  const [availablePermissions, setAvailablePermissions] = useState<string[]>([]);
+  const [customRoleName, setCustomRoleName] = useState("");
+  const [customRolePermissions, setCustomRolePermissions] = useState<string[]>([
+    "world:view",
+  ]);
+  const [confirmationName, setConfirmationName] = useState("");
+  const [roleSelections, setRoleSelections] = useState<Record<string, string>>({});
+  const [backups, setBackups] = useState<ApiBackup[]>([]);
+  const [activityEvents, setActivityEvents] = useState<ApiActivityEvent[]>([]);
+  const [exportUrl, setExportUrl] = useState("");
   const [contribution, setContribution] = useState(25);
   const [saved, setSaved] = useState(false);
   const [liveConfigurationFields, setLiveConfigurationFields] = useState<
@@ -159,7 +239,7 @@ export function ConsoleDashboard({
       ]);
       const worldsPayload = (await worldsResponse.json()) as { worlds: ApiWorld[] };
       const walletPayload = (await walletResponse.json()) as {
-        wallet: { availableBalance: string };
+        wallet: { availableBalance: string; statement: WalletEntry[] };
       };
       const accountsPayload = (await accountsResponse.json()) as {
         accounts: Array<{ id: string; name: string }>;
@@ -168,6 +248,7 @@ export function ConsoleDashboard({
       setWorld(selected);
       if (selected) setWorldStatus(selected.status);
       setWalletBalance(walletPayload.wallet.availableBalance);
+      setWalletStatement(walletPayload.wallet.statement ?? []);
       setAccountName(
         accountsPayload.accounts.find((account) => account.id === accountId)?.name ?? "Seu grupo",
       );
@@ -211,6 +292,43 @@ export function ConsoleDashboard({
       }
     }
     void loadConfiguration();
+  }, [accountId, isDemo, section, world]);
+
+  useEffect(() => {
+    if (isDemo) return;
+    async function loadSection() {
+      try {
+        if (section === "members") {
+          const [membersResponse, rolesResponse] = await Promise.all([
+            gameWakeFetch(`/api/v1/accounts/${accountId}/memberships`),
+            gameWakeFetch(`/api/v1/accounts/${accountId}/roles`),
+          ]);
+          const members = (await membersResponse.json()) as { memberships: ApiMembership[] };
+          const roles = (await rolesResponse.json()) as {
+            customRoles: ApiCustomRole[];
+            permissions: string[];
+          };
+          setMemberships(members.memberships);
+          setCustomRoles(roles.customRoles);
+          setAvailablePermissions(roles.permissions);
+        }
+        if (section === "backups" && world) {
+          const response = await gameWakeFetch(
+            `/api/v1/accounts/${accountId}/worlds/${world.id}/backups`,
+          );
+          const payload = (await response.json()) as { backups: ApiBackup[] };
+          setBackups(payload.backups);
+        }
+        if (section === "activity") {
+          const response = await gameWakeFetch(`/api/v1/accounts/${accountId}/activity`);
+          const payload = (await response.json()) as { events: ApiActivityEvent[] };
+          setActivityEvents(payload.events);
+        }
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "Não foi possível carregar esta área.");
+      }
+    }
+    void loadSection();
   }, [accountId, isDemo, section, world]);
 
   async function wakeWorld() {
@@ -322,6 +440,121 @@ export function ConsoleDashboard({
     setInvites((current) =>
       current.includes("Caio") ? current : [...current, "Caio"],
     );
+  }
+
+  async function inviteFriends() {
+    if (isDemo) {
+      addInvite();
+      return;
+    }
+    const invitedUserIds = inviteUserIds
+      .split(/[\s,]+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (invitedUserIds.length === 0) return;
+    try {
+      await gameWakeFetch(`/api/v1/accounts/${accountId}/invitations`, {
+        method: "POST",
+        body: JSON.stringify({ invitedUserIds }),
+      });
+      setInviteUserIds("");
+      setSaved(true);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível criar os convites.");
+    }
+  }
+
+  async function createCustomRole() {
+    if (isDemo || !customRoleName.trim() || customRolePermissions.length === 0) return;
+    try {
+      const response = await gameWakeFetch(`/api/v1/accounts/${accountId}/roles`, {
+        method: "POST",
+        body: JSON.stringify({
+          name: customRoleName.trim(),
+          permissions: customRolePermissions,
+          confirmedResourceName: confirmationName,
+        }),
+      });
+      const payload = (await response.json()) as { role: ApiCustomRole };
+      setCustomRoles((current) => [...current, payload.role]);
+      setCustomRoleName("");
+      setConfirmationName("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível criar a Role.");
+    }
+  }
+
+  async function assignRole(membershipId: string) {
+    const selected = roleSelections[membershipId];
+    if (isDemo || !selected || confirmationName !== accountName) return;
+    const [kind, roleId] = selected.split(":", 2);
+    try {
+      const response = await gameWakeFetch(
+        `/api/v1/accounts/${accountId}/memberships/${membershipId}/roles`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            ...(kind === "custom" ? { customRoleId: roleId } : { predefinedRole: roleId }),
+            confirmedResourceName: confirmationName,
+          }),
+        },
+      );
+      const payload = (await response.json()) as { membership: ApiMembership };
+      setMemberships((current) => current.map((item) => item.id === membershipId ? payload.membership : item));
+      setRoleSelections((current) => ({ ...current, [membershipId]: "" }));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível atribuir a Role.");
+    }
+  }
+
+  async function createManualBackup() {
+    if (isDemo || !world) return;
+    try {
+      const response = await gameWakeFetch(
+        `/api/v1/accounts/${accountId}/worlds/${world.id}/backups`,
+        {
+          method: "POST",
+          body: JSON.stringify({ idempotencyKey: gameWakeIdempotencyKey("backup") }),
+        },
+      );
+      const payload = (await response.json()) as { backup: ApiBackup };
+      setBackups((current) => [...current, payload.backup]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível criar o Backup.");
+    }
+  }
+
+  async function restoreBackup(backupId: string) {
+    if (isDemo || !world) return;
+    try {
+      await gameWakeFetch(
+        `/api/v1/accounts/${accountId}/worlds/${world.id}/backups/${backupId}/restore`,
+        {
+          method: "POST",
+          body: JSON.stringify({ idempotencyKey: gameWakeIdempotencyKey("restore") }),
+        },
+      );
+      setSaved(true);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível restaurar o Backup.");
+    }
+  }
+
+  async function exportWorld() {
+    if (isDemo || !world) return;
+    try {
+      const response = await gameWakeFetch(
+        `/api/v1/accounts/${accountId}/worlds/${world.id}/exports`,
+        {
+          method: "POST",
+          body: JSON.stringify({ idempotencyKey: gameWakeIdempotencyKey("export") }),
+        },
+      );
+      const payload = (await response.json()) as { export: { downloadUrl: string } };
+      setExportUrl(payload.export.downloadUrl);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível exportar o World.");
+    }
   }
 
   return (
@@ -506,15 +739,50 @@ export function ConsoleDashboard({
                   <button className="button button-primary full-button" data-testid="create-checkout" onClick={() => void createCheckout()} type="button">Contribuir R$ {contribution},00</button>
                 </article>
               </div>
-              <article className="table-card"><div className="card-heading"><h2>Extrato</h2><span>Julho de 2026</span></div><table><thead><tr><th>Data</th><th>Movimentação</th><th>Responsável</th><th>Valor</th></tr></thead><tbody><tr><td>30 jul, 23:41</td><td>Sessão · Palpagos</td><td>Grupo</td><td className="negative">− R$ 4,87</td></tr><tr><td>28 jul, 19:03</td><td>Contribuição</td><td>Ana</td><td className="positive">+ R$ 25,00</td></tr><tr><td>24 jul, 22:16</td><td>Crédito de disponibilidade</td><td>GameWake</td><td className="positive">+ R$ 0,42</td></tr></tbody></table></article>
+              <article className="table-card">
+                <div className="card-heading"><h2>Extrato</h2><span>Ledger imutável</span></div>
+                <table>
+                  <thead><tr><th>Data</th><th>Movimentação</th><th>Referência</th><th>Valor</th></tr></thead>
+                  <tbody>
+                    {(isDemo ? [
+                      { id: "demo-1", type: "runtime_charge", amount: "-4.87", reference: "Palpagos", occurredAt: "2026-07-30T23:41:00Z" },
+                      { id: "demo-2", type: "contribution", amount: "25.00", reference: "Ana", occurredAt: "2026-07-28T19:03:00Z" },
+                    ] : walletStatement).map((entry) => {
+                      const amount = Number(entry.amount);
+                      return <tr key={entry.id}><td>{new Date(entry.occurredAt).toLocaleDateString("pt-BR")}</td><td>{entry.type.replaceAll("_", " ")}</td><td>{entry.reference}</td><td className={amount < 0 ? "negative" : "positive"}>{amount < 0 ? "− " : "+ "}{new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Math.abs(amount))}</td></tr>;
+                    })}
+                    {!isDemo && walletStatement.length === 0 && <tr><td colSpan={4}>Nenhuma movimentação ainda.</td></tr>}
+                  </tbody>
+                </table>
+              </article>
             </div>
           )}
 
           {section === "members" && (
             <div className="panel-page" data-testid="members-panel">
-              <div className="panel-heading split"><div><span className="section-index">ACESSO SIMPLES</span><h1>Membros e Roles</h1><p>Use Player, Manager e Owner. Roles personalizadas ficam em permissões avançadas.</p></div><button className="button button-primary" data-testid="invite-friends" onClick={addInvite} type="button">+ Convidar amigos</button></div>
-              <article className="table-card"><div className="card-heading"><h2>Seu grupo</h2><span>{invites.length + 3} membros</span></div><div className="member-row"><span className="avatar">L</span><div><strong>Leonardo</strong><small>Você · leonardo</small></div><span className="role role-owner">Owner</span></div>{invites.map((name) => <div className="member-row" key={name}><span className="avatar pastel">{name[0]}</span><div><strong>{name}</strong><small>Discord conectado</small></div><span className="role">Player</span></div>)}<div className="member-row"><span className="avatar pastel-purple">R</span><div><strong>Rafael</strong><small>Discord conectado</small></div><span className="role role-manager">Manager</span></div></article>
-              <details className="advanced-roles"><summary>Permissões avançadas e Roles personalizadas</summary><p>Crie combinações próprias e limite o acesso a Worlds específicos. As permissões são sempre aditivas.</p><button className="button button-outline" type="button">Criar Role personalizada</button></details>
+              <div className="panel-heading split"><div><span className="section-index">ACESSO SIMPLES</span><h1>Membros e Roles</h1><p>Use Player, Manager e Owner. Convites do Discord continuam aceitos explicitamente.</p></div></div>
+              <article className="contribution-panel">
+                <h2>Convidar amigos</h2>
+                <p>No Discord, use <code>/gamewake convidar @amigo1 @amigo2</code>. Aqui, informe os IDs internos separados por vírgula.</p>
+                <label>IDs dos amigos<input aria-label="IDs dos amigos" onChange={(event) => setInviteUserIds(event.target.value)} placeholder="user-1, user-2" value={inviteUserIds} /></label>
+                <button className="button button-primary" data-testid="invite-friends" onClick={() => void inviteFriends()} type="button">+ Criar convites</button>
+                {saved && <small>Convites criados. Cada amigo ainda precisa aceitar.</small>}
+              </article>
+              <article className="table-card">
+                <div className="card-heading"><h2>Seu grupo</h2><span>{isDemo ? invites.length + 2 : memberships.length} membros</span></div>
+                {isDemo ? <><div className="member-row"><span className="avatar">L</span><div><strong>Leonardo</strong><small>Você · Discord conectado</small></div><span className="role role-owner">Owner</span></div>{invites.map((name) => <div className="member-row" key={name}><span className="avatar pastel">{name[0]}</span><div><strong>{name}</strong><small>Discord conectado</small></div><span className="role">Player</span></div>)}</> : memberships.map((membership) => <div className="member-row" key={membership.id}><span className="avatar pastel">{membership.userId[0]?.toUpperCase()}</span><div><strong>{membership.userId}</strong><small>{membership.roles.some((role) => role.worldId) ? "Acesso limitado por World" : "Acesso à conta"}</small></div><span className={`role role-${membership.roles[0]?.role ?? "custom"}`}>{membership.roles.map((role) => customRoles.find((custom) => custom.id === role.role)?.name ?? role.role).join(" + ")}</span><select aria-label={`Nova Role para ${membership.userId}`} onChange={(event) => setRoleSelections((current) => ({ ...current, [membership.id]: event.target.value }))} value={roleSelections[membership.id] ?? ""}><option value="">Adicionar Role…</option><option value="predefined:player">Player</option><option value="predefined:manager">Manager</option><option value="predefined:owner">Owner</option>{customRoles.map((role) => <option key={role.id} value={`custom:${role.id}`}>{role.name}</option>)}</select><button disabled={!roleSelections[membership.id] || confirmationName !== accountName} onClick={() => void assignRole(membership.id)} type="button">Atribuir</button></div>)}
+              </article>
+              <details className="advanced-roles" open={!isDemo && customRoles.length > 0}>
+                <summary>Permissões avançadas e Roles personalizadas</summary>
+                <p>As permissões são aditivas. Criar uma Role exige uma sessão Discord iniciada nos últimos cinco minutos.</p>
+                {customRoles.map((role) => <div className="member-row" key={role.id}><span className="avatar pastel-purple">R</span><div><strong>{role.name}</strong><small>{role.permissions.map((permission) => permissionLabels[permission] ?? permission).join(" · ")}</small></div><span className="role">Personalizada</span></div>)}
+                {!isDemo && <div className="contribution-panel">
+                  <label>Nome da Role personalizada<input aria-label="Nome da Role personalizada" onChange={(event) => setCustomRoleName(event.target.value)} value={customRoleName} /></label>
+                  <div className="amount-options" role="group" aria-label="Permissões da Role">{availablePermissions.map((permission) => <label key={permission}><input checked={customRolePermissions.includes(permission)} onChange={(event) => setCustomRolePermissions((current) => event.target.checked ? [...current, permission] : current.filter((item) => item !== permission))} type="checkbox" />{permissionLabels[permission] ?? permission}</label>)}</div>
+                  <label>Confirme o nome da conta<input aria-label="Confirme o nome da conta" onChange={(event) => setConfirmationName(event.target.value)} placeholder={accountName} value={confirmationName} /></label>
+                  <button className="button button-outline" disabled={!customRoleName.trim() || confirmationName !== accountName} onClick={() => void createCustomRole()} type="button">Criar Role personalizada</button>
+                </div>}
+              </details>
             </div>
           )}
 
@@ -529,22 +797,29 @@ export function ConsoleDashboard({
 
           {section === "backups" && (
             <div className="panel-page" data-testid="backups-panel">
-              <div className="panel-heading split"><div><span className="section-index">RECOVERY GUARANTEE</span><h1>Backups</h1><p>A última cópia recuperável nunca é removida. Restaurar sempre cria antes um ponto de retorno.</p></div><button className="button button-primary" type="button">+ Backup manual</button></div>
-              <article className="storage-card"><div><small>Armazenamento incluído</small><strong>3,8 GB de 10 GB</strong></div><div className="meter"><span /></div><p>Backups manuais e o estado atual permanecem protegidos.</p></article>
-              <article className="table-card backup-list"><div className="backup-row"><span className="backup-icon">✓</span><div><strong>Backup automático</strong><small>Ontem, 23:42 · 1,2 GB · checksum verificado</small></div><span className="backup-badge">ATUAL</span><button type="button">•••</button></div><div className="backup-row"><span className="backup-icon">↺</span><div><strong>Antes da configuração #11</strong><small>28 jul, 18:57 · 1,2 GB · automático</small></div><span /><button type="button">•••</button></div><div className="backup-row"><span className="backup-icon">◆</span><div><strong>Castelo pronto</strong><small>24 jul, 22:04 · 1,1 GB · manual</small></div><span className="backup-badge manual">MANUAL</span><button type="button">•••</button></div></article>
+              <div className="panel-heading split"><div><span className="section-index">RECOVERY GUARANTEE</span><h1>Backups</h1><p>A última cópia recuperável nunca é removida. Restaurar sempre cria antes um ponto de retorno.</p></div><div className="world-actions"><button className="button button-primary" disabled={!isDemo && worldStatus !== "sleeping"} onClick={() => void createManualBackup()} type="button">+ Backup manual</button><button className="button button-outline" onClick={() => void exportWorld()} type="button">Exportar World</button></div></div>
+              <article className="storage-card"><div><small>Armazenamento durável</small><strong>{isDemo ? "3 cópias protegidas" : `${backups.length} cópia${backups.length === 1 ? "" : "s"} protegida${backups.length === 1 ? "" : "s"}`}</strong></div><p>Backups, estado atual e exports usam armazenamento privado criptografado.</p>{exportUrl && <a className="button button-primary" href={exportUrl} rel="noreferrer">Baixar export privado</a>}</article>
+              <article className="table-card backup-list">
+                {(isDemo ? [{ id: "demo-backup", kind: "manual" as const, sizeBytes: 1_200_000_000, checksumVerified: true, createdAt: "2026-07-31T23:42:00Z" }] : backups).map((backup) => <div className="backup-row" key={backup.id}><span className="backup-icon">{backup.checksumVerified ? "✓" : "!"}</span><div><strong>{backupLabels[backup.kind]}</strong><small>{backup.createdAt ? new Date(backup.createdAt).toLocaleString("pt-BR") : "Data indisponível"} · {formatBytes(backup.sizeBytes)} · {backup.checksumVerified ? "checksum verificado" : "verificação pendente"}</small></div><span className={`backup-badge${backup.kind === "manual" ? " manual" : ""}`}>{backup.kind.toUpperCase()}</span><button aria-label={`Restaurar ${backupLabels[backup.kind]}`} disabled={isDemo || worldStatus !== "sleeping"} onClick={() => void restoreBackup(backup.id)} type="button">Restaurar</button></div>)}
+                {!isDemo && backups.length === 0 && <p>Nenhum Backup disponível. O primeiro será criado ao concluir o sono seguro.</p>}
+              </article>
             </div>
           )}
 
           {section === "activity" && (
             <div className="panel-page" data-testid="activity-panel">
               <div className="panel-heading"><div><span className="section-index">AUDITORIA REDIGIDA</span><h1>Atividade</h1><p>O grupo acompanha o que aconteceu sem expor senha, token ou dados de pagamento.</p></div></div>
-              <article className="timeline-card"><div className="timeline-date">HOJE</div><div className="timeline-row"><span className="event-dot green" /><div><strong>Backup verificado</strong><p>O sono seguro do World Palpagos concluiu com uma cópia recuperável.</p><small>23:42 · GameWake</small></div></div><div className="timeline-row"><span className="event-dot amber" /><div><strong>Sessão encerrada</strong><p>Palpagos ficou online por 2h 38min. Total: R$ 4,87.</p><small>23:41 · Leonardo</small></div></div><div className="timeline-date">SEGUNDA, 28 DE JULHO</div><div className="timeline-row"><span className="event-dot blue" /><div><strong>Ana entrou no grupo</strong><p>Invitation aceito com a Role Player.</p><small>19:08 · Ana</small></div></div></article>
+              <article className="timeline-card">
+                <div className="timeline-date">EVENTOS IMUTÁVEIS</div>
+                {(isDemo ? [{ id: "demo-event", action: "role_assignment.revoked", actorUserId: "Leonardo", subjectId: "role-demo", occurredAt: "2026-07-31T23:42:00Z" }] : activityEvents).map((event) => <div className="timeline-row" key={event.id}><span className="event-dot blue" /><div><strong>{activityLabels[event.action] ?? event.action}</strong><p>Recurso {event.subjectId}. O payload é redigido na origem.</p><small>{new Date(event.occurredAt).toLocaleString("pt-BR")} · {event.actorUserId}</small></div></div>)}
+                {!isDemo && activityEvents.length === 0 && <p>Nenhum evento de segurança registrado ainda.</p>}
+              </article>
             </div>
           )}
         </div>
 
         <nav className="mobile-nav" aria-label="Navegação móvel">
-          {sections.slice(0, 5).map((item) => <button className={section === item.id ? "active" : ""} data-testid={`nav-${item.id}`} disabled={!hydrated} key={item.id} onClick={() => setSection(item.id)} type="button"><span>{item.symbol}</span><small>{item.label.split(" ")[0]}</small></button>)}
+          {sections.map((item) => <button className={section === item.id ? "active" : ""} data-testid={`nav-${item.id}`} disabled={!hydrated} key={item.id} onClick={() => setSection(item.id)} type="button"><span>{item.symbol}</span><small>{item.label.split(" ")[0]}</small></button>)}
         </nav>
       </section>
       {connectionDetails && (

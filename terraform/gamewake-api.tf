@@ -77,6 +77,35 @@ data "aws_iam_policy_document" "gamewake_api" {
   }
 
   statement {
+    sid    = "ManageWorldArchives"
+    effect = "Allow"
+    actions = [
+      "s3:GetObject",
+      "s3:PutObject",
+      "s3:DeleteObject",
+    ]
+    resources = ["${aws_s3_bucket.world_data.arn}/*"]
+  }
+
+  statement {
+    sid       = "ListWorldArchives"
+    effect    = "Allow"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.world_data.arn]
+  }
+
+  statement {
+    sid    = "EncryptWorldArchives"
+    effect = "Allow"
+    actions = [
+      "kms:Decrypt",
+      "kms:Encrypt",
+      "kms:GenerateDataKey",
+    ]
+    resources = [aws_kms_key.world_data.arn]
+  }
+
+  statement {
     sid    = "AuthenticateSessions"
     effect = "Allow"
     actions = [
@@ -147,6 +176,7 @@ resource "aws_lambda_function" "gamewake_api" {
       RUNTIME_PROFILE_HOURLY_RATES_JSON        = jsonencode(var.runtime_profile_hourly_rates)
       SESSION_KMS_KEY_ID                       = aws_kms_key.sessions.key_id
       WORLD_OPERATION_STATE_MACHINE_ARN        = aws_sfn_state_machine.world_operation.arn
+      WORLD_DATA_BUCKET                        = aws_s3_bucket.world_data.id
     }
   }
 

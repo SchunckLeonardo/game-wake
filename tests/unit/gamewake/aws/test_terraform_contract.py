@@ -75,6 +75,10 @@ def test_public_api_uses_kms_sessions_exact_cors_and_managed_provider_secrets():
     assert 'key_usage                = "GENERATE_VERIFY_MAC"' in api
     assert 'customer_master_key_spec = "HMAC_256"' in api
     assert "GAMEWAKE_WORLD_PARAMETER_PREFIX" in api
+    assert "WORLD_DATA_BUCKET" in api
+    assert 'sid    = "ManageWorldArchives"' in api
+    assert '"s3:GetObject"' in api
+    assert '"s3:PutObject"' in api
     assert 'resource "aws_ssm_parameter" "discord_client_secret"' in parameters
     assert 'resource "aws_ssm_parameter" "abacatepay_api_key"' in parameters
 

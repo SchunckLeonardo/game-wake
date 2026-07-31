@@ -953,7 +953,7 @@ footer > div { display: flex; font-size: 11px; gap: 20px; }
   .sticky-save { align-items: stretch; bottom: 72px; flex-direction: column; gap: 12px; }
   .table-card { overflow-x: auto; }
   .table-card table { min-width: 560px; }
-  .mobile-nav { align-items: center; background: rgba(11, 16, 32, 0.96); bottom: 0; display: grid; grid-template-columns: repeat(5, 1fr); height: 66px; left: 0; position: fixed; right: 0; z-index: 20; }
+  .mobile-nav { align-items: center; background: rgba(11, 16, 32, 0.96); bottom: 0; display: grid; grid-template-columns: repeat(6, 1fr); height: 66px; left: 0; position: fixed; right: 0; z-index: 20; }
   .mobile-nav button { align-items: center; background: transparent; border: 0; color: #70798b; display: flex; flex-direction: column; gap: 3px; }
   .mobile-nav button.active { color: var(--wake); }
   .mobile-nav button span { font-size: 15px; }

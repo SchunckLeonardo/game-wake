@@ -21,6 +21,7 @@ def test_kms_session_round_trip_is_short_lived_and_contains_no_secret_key():
     claims = codec.verify(token)
 
     assert claims.subject == "user-123"
+    assert claims.issued_at == now
     assert claims.expires_at == now + timedelta(hours=12)
     assert "kms-key-123" not in token
 

@@ -262,6 +262,17 @@ class Accounts:
             raise PermissionDeniedError("activity is visible only to account members")
         return list(snapshot.activity_events)
 
+    def list_custom_roles(
+        self,
+        account_id: str,
+        *,
+        viewer_user_id: str,
+    ) -> list[CustomRole]:
+        snapshot = self._repository.get(account_id)
+        if not any(membership.user_id == viewer_user_id for membership in snapshot.memberships):
+            raise PermissionDeniedError("roles are visible only inside their account")
+        return list(snapshot.custom_roles)
+
     def authorize(
         self,
         account_id: str,

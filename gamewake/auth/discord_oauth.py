@@ -91,9 +91,7 @@ class DiscordOAuthClient:
     def authenticate_activity(self, code: str) -> DiscordOAuthGrant:
         return self._exchange(code)
 
-    def _exchange(
-        self, code: str, *, redirect_uri: str | None = None
-    ) -> DiscordOAuthGrant:
+    def _exchange(self, code: str, *, redirect_uri: str | None = None) -> DiscordOAuthGrant:
         form = {
             "client_id": self._client_id,
             "client_secret": self._client_secret,
