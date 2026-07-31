@@ -1,4 +1,6 @@
+from collections.abc import Callable
 from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from gamewake.accounts import Permission, PermissionDeniedError
@@ -15,9 +17,16 @@ from .model import (
 
 
 class Worlds:
-    def __init__(self, repository: WorldRepository, *, access: AccessControl) -> None:
+    def __init__(
+        self,
+        repository: WorldRepository,
+        *,
+        access: AccessControl,
+        clock: Callable[[], datetime] | None = None,
+    ) -> None:
         self._repository = repository
         self._access = access
+        self._clock = clock or (lambda: datetime.now(UTC))
 
     def create_world(
         self,
@@ -90,6 +99,7 @@ class Worlds:
             status=OperationStatus.PENDING,
             phase=OperationPhase.REQUESTED,
             idempotency_key=idempotency_key,
+            created_at=self._clock(),
             version=1,
             runtime_id=None,
             runtime_provider_reference=None,
@@ -132,6 +142,7 @@ class Worlds:
             status=OperationStatus.PENDING,
             phase=OperationPhase.REQUESTED,
             idempotency_key=idempotency_key,
+            created_at=self._clock(),
             version=1,
             runtime_id=world.runtime_id,
             runtime_provider_reference=world.runtime_provider_reference,
@@ -141,6 +152,49 @@ class Worlds:
             replace(
                 world,
                 status=WorldStatus.GOING_TO_SLEEP,
+                version=world.version + 1,
+            ),
+            operation,
+            expected_world_version=world.version,
+        )
+
+    def request_automatic_recovery(
+        self,
+        account_id: str,
+        world_id: str,
+        *,
+        detected_at: datetime,
+        idempotency_key: str,
+    ) -> WorldOperation | None:
+        world = self._repository.get(account_id, world_id)
+        recent_attempts = [
+            operation
+            for operation in self._repository.list_operations(account_id, world_id)
+            if operation.operation_type is OperationType.RECOVER
+            and operation.created_at >= detected_at - timedelta(minutes=15)
+        ]
+        if len(recent_attempts) >= 3 or world.status is WorldStatus.NEEDS_ATTENTION:
+            return None
+        if world.status not in {WorldStatus.ONLINE, WorldStatus.WAKING}:
+            raise ValueError("Automatic Recovery requires an active Runtime session")
+        operation = WorldOperation(
+            id=str(uuid4()),
+            account_id=account_id,
+            world_id=world_id,
+            operation_type=OperationType.RECOVER,
+            status=OperationStatus.PENDING,
+            phase=OperationPhase.REQUESTED,
+            idempotency_key=idempotency_key,
+            created_at=detected_at,
+            version=1,
+            runtime_id=world.runtime_id,
+            runtime_provider_reference=world.runtime_provider_reference,
+            attempt_number=len(recent_attempts) + 1,
+        )
+        return self._repository.begin_operation(
+            replace(
+                world,
+                status=WorldStatus.WAKING,
                 version=world.version + 1,
             ),
             operation,

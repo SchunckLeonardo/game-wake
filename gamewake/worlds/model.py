@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 
 
@@ -21,6 +22,7 @@ class OperationStatus(StrEnum):
     RUNNING = "running"
     SUCCEEDED = "succeeded"
     CANCELLED = "cancelled"
+    FAILED = "failed"
     NEEDS_ATTENTION = "needs_attention"
 
 
@@ -86,6 +88,7 @@ class WorldOperation:
     status: OperationStatus
     phase: OperationPhase
     idempotency_key: str
+    created_at: datetime
     version: int
     runtime_id: str | None = None
     runtime_provider_reference: str | None = None
@@ -93,3 +96,4 @@ class WorldOperation:
     stored_state_id: str | None = None
     stored_state_checksum: str | None = None
     backup_id: str | None = None
+    attempt_number: int = 0

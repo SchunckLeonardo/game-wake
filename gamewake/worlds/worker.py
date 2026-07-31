@@ -44,6 +44,7 @@ class WorldOperationWorker:
             if operation.status in {
                 OperationStatus.SUCCEEDED,
                 OperationStatus.CANCELLED,
+                OperationStatus.FAILED,
                 OperationStatus.NEEDS_ATTENTION,
             }:
                 return operation
@@ -56,6 +57,8 @@ class WorldOperationWorker:
 
         if operation.operation_type is OperationType.SLEEP:
             return self._advance_sleep(operation, world, template)
+        if operation.operation_type is OperationType.RECOVER:
+            return self._advance_recovery(operation, world, template)
 
         if operation.phase is OperationPhase.REQUESTED:
             return self._move_to_phase(operation, OperationPhase.PROVISIONING_RUNTIME)
@@ -253,6 +256,59 @@ class WorldOperationWorker:
             return completed
 
         raise RuntimeError(f"unsupported sleep phase: {operation.phase}")
+
+    def _advance_recovery(self, operation, world, template) -> WorldOperation:
+        runtime = self._runtime_for(operation)
+        if operation.phase is OperationPhase.REQUESTED:
+            return self._move_to_phase(operation, OperationPhase.STARTING_GAME)
+
+        if operation.phase is OperationPhase.STARTING_GAME:
+            template.start(
+                world,
+                runtime,
+                idempotency_key=self._effect_key(operation, "restart"),
+            )
+            return self._move_to_phase(operation, OperationPhase.CHECKING_GAME_HEALTH)
+
+        if operation.phase is OperationPhase.CHECKING_GAME_HEALTH:
+            healthy = template.is_healthy(world, runtime)
+            exhausted = operation.attempt_number >= 3
+            completed = replace(
+                operation,
+                status=(
+                    OperationStatus.SUCCEEDED
+                    if healthy
+                    else (
+                        OperationStatus.NEEDS_ATTENTION
+                        if exhausted
+                        else OperationStatus.FAILED
+                    )
+                ),
+                phase=OperationPhase.COMPLETE,
+                version=operation.version + 1,
+            )
+            updated_world = replace(
+                world,
+                status=(
+                    WorldStatus.ONLINE
+                    if healthy
+                    else (
+                        WorldStatus.NEEDS_ATTENTION
+                        if exhausted
+                        else WorldStatus.WAKING
+                    )
+                ),
+                version=world.version + 1,
+            )
+            self._repository.save_operation(
+                completed,
+                expected_operation_version=operation.version,
+                world=updated_world,
+                expected_world_version=world.version,
+            )
+            return completed
+
+        raise RuntimeError(f"unsupported recovery phase: {operation.phase}")
 
     def _needs_attention(self, operation, world) -> WorldOperation:
         failed = replace(
