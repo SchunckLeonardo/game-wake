@@ -217,7 +217,7 @@ O `make validate` atual continua como gate enquanto novos comandos de contrato, 
 
 Estes estudos precisam produzir decisão e evidência antes do marco correspondente:
 
-1. Banco transacional e mecanismo de workflow durável adequados ao orçamento e à operação da equipe.
+1. **Concluído**: Aurora PostgreSQL Serverless v2 via Data API e Step Functions Standard, conforme [ADR 0025](./adr/0025-use-aurora-postgresql-and-step-functions.md).
 2. Custo e tempo de criar Runtimes descartáveis por região e Runtime Profile.
 3. Estratégia canônica de volumes e S3 que satisfaça Recovery Guarantee sem computação ociosa.
 4. Semântica completa de reembolso, disputa e conciliação da AbacatePay.

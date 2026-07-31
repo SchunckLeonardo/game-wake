@@ -197,11 +197,11 @@ flowchart LR
     API --> Worlds["Worlds"]
     API --> Billing["Billing"]
     API --> Catalog["Game Catalog"]
-    Worlds --> Worker["Durable Operation Worker"]
+    Worlds --> Worker["Step Functions Standard"]
     Worker --> AWS["AWS Runtime Provider"]
     Worker --> Pal["Palworld Game Template"]
     Billing --> Abacate["AbacatePay v2"]
-    Access --> DB["Transactional data store"]
+    Access --> DB["Aurora PostgreSQL Serverless v2"]
     Worlds --> DB
     Billing --> DB
     Worlds --> Objects["Durable object storage"]
@@ -211,8 +211,8 @@ flowchart LR
 Responsabilidades:
 
 - **Control Plane API**: autenticação, autorização, comandos, consultas e projeções para as interfaces.
-- **Durable Operation Worker**: exclusão mútua por World, journal por etapa, retomada e reconciliação.
-- **Transactional data store**: Accounts, Memberships, Roles, Worlds, operações, Activity Events e Wallet Ledger.
+- **Step Functions Standard**: exclusão mútua por World, retomada, reconciliação e execução durável; efeitos externos continuam idempotentes por contrato.
+- **Aurora PostgreSQL Serverless v2**: Accounts, Memberships, Roles, Worlds, idempotência, projeções de operações, Activity Events e Wallet Ledger; Data API evita conexões ociosas e versões compatíveis pausam em zero ACUs.
 - **Durable object storage**: saves, Backups, exports e artefatos versionados de Game Templates.
 - **Managed secret storage**: chaves de provedor, webhooks e segredos de conexão, nunca o banco de atividade.
 - **Adapters**: AWS, AbacatePay, Discord e Palworld permanecem nas bordas.
