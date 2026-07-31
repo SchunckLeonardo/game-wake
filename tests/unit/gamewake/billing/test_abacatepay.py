@@ -16,7 +16,7 @@ class RecordingHttpClient:
         self.response = response
         self.requests = []
 
-    def request(self, method, url, *, headers, json_body):
+    def request(self, method, url, *, headers, json_body=None):
         self.requests.append((method, url, headers, json_body))
         return self.response
 
@@ -116,5 +116,38 @@ def test_refund_requests_the_documented_full_checkout_refund():
                 "Content-Type": "application/json",
             },
             {"id": "bill_123", "reason": "Créditos não utilizados"},
+        )
+    ]
+
+
+def test_checkout_can_be_recovered_by_its_external_id():
+    http = RecordingHttpClient(
+        {
+            "success": True,
+            "error": None,
+            "data": [
+                {
+                    "id": "bill_123",
+                    "externalId": "contribution-1",
+                    "url": "https://app.abacatepay.com/pay/bill_123",
+                    "amount": 5000,
+                    "paidAmount": None,
+                    "status": "PENDING",
+                }
+            ],
+        }
+    )
+    provider = AbacatePayPaymentProvider(api_key="test-key", http_client=http)
+
+    checkout = provider.find_checkout("contribution-1")
+
+    assert checkout.id == "bill_123"
+    assert checkout.status == "PENDING"
+    assert http.requests == [
+        (
+            "GET",
+            "https://api.abacatepay.com/v2/checkouts/list?externalId=contribution-1&limit=1",
+            {"Authorization": "Bearer test-key"},
+            None,
         )
     ]

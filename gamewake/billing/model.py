@@ -63,6 +63,8 @@ class PaymentCheckout:
     external_id: str
     url: str
     amount: Decimal
+    status: str = "PENDING"
+    paid_amount: Decimal | None = None
 
 
 @dataclass(frozen=True)

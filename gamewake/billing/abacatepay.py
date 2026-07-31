@@ -6,6 +6,7 @@ from collections.abc import Callable, Mapping
 from decimal import Decimal
 from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from .model import ContributionCheckoutRequest, PaymentCheckout
@@ -28,7 +29,7 @@ class JsonHttpClient(Protocol):
         url: str,
         *,
         headers: Mapping[str, str],
-        json_body: Mapping[str, Any],
+        json_body: Mapping[str, Any] | None,
     ) -> Mapping[str, Any]: ...
 
 
@@ -39,11 +40,11 @@ class UrllibJsonHttpClient:
         url: str,
         *,
         headers: Mapping[str, str],
-        json_body: Mapping[str, Any],
+        json_body: Mapping[str, Any] | None,
     ) -> Mapping[str, Any]:
         request = Request(
             url,
-            data=json.dumps(json_body).encode("utf-8"),
+            data=(json.dumps(json_body).encode("utf-8") if json_body is not None else None),
             headers=dict(headers),
             method=method,
         )
@@ -90,21 +91,34 @@ class AbacatePayPaymentProvider:
         )
         if response.get("success") is not True or not isinstance(response.get("data"), dict):
             raise PaymentProviderError(str(response.get("error") or "checkout creation failed"))
-        data = response["data"]
-        try:
-            amount = Decimal(int(data["amount"])) / Decimal(100)
-            checkout = PaymentCheckout(
-                id=str(data["id"]),
-                external_id=str(data["externalId"]),
-                url=str(data["url"]),
-                amount=amount,
-            )
-        except (KeyError, TypeError, ValueError) as error:
-            raise PaymentProviderError("AbacatePay returned an invalid checkout") from error
+        checkout = self._parse_checkout(response["data"])
         if checkout.external_id != request.external_id:
             raise PaymentProviderError("AbacatePay checkout externalId does not match")
         if checkout.amount != request.expected_amount:
             raise PaymentProviderError("AbacatePay checkout amount does not match credit package")
+        return checkout
+
+    def find_checkout(self, external_id: str) -> PaymentCheckout | None:
+        query = urlencode({"externalId": external_id, "limit": 1})
+        response = self._http_client.request(
+            "GET",
+            f"{self._base_url}/checkouts/list?{query}",
+            headers={"Authorization": f"Bearer {self._api_key}"},
+            json_body=None,
+        )
+        data = response.get("data")
+        if response.get("success") is not True or not isinstance(data, list):
+            raise PaymentProviderError(str(response.get("error") or "checkout lookup failed"))
+        matching = [
+            item
+            for item in data
+            if isinstance(item, dict) and item.get("externalId") == external_id
+        ]
+        if not matching:
+            return None
+        checkout = self._parse_checkout(matching[0])
+        if checkout.external_id != external_id:
+            raise PaymentProviderError("AbacatePay checkout externalId does not match")
         return checkout
 
     def refund_checkout(self, checkout_id: str, *, reason: str) -> str:
@@ -127,6 +141,27 @@ class AbacatePayPaymentProvider:
         if not isinstance(refund_id, str) or not refund_id:
             raise PaymentProviderError("AbacatePay returned an invalid refund")
         return refund_id
+
+    @staticmethod
+    def _parse_checkout(data: Mapping[str, Any]) -> PaymentCheckout:
+        try:
+            amount = Decimal(int(data["amount"])) / Decimal(100)
+            paid_cents = data.get("paidAmount")
+            paid_amount = (
+                Decimal(int(paid_cents)) / Decimal(100)
+                if paid_cents is not None
+                else None
+            )
+            return PaymentCheckout(
+                id=str(data["id"]),
+                external_id=str(data["externalId"]),
+                url=str(data["url"]),
+                amount=amount,
+                status=str(data["status"]),
+                paid_amount=paid_amount,
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            raise PaymentProviderError("AbacatePay returned an invalid checkout") from error
 
 
 class AbacatePayWebhookHandler:

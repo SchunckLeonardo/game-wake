@@ -36,6 +36,9 @@ class FakePaymentProvider:
         self.refunds.append((checkout_id, reason))
         return "tran_refund_123"
 
+    def find_checkout(self, external_id):
+        return None
+
 
 def test_membership_starts_an_idempotent_wallet_contribution_checkout():
     provider = FakePaymentProvider()
@@ -324,6 +327,53 @@ def test_provider_reversal_with_committed_credit_freezes_funding_without_negativ
             purpose="wake:world-2",
             idempotency_key="wake-2",
         )
+
+
+def test_reconciliation_recovers_a_checkout_after_the_create_response_was_lost():
+    class RecoveringProvider(FakePaymentProvider):
+        def __init__(self):
+            super().__init__()
+            self.recovered_checkout = None
+
+        def create_checkout(self, request):
+            self.requests.append(request)
+            raise RuntimeError("connection lost after provider accepted request")
+
+        def find_checkout(self, external_id):
+            return self.recovered_checkout
+
+    repository = InMemoryBillingRepository()
+    provider = RecoveringProvider()
+    billing = Billing(
+        repository,
+        payment_provider=provider,
+        contribution_packages=(
+            ContributionPackage("credit-50", Decimal("50.00"), "prod_50_brl"),
+        ),
+    )
+    with pytest.raises(RuntimeError):
+        billing.create_contribution(
+            "account-1",
+            payer_user_id="user-1",
+            package_id="credit-50",
+            return_url="https://gamewake.example/wallet",
+            completion_url="https://gamewake.example/wallet/success",
+            idempotency_key="checkout-command-1",
+        )
+    intent = repository.get("account-1").contributions[0]
+    provider.recovered_checkout = PaymentCheckout(
+        id="bill_recovered",
+        external_id=intent.id,
+        url="https://app.abacatepay.com/pay/bill_recovered",
+        amount=Decimal("50.00"),
+        status="PENDING",
+    )
+
+    recovered = billing.reconcile_contribution("account-1", intent.id)
+
+    assert recovered.status is ContributionStatus.PENDING
+    assert recovered.provider_checkout_id == "bill_recovered"
+    assert recovered.checkout_url == "https://app.abacatepay.com/pay/bill_recovered"
 
 
 def _checkout_event(event_id, event_type, contribution_id):

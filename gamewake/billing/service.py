@@ -220,6 +220,84 @@ class Billing:
                 return requested
         raise ConcurrentBillingUpdate("could not record contribution refund request")
 
+    def reconcile_contribution(
+        self,
+        account_id: str,
+        contribution_id: str,
+    ) -> WalletContribution:
+        if self._payment_provider is None:
+            raise RuntimeError("Payment Provider is not configured")
+        contribution = next(
+            item
+            for item in self._repository.get(account_id).contributions
+            if item.id == contribution_id
+        )
+        checkout = self._payment_provider.find_checkout(contribution.id)
+        if checkout is None:
+            return contribution
+        if checkout.external_id != contribution.id or checkout.amount != contribution.amount:
+            raise ValueError("reconciled checkout does not match contribution")
+
+        if contribution.status is ContributionStatus.CREATING_CHECKOUT:
+            pending = replace(
+                contribution,
+                provider_checkout_id=checkout.id,
+                checkout_url=checkout.url,
+                status=ContributionStatus.PENDING,
+            )
+            for _ in range(100):
+                snapshot = self._repository.get(account_id)
+                current = next(
+                    item for item in snapshot.contributions if item.id == contribution.id
+                )
+                if current.status is not ContributionStatus.CREATING_CHECKOUT:
+                    contribution = current
+                    break
+                contributions = tuple(
+                    pending if item.id == contribution.id else item
+                    for item in snapshot.contributions
+                )
+                if self._try_save(
+                    replace(snapshot, contributions=contributions),
+                    expected_version=snapshot.version,
+                ):
+                    contribution = pending
+                    break
+            else:
+                raise ConcurrentBillingUpdate("could not reconcile contribution checkout")
+
+        event_type = {
+            "PAID": "checkout.completed",
+            "REFUNDED": "checkout.refunded",
+        }.get(checkout.status)
+        if event_type is not None:
+            self.process_payment_event(
+                {
+                    "id": f"reconcile:{checkout.id}:{checkout.status.lower()}",
+                    "event": event_type,
+                    "apiVersion": 2,
+                    "data": {
+                        "checkout": {
+                            "id": checkout.id,
+                            "externalId": checkout.external_id,
+                            "amount": int(checkout.amount * 100),
+                            "paidAmount": (
+                                int(checkout.paid_amount * 100)
+                                if checkout.paid_amount is not None
+                                else None
+                            ),
+                            "status": checkout.status,
+                        }
+                    },
+                }
+            )
+            contribution = next(
+                item
+                for item in self._repository.get(account_id).contributions
+                if item.id == contribution_id
+            )
+        return contribution
+
     def process_payment_event(
         self,
         payload: Mapping[str, object],
