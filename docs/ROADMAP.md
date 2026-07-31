@@ -1,6 +1,6 @@
 # GameWake Delivery Roadmap
 
-Este roadmap transforma o protótipo Palworld atual no MVP definido na [GameWake Foundation](./GAMEWAKE_FOUNDATION.md). Ele usa marcos e critérios de aceitação, não datas: cronograma depende de equipe, orçamento, benchmarks e decisões técnicas ainda abertas.
+Este roadmap registra a transformação do protótipo Palworld no MVP definido na [GameWake Foundation](./GAMEWAKE_FOUNDATION.md). Em 31 de julho de 2026, os marcos 0–6 estão implementados no repositório e cobertos por testes; o marco 7 continua aberto porque depende de deploy, provedores e grupos reais. A evidência e os gates externos estão em [MVP_AUDIT.md](./MVP_AUDIT.md).
 
 ## Estratégia
 
@@ -11,7 +11,7 @@ Este roadmap transforma o protótipo Palworld atual no MVP definido na [GameWake
 - Não criar microserviços, múltiplos jogos ou múltiplos provedores antes de a Closed Beta provar necessidade.
 - Tratar integridade de World e Wallet como gates, nunca como melhorias posteriores.
 
-## Ponto de partida
+## Ponto de partida histórico
 
 | Ativo atual | Como será reutilizado | Limite que precisa ser removido |
 |---|---|---|
@@ -211,17 +211,17 @@ Billing começa depois de o ciclo de vida ser confiável porque não devemos cob
 | E2E | navegador e Discord percorrem o mesmo caso completo |
 | Operação | restore drills, reconciliação diária e runbooks executados antes da beta |
 
-O `make validate` atual continua como gate enquanto novos comandos de contrato, integração e E2E são adicionados progressivamente.
+`make validate`, a integração PostgreSQL no CI e o Playwright desktop/mobile formam o gate automatizado atual. Drills e métricas reais continuam no marco de Closed Beta.
 
 ## Spikes obrigatórios
 
 Estes estudos precisam produzir decisão e evidência antes do marco correspondente:
 
 1. **Concluído**: Aurora PostgreSQL Serverless v2 via Data API e Step Functions Standard, conforme [ADR 0025](./adr/0025-use-aurora-postgresql-and-step-functions.md).
-2. Custo e tempo de criar Runtimes descartáveis por região e Runtime Profile.
-3. Estratégia canônica de volumes e S3 que satisfaça Recovery Guarantee sem computação ociosa.
-4. Semântica completa de reembolso, disputa e conciliação da AbacatePay.
-5. Empacotamento e restrições da GameWake Console como Discord Activity.
+2. Custo e tempo de criar Runtimes descartáveis por região e Runtime Profile — implementação pronta, benchmark real pendente.
+3. **Concluído em código**: S3/KMS canônico, runtimes descartáveis, Backup/restore/export e Recovery Guarantee; drill Palworld externo pendente.
+4. Semântica completa comercial/jurídica de reembolso, disputa e conciliação da AbacatePay; domínio e runbook implementados.
+5. **Concluído em código**: mesma Console empacotada como Discord Activity; configuração e smoke no Developer Portal pendentes.
 6. Valores reais da Storage Allowance, retenção e preços de varejo.
 7. Validação jurídica de marca, LGPD, termos, tributação e créditos pré-pagos.
 

@@ -46,6 +46,11 @@ output "configure_secrets_command" {
   value       = "./scripts/configure-secrets.sh ${local.parameter_path}"
 }
 
+output "parameter_path" {
+  description = "Prefixo nao secreto usado pelos parametros SSM deste ambiente."
+  value       = local.parameter_path
+}
+
 output "session_manager_command" {
   description = "Acesso administrativo sem SSH."
   value       = var.enable_legacy_single_server ? "aws ssm start-session --region ${var.aws_region} --target ${aws_instance.palworld[0].id}" : null
@@ -55,10 +60,12 @@ output "post_deploy_instructions" {
   description = "Passos obrigatorios sem segredos."
   value = [
     "1. Execute ./scripts/configure-secrets.sh ${local.parameter_path}",
-    "2. Configure a Lambda Function URL como Interactions Endpoint no Discord",
-    "3. Execute ./scripts/register-discord-commands.sh",
-    "4. Confirme que a EC2 terminou o bootstrap e ficou stopped",
-    "5. Use /palworld ligar no Discord",
+    "2. Configure o output gamewake_api.discord_interactions como Interactions Endpoint no Discord",
+    "3. Configure o output gamewake_api.discord_oauth_callback como OAuth2 Redirect URL",
+    "4. Execute ./scripts/register-discord-commands.sh para registrar /gamewake",
+    "5. Publique a Console com NEXT_PUBLIC_GAMEWAKE_API_URL e NEXT_PUBLIC_DISCORD_APPLICATION_ID",
+    "6. Confirme a assinatura do email SNS quando operations_alarm_email estiver configurado",
+    "7. Execute o smoke test iniciando por /gamewake comecar",
   ]
 }
 
@@ -76,6 +83,9 @@ output "gamewake_control_plane" {
     runtime_launch_template_id = aws_launch_template.gamewake_runtime.id
     world_data_bucket          = aws_s3_bucket.world_data.id
     reconciliation_schedule    = aws_scheduler_schedule.reconciliation.arn
+    session_monitor_schedule   = aws_scheduler_schedule.session_monitor.arn
+    data_maintenance_schedule  = aws_scheduler_schedule.data_maintenance.arn
+    operations_dead_letter_url = aws_sqs_queue.operations_dead_letter.url
     operations_dashboard       = aws_cloudwatch_dashboard.gamewake.dashboard_name
     operations_alert_topic_arn = aws_sns_topic.operations_alerts.arn
   }

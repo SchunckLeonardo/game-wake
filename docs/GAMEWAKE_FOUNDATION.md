@@ -282,7 +282,6 @@ O crescimento deve ampliar o comportamento validado, não aumentar o catálogo a
 
 - preço final, margem mínima e valores dos Runtime Profiles;
 - tamanho da Storage Allowance e retenção automática por jogo;
-- provedor transacional, mecanismo de workflow durável e topologia AWS exatos;
 - política comercial e jurídica de reembolso de créditos não utilizados, disputas, tributos e LGPD;
 - regiões AWS do MVP e benchmarks reais de latência, custo e tempo de despertar;
 - validação de marca, domínio e disponibilidade jurídica de `GameWake`;
@@ -290,3 +289,5 @@ O crescimento deve ampliar o comportamento validado, não aumentar o catálogo a
 - suporte futuro da AbacatePay a Auto Recharge sob demanda.
 
 Esses itens são deliberadamente abertos: precisam de benchmarks, pesquisa jurídica ou validação de mercado e não alteram o modelo de domínio confirmado.
+
+O provedor transacional, o workflow e a persistência já estão decididos para o MVP: AbacatePay API v2, Step Functions Standard e Aurora PostgreSQL Serverless v2 via Data API, conforme ADRs 0023 e 0025.

@@ -40,6 +40,15 @@ Discord Activity surface.
 - `NEXT_PUBLIC_GAMEWAKE_API_URL`: HTTPS origin of the GameWake Control Plane.
 - `NEXT_PUBLIC_DISCORD_APPLICATION_ID`: Discord application ID used by the
   Embedded App SDK.
+- `NEXT_PUBLIC_SITE_URL`: stable public HTTPS origin used for canonical and
+  social metadata when the request host is unavailable.
+
+For production, the site origin must exactly match Terraform's
+`gamewake_console_url`. Configure the Terraform outputs
+`gamewake_api.discord_oauth_callback` and `gamewake_api.discord_interactions`
+in the Discord Developer Portal, then map the Discord Activity to `/activity`.
+The Activity requests `identify`, `email`, and `guilds`; only an email marked as
+verified by Discord can establish Owner recovery.
 
 Discord is the product identity provider. Sites access control is used only to
 keep preview deployments private; it is not a substitute for GameWake account
@@ -47,3 +56,6 @@ authorization.
 
 The production Control Plane, ledger and World state live in Aurora PostgreSQL;
 the site intentionally has no separate application database.
+
+See [`../docs/DEPLOYMENT.md`](../docs/DEPLOYMENT.md) for the complete production
+sequence and required AbacatePay/AWS configuration.
