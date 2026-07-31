@@ -1,13 +1,14 @@
 from dataclasses import dataclass
 from typing import Protocol
 
-from .model import Account, Membership
+from .model import Account, Invitation, Membership
 
 
 @dataclass(frozen=True)
 class AccountSnapshot:
     account: Account
     memberships: tuple[Membership, ...]
+    invitations: tuple[Invitation, ...]
     version: int
 
 

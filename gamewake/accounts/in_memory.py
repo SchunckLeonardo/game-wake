@@ -9,7 +9,12 @@ class InMemoryAccountRepository:
         self._snapshots: dict[str, AccountSnapshot] = {}
 
     def create(self, account: Account, owner: Membership) -> None:
-        self._snapshots[account.id] = AccountSnapshot(account, (owner,), version=1)
+        self._snapshots[account.id] = AccountSnapshot(
+            account=account,
+            memberships=(owner,),
+            invitations=(),
+            version=1,
+        )
 
     def get(self, account_id: str) -> AccountSnapshot:
         return self._snapshots[account_id]
@@ -19,7 +24,8 @@ class InMemoryAccountRepository:
         if current.version != expected_version:
             raise RuntimeError("account was changed concurrently")
         self._snapshots[snapshot.account.id] = AccountSnapshot(
-            snapshot.account,
-            snapshot.memberships,
+            account=snapshot.account,
+            memberships=snapshot.memberships,
+            invitations=snapshot.invitations,
             version=expected_version + 1,
         )

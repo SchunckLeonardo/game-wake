@@ -1,6 +1,14 @@
 from uuid import uuid4
 
-from .model import Account, LastOwnerRemovalError, Membership, PredefinedRole
+from .model import (
+    Account,
+    Invitation,
+    InvitationStatus,
+    LastOwnerRemovalError,
+    Membership,
+    PermissionDeniedError,
+    PredefinedRole,
+)
 from .repository import AccountRepository, AccountSnapshot
 
 
@@ -22,6 +30,89 @@ class Accounts:
     def list_memberships(self, account_id: str) -> list[Membership]:
         return list(self._repository.get(account_id).memberships)
 
+    def list_invitations(self, account_id: str) -> list[Invitation]:
+        return list(self._repository.get(account_id).invitations)
+
+    def invite_members(
+        self,
+        account_id: str,
+        *,
+        inviter_user_id: str,
+        invited_user_ids: list[str],
+    ) -> list[Invitation]:
+        snapshot = self._repository.get(account_id)
+        if not any(
+            membership.user_id == inviter_user_id
+            and PredefinedRole.OWNER in membership.roles
+            for membership in snapshot.memberships
+        ):
+            raise PermissionDeniedError("inviting members requires the Owner role")
+        invitations = [
+            Invitation(
+                id=str(uuid4()),
+                account_id=account_id,
+                inviter_user_id=inviter_user_id,
+                invited_user_id=invited_user_id,
+                status=InvitationStatus.PENDING,
+            )
+            for invited_user_id in invited_user_ids
+        ]
+        self._repository.save(
+            AccountSnapshot(
+                account=snapshot.account,
+                memberships=snapshot.memberships,
+                invitations=(*snapshot.invitations, *invitations),
+                version=snapshot.version,
+            ),
+            expected_version=snapshot.version,
+        )
+        return invitations
+
+    def accept_invitation(
+        self,
+        account_id: str,
+        invitation_id: str,
+        *,
+        invited_user_id: str,
+    ) -> Membership:
+        snapshot = self._repository.get(account_id)
+        invitation = next(
+            invitation
+            for invitation in snapshot.invitations
+            if invitation.id == invitation_id
+        )
+        if invitation.invited_user_id != invited_user_id:
+            raise PermissionDeniedError("only the invited User can accept this Invitation")
+        if invitation.status is not InvitationStatus.PENDING:
+            raise ValueError("the Invitation is no longer pending")
+        accepted = Invitation(
+            id=invitation.id,
+            account_id=invitation.account_id,
+            inviter_user_id=invitation.inviter_user_id,
+            invited_user_id=invitation.invited_user_id,
+            status=InvitationStatus.ACCEPTED,
+        )
+        membership = Membership(
+            id=str(uuid4()),
+            account_id=account_id,
+            user_id=invited_user_id,
+            roles=frozenset({PredefinedRole.PLAYER}),
+        )
+        invitations = tuple(
+            accepted if item.id == invitation.id else item
+            for item in snapshot.invitations
+        )
+        self._repository.save(
+            AccountSnapshot(
+                account=snapshot.account,
+                memberships=(*snapshot.memberships, membership),
+                invitations=invitations,
+                version=snapshot.version,
+            ),
+            expected_version=snapshot.version,
+        )
+        return membership
+
     def remove_membership(self, account_id: str, membership_id: str) -> None:
         snapshot = self._repository.get(account_id)
         membership = next(
@@ -38,7 +129,12 @@ class Accounts:
             if membership.id != membership_id
         )
         self._repository.save(
-            AccountSnapshot(snapshot.account, remaining, snapshot.version),
+            AccountSnapshot(
+                account=snapshot.account,
+                memberships=remaining,
+                invitations=snapshot.invitations,
+                version=snapshot.version,
+            ),
             expected_version=snapshot.version,
         )
 

@@ -3,7 +3,9 @@ import pytest
 from gamewake.accounts import (
     Accounts,
     InMemoryAccountRepository,
+    InvitationStatus,
     LastOwnerRemovalError,
+    PermissionDeniedError,
     PredefinedRole,
 )
 
@@ -28,3 +30,87 @@ def test_the_last_owner_cannot_be_removed_from_an_account():
         accounts.remove_membership(account.id, owner.id)
 
     assert accounts.list_memberships(account.id) == [owner]
+
+
+def test_batch_invitations_stay_independent_and_require_explicit_acceptance():
+    accounts = Accounts(InMemoryAccountRepository())
+    account = accounts.create_account(name="Sexta com os amigos", owner_user_id="user-owner")
+
+    invitations = accounts.invite_members(
+        account.id,
+        inviter_user_id="user-owner",
+        invited_user_ids=["friend-one", "friend-two", "friend-three"],
+    )
+
+    assert len({invitation.id for invitation in invitations}) == 3
+    assert [invitation.invited_user_id for invitation in invitations] == [
+        "friend-one",
+        "friend-two",
+        "friend-three",
+    ]
+    assert all(invitation.status is InvitationStatus.PENDING for invitation in invitations)
+    assert [membership.user_id for membership in accounts.list_memberships(account.id)] == [
+        "user-owner"
+    ]
+
+    membership = accounts.accept_invitation(
+        account.id,
+        invitations[1].id,
+        invited_user_id="friend-two",
+    )
+
+    assert membership.user_id == "friend-two"
+    assert membership.roles == frozenset({PredefinedRole.PLAYER})
+    assert [invitation.status for invitation in accounts.list_invitations(account.id)] == [
+        InvitationStatus.PENDING,
+        InvitationStatus.ACCEPTED,
+        InvitationStatus.PENDING,
+    ]
+
+
+def test_a_player_cannot_invite_members():
+    accounts = Accounts(InMemoryAccountRepository())
+    account = accounts.create_account(name="Sexta com os amigos", owner_user_id="user-owner")
+    [invitation] = accounts.invite_members(
+        account.id,
+        inviter_user_id="user-owner",
+        invited_user_ids=["friend-one"],
+    )
+    accounts.accept_invitation(
+        account.id,
+        invitation.id,
+        invited_user_id="friend-one",
+    )
+
+    with pytest.raises(PermissionDeniedError):
+        accounts.invite_members(
+            account.id,
+            inviter_user_id="friend-one",
+            invited_user_ids=["friend-two"],
+        )
+
+    assert [item.invited_user_id for item in accounts.list_invitations(account.id)] == [
+        "friend-one"
+    ]
+
+
+def test_only_the_invited_user_can_accept_an_invitation():
+    accounts = Accounts(InMemoryAccountRepository())
+    account = accounts.create_account(name="Sexta com os amigos", owner_user_id="user-owner")
+    [invitation] = accounts.invite_members(
+        account.id,
+        inviter_user_id="user-owner",
+        invited_user_ids=["friend-one"],
+    )
+
+    with pytest.raises(PermissionDeniedError):
+        accounts.accept_invitation(
+            account.id,
+            invitation.id,
+            invited_user_id="someone-else",
+        )
+
+    assert accounts.list_invitations(account.id) == [invitation]
+    assert [membership.user_id for membership in accounts.list_memberships(account.id)] == [
+        "user-owner"
+    ]
