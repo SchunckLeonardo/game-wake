@@ -76,6 +76,8 @@ class Worlds:
             entries=tuple(validated_defaults.items()),
             idempotency_key=f"world:{world_id}:initial-configuration",
             created_at=self._clock(),
+            actor_user_id=actor_user_id,
+            origin="system",
         )
         world = World(
             id=world_id,
@@ -196,6 +198,7 @@ class Worlds:
         actor_user_id: str,
         changes: object,
         idempotency_key: str,
+        origin: str = "web",
     ) -> ConfigurationRevision:
         preview = self.preview_configuration_change(
             account_id,
@@ -218,6 +221,8 @@ class Worlds:
             entries=preview.proposed_entries,
             idempotency_key=idempotency_key,
             created_at=self._clock(),
+            actor_user_id=actor_user_id,
+            origin=origin,
         )
         return self._repository.append_configuration(
             replace(

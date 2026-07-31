@@ -132,6 +132,8 @@ class ConfigurationRevision:
     entries: tuple[tuple[str, ConfigurationValue], ...]
     idempotency_key: str
     created_at: datetime
+    actor_user_id: str = "system"
+    origin: str = "system"
 
     @property
     def values(self) -> dict[str, ConfigurationValue]:
