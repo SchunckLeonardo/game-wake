@@ -3,25 +3,64 @@ from uuid import uuid4
 
 from .model import (
     Account,
+    IdentityProvider,
     Invitation,
     InvitationStatus,
     LastOwnerRemovalError,
+    LinkedIdentity,
     Membership,
     PermissionDeniedError,
     PredefinedRole,
     ResourceScope,
     RoleAssignment,
+    User,
 )
 from .policy import CustomRole, Permission, permissions_for
-from .repository import AccountRepository, AccountSnapshot
+from .repository import AccountRepository, AccountSnapshot, IdentityRepository
 
 
 class Accounts:
-    def __init__(self, repository: AccountRepository) -> None:
+    def __init__(
+        self,
+        repository: AccountRepository,
+        identity_repository: IdentityRepository | None = None,
+    ) -> None:
         self._repository = repository
+        self._identities = identity_repository or repository
 
-    def create_account(self, *, name: str, owner_user_id: str) -> Account:
-        account = Account(id=str(uuid4()), name=name)
+    def sign_in_with_discord(self, *, discord_user_id: str, display_name: str) -> User:
+        existing = self._identities.find_user_by_identity(
+            IdentityProvider.DISCORD,
+            discord_user_id,
+        )
+        if existing is not None:
+            return existing
+
+        user = User(id=str(uuid4()), display_name=display_name)
+        identity = LinkedIdentity(
+            id=str(uuid4()),
+            user_id=user.id,
+            provider=IdentityProvider.DISCORD,
+            provider_user_id=discord_user_id,
+        )
+        self._identities.create_user(user, identity)
+        return user
+
+    def list_linked_identities(self, user_id: str) -> list[LinkedIdentity]:
+        return list(self._identities.list_linked_identities(user_id))
+
+    def create_account(
+        self,
+        *,
+        name: str,
+        owner_user_id: str,
+        discord_guild_id: str | None = None,
+    ) -> Account:
+        account = Account(
+            id=str(uuid4()),
+            name=name,
+            discord_guild_id=discord_guild_id,
+        )
         owner_membership_id = str(uuid4())
         owner = Membership(
             id=owner_membership_id,
@@ -37,6 +76,10 @@ class Accounts:
         )
         self._repository.create(account, owner)
         return account
+
+    def find_account_by_discord_guild(self, discord_guild_id: str) -> Account | None:
+        snapshot = self._repository.find_by_discord_guild(discord_guild_id)
+        return snapshot.account if snapshot is not None else None
 
     def list_memberships(self, account_id: str) -> list[Membership]:
         return list(self._repository.get(account_id).memberships)

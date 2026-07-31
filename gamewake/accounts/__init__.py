@@ -3,14 +3,18 @@
 from .in_memory import InMemoryAccountRepository
 from .model import (
     Account,
+    DiscordGuildAlreadyLinkedError,
+    IdentityProvider,
     Invitation,
     InvitationStatus,
     LastOwnerRemovalError,
+    LinkedIdentity,
     Membership,
     PermissionDeniedError,
     PredefinedRole,
     ResourceScope,
     RoleAssignment,
+    User,
 )
 from .policy import CustomRole, Permission
 from .service import Accounts
@@ -19,14 +23,18 @@ __all__ = [
     "Account",
     "Accounts",
     "CustomRole",
+    "DiscordGuildAlreadyLinkedError",
+    "IdentityProvider",
     "InMemoryAccountRepository",
     "Invitation",
     "InvitationStatus",
     "LastOwnerRemovalError",
+    "LinkedIdentity",
     "Membership",
     "Permission",
     "PermissionDeniedError",
     "PredefinedRole",
     "ResourceScope",
     "RoleAssignment",
+    "User",
 ]

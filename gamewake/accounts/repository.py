@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Protocol
 
-from .model import Account, Invitation, Membership
+from .model import Account, IdentityProvider, Invitation, LinkedIdentity, Membership, User
 from .policy import CustomRole
 
 
@@ -19,4 +19,18 @@ class AccountRepository(Protocol):
 
     def get(self, account_id: str) -> AccountSnapshot: ...
 
+    def find_by_discord_guild(self, discord_guild_id: str) -> AccountSnapshot | None: ...
+
     def save(self, snapshot: AccountSnapshot, expected_version: int) -> None: ...
+
+
+class IdentityRepository(Protocol):
+    def find_user_by_identity(
+        self,
+        provider: IdentityProvider,
+        provider_user_id: str,
+    ) -> User | None: ...
+
+    def create_user(self, user: User, identity: LinkedIdentity) -> None: ...
+
+    def list_linked_identities(self, user_id: str) -> tuple[LinkedIdentity, ...]: ...

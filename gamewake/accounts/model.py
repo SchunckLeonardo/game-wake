@@ -13,6 +13,10 @@ class InvitationStatus(StrEnum):
     ACCEPTED = "accepted"
 
 
+class IdentityProvider(StrEnum):
+    DISCORD = "discord"
+
+
 class LastOwnerRemovalError(ValueError):
     """Raised when a mutation would leave an account without an Owner."""
 
@@ -21,10 +25,29 @@ class PermissionDeniedError(PermissionError):
     """Raised when a Membership does not grant the requested action."""
 
 
+class DiscordGuildAlreadyLinkedError(ValueError):
+    """Raised when a Discord Guild is already linked to another account."""
+
+
+@dataclass(frozen=True)
+class User:
+    id: str
+    display_name: str
+
+
+@dataclass(frozen=True)
+class LinkedIdentity:
+    id: str
+    user_id: str
+    provider: IdentityProvider
+    provider_user_id: str
+
+
 @dataclass(frozen=True)
 class Account:
     id: str
     name: str
+    discord_guild_id: str | None = None
 
 
 @dataclass(frozen=True)
