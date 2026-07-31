@@ -71,3 +71,9 @@ def test_local_quality_commands_cover_the_gamewake_backend_and_web_console():
     assert "npm --prefix web run lint" in makefile
     assert "gamewake lambda server scripts shared tests palworld" in validation
     assert "npm --prefix web run test" in validation
+
+
+def test_every_change_requires_the_repository_owner_review():
+    codeowners = read(".github/CODEOWNERS")
+
+    assert codeowners.splitlines()[-1] == "* @SchunckLeonardo"
