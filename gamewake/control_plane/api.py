@@ -2,10 +2,12 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from gamewake.accounts import Account, Invitation
+from gamewake.billing import Wallet, WalletContribution
 from gamewake.game_catalog import GameTemplateDefinition
-from gamewake.worlds import ConfigurationRevision, World
+from gamewake.worlds import ConfigurationRevision, World, WorldOperation
 
 from .application import GameWakeApplication
+from .contracts import ConnectionDetails
 
 
 @dataclass(frozen=True)
@@ -53,6 +55,19 @@ class GameWakeApi:
         if len(parts) < 4:
             raise KeyError(request.path)
         account_id = parts[3]
+        if request.method == "GET" and parts[4:] == ("wallet",):
+            wallet = self._application.get_wallet(account_id, viewer_user_id=request.user_id)
+            return ApiResponse(200, {"wallet": self._wallet(wallet)})
+        if request.method == "POST" and parts[4:] == ("wallet", "contributions"):
+            contribution = self._application.create_contribution(
+                account_id,
+                payer_user_id=request.user_id,
+                package_id=self._required_string(request.body, "packageId"),
+                return_url=self._required_string(request.body, "returnUrl"),
+                completion_url=self._required_string(request.body, "completionUrl"),
+                idempotency_key=self._required_string(request.body, "idempotencyKey"),
+            )
+            return ApiResponse(201, {"contribution": self._contribution(contribution)})
         if request.method == "POST" and parts[4:] == ("invitations",):
             invited_user_ids = request.body.get("invitedUserIds")
             if (
@@ -80,9 +95,49 @@ class GameWakeApi:
                 runtime_profile_id=self._required_string(request.body, "runtimeProfileId"),
             )
             return ApiResponse(201, {"world": self._world(world)})
+        if request.method == "GET" and parts[4:] == ("worlds",):
+            worlds = self._application.list_worlds(
+                account_id,
+                viewer_user_id=request.user_id,
+            )
+            return ApiResponse(200, {"worlds": [self._world(world) for world in worlds]})
         if len(parts) < 6 or parts[4] != "worlds":
             raise KeyError(request.path)
         world_id = parts[5]
+        if request.method == "POST" and parts[6:] == ("wake",):
+            operation = self._application.request_wake(
+                account_id,
+                world_id,
+                actor_user_id=request.user_id,
+                idempotency_key=self._required_string(request.body, "idempotencyKey"),
+            )
+            return ApiResponse(202, {"operation": self._operation(operation)})
+        if request.method == "POST" and parts[6:] == ("sleep",):
+            operation = self._application.request_sleep(
+                account_id,
+                world_id,
+                actor_user_id=request.user_id,
+                idempotency_key=self._required_string(request.body, "idempotencyKey"),
+                force=request.body.get("force") is True,
+            )
+            return ApiResponse(202, {"operation": self._operation(operation)})
+        if request.method == "GET" and parts[6:] == ("operations",):
+            operations = self._application.worlds.list_operations(
+                account_id,
+                world_id,
+                viewer_user_id=request.user_id,
+            )
+            return ApiResponse(
+                200,
+                {"operations": [self._operation(operation) for operation in operations]},
+            )
+        if request.method == "GET" and parts[6:] == ("connection",):
+            details = self._application.connection_details(
+                account_id,
+                world_id,
+                viewer_user_id=request.user_id,
+            )
+            return ApiResponse(200, {"connection": self._connection(details)})
         if request.method == "GET" and parts[6:] == ("configuration", "schema"):
             template = self._application.configuration_schema(
                 account_id,
@@ -161,6 +216,57 @@ class GameWakeApi:
             "actorUserId": revision.actor_user_id,
             "origin": revision.origin,
             "createdAt": revision.created_at.isoformat(),
+        }
+
+    @staticmethod
+    def _operation(operation: WorldOperation) -> dict[str, Any]:
+        return {
+            "id": operation.id,
+            "accountId": operation.account_id,
+            "worldId": operation.world_id,
+            "type": operation.operation_type.value,
+            "status": operation.status.value,
+            "phase": operation.phase.value,
+            "createdAt": operation.created_at.isoformat(),
+        }
+
+    @staticmethod
+    def _wallet(wallet: Wallet) -> dict[str, Any]:
+        return {
+            "accountId": wallet.account_id,
+            "currency": wallet.currency,
+            "balance": str(wallet.balance),
+            "availableBalance": str(wallet.available_balance),
+            "statement": [
+                {
+                    "id": entry.id,
+                    "type": entry.entry_type.value,
+                    "amount": str(entry.amount),
+                    "reference": entry.reference,
+                    "occurredAt": entry.occurred_at.isoformat(),
+                }
+                for entry in wallet.statement
+            ],
+        }
+
+    @staticmethod
+    def _contribution(contribution: WalletContribution) -> dict[str, Any]:
+        return {
+            "id": contribution.id,
+            "accountId": contribution.account_id,
+            "packageId": contribution.package_id,
+            "amount": str(contribution.amount),
+            "status": contribution.status.value,
+            "checkoutUrl": contribution.checkout_url,
+            "createdAt": contribution.created_at.isoformat(),
+        }
+
+    @staticmethod
+    def _connection(details: ConnectionDetails) -> dict[str, Any]:
+        return {
+            "host": details.host,
+            "port": details.port,
+            "password": details.password,
         }
 
     @staticmethod

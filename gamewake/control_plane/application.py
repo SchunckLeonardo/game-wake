@@ -1,9 +1,9 @@
 from gamewake.accounts import Account, Accounts, Invitation, User
-from gamewake.billing import Billing
+from gamewake.billing import Billing, Wallet, WalletContribution
 from gamewake.game_catalog import GameCatalog, GameTemplateDefinition
 from gamewake.worlds import ConfigurationRevision, World, WorldOperation, Worlds
 
-from .contracts import ConnectionDetails, ConnectionDetailsProvider
+from .contracts import ConnectionDetails, ConnectionDetailsProvider, OperationDispatcher
 
 
 class GameWakeApplication:
@@ -17,12 +17,14 @@ class GameWakeApplication:
         billing: Billing,
         game_catalog: GameCatalog,
         connection_details_provider: ConnectionDetailsProvider | None = None,
+        operation_dispatcher: OperationDispatcher | None = None,
     ) -> None:
         self.accounts = accounts
         self.worlds = worlds
         self.billing = billing
         self.game_catalog = game_catalog
         self._connection_details_provider = connection_details_provider
+        self._operation_dispatcher = operation_dispatcher
 
     def resolve_discord_principal(
         self,
@@ -116,6 +118,30 @@ class GameWakeApplication:
             viewer_user_id=viewer_user_id,
         )
 
+    def get_wallet(self, account_id: str, *, viewer_user_id: str) -> Wallet:
+        self.accounts.list_memberships(account_id, viewer_user_id=viewer_user_id)
+        return self.billing.get_wallet(account_id)
+
+    def create_contribution(
+        self,
+        account_id: str,
+        *,
+        payer_user_id: str,
+        package_id: str,
+        return_url: str,
+        completion_url: str,
+        idempotency_key: str,
+    ) -> WalletContribution:
+        self.accounts.list_memberships(account_id, viewer_user_id=payer_user_id)
+        return self.billing.create_contribution(
+            account_id,
+            payer_user_id=payer_user_id,
+            package_id=package_id,
+            return_url=return_url,
+            completion_url=completion_url,
+            idempotency_key=idempotency_key,
+        )
+
     def request_wake(
         self,
         account_id: str,
@@ -124,12 +150,15 @@ class GameWakeApplication:
         actor_user_id: str,
         idempotency_key: str,
     ) -> WorldOperation:
-        return self.worlds.request_wake(
+        operation = self.worlds.request_wake(
             account_id,
             world_id,
             actor_user_id=actor_user_id,
             idempotency_key=idempotency_key,
         )
+        if self._operation_dispatcher is not None:
+            self._operation_dispatcher.start(account_id, operation.id)
+        return operation
 
     def request_sleep(
         self,
@@ -140,13 +169,16 @@ class GameWakeApplication:
         idempotency_key: str,
         force: bool = False,
     ) -> WorldOperation:
-        return self.worlds.request_sleep(
+        operation = self.worlds.request_sleep(
             account_id,
             world_id,
             actor_user_id=actor_user_id,
             idempotency_key=idempotency_key,
             force=force,
         )
+        if self._operation_dispatcher is not None:
+            self._operation_dispatcher.start(account_id, operation.id)
+        return operation
 
     def connection_details(
         self,

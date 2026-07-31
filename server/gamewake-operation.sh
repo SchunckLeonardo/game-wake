@@ -57,8 +57,12 @@ run_mutation() {
   local archive bucket checksum checksum_hex expected_checksum key prefix remote_checksum state_id
   case "$action" in
     apply-configuration)
-      [[ $# -eq 1 ]] || return 64
-      /usr/local/sbin/configure-palworld.sh
+      [[ $# -eq 3 ]] || return 64
+      PALWORLD_CONFIG_PARAMETER_NAME=$1 \
+        PALWORLD_OVERRIDES_PARAMETER_NAME="${1%/config}/settings-overrides" \
+        SERVER_PASSWORD_PARAMETER_NAME=$2 \
+        ADMIN_PASSWORD_PARAMETER_NAME=$3 \
+        /usr/local/sbin/configure-palworld.sh
       ;;
     start)
       [[ $# -eq 0 ]] || return 64

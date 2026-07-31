@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass
 from typing import Any
@@ -78,7 +79,15 @@ def build_services(
             _required(environ, "WORLD_DATA_BUCKET"),
             runner=runner,
         ),
-        game_templates=_PalworldTemplates(SsmPalworldTemplate(runner)),
+        game_templates=_PalworldTemplates(
+            SsmPalworldTemplate(
+                runner,
+                repository=repository,
+                parameter_prefix=_required(environ, "GAMEWAKE_WORLD_PARAMETER_PREFIX"),
+                base_configuration=json.loads(_required(environ, "PALWORLD_BASE_CONFIG_JSON")),
+                client=client_factory("ssm"),
+            )
+        ),
         backup_store=archive,
     )
     step_functions_client = client_factory("stepfunctions")

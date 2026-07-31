@@ -178,6 +178,31 @@ variable "discord_guild_id" {
   default     = "REPLACE_ME"
 }
 
+variable "gamewake_console_url" {
+  description = "Origem HTTPS exata da Console usada por OAuth e CORS."
+  type        = string
+  default     = "https://gamewake-mvp.leonardorainha.chatgpt.site"
+
+  validation {
+    condition     = can(regex("^https://[^/]+$", var.gamewake_console_url))
+    error_message = "gamewake_console_url deve ser uma origem HTTPS sem barra final."
+  }
+}
+
+variable "abacatepay_packages" {
+  description = "Pacotes de credito e produtos avulsos correspondentes na AbacatePay v2."
+  type = list(object({
+    id         = string
+    amount     = number
+    product_id = string
+  }))
+  default = [
+    { id = "credits-25", amount = 25, product_id = "REPLACE_ME" },
+    { id = "credits-50", amount = 50, product_id = "REPLACE_ME" },
+    { id = "credits-100", amount = 100, product_id = "REPLACE_ME" },
+  ]
+}
+
 variable "discord_allowed_user_ids" {
   description = "IDs de usuarios autorizados. Lista vazia nao autoriza usuarios diretamente."
   type        = list(string)

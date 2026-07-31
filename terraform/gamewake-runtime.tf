@@ -8,6 +8,15 @@ locals {
 
 data "aws_iam_policy_document" "gamewake_runtime_data" {
   statement {
+    sid     = "ReadOwnWorldConfiguration"
+    effect  = "Allow"
+    actions = ["ssm:GetParameter"]
+    resources = [
+      "arn:${data.aws_partition.current.partition}:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${local.parameter_path}/gamewake/worlds/*",
+    ]
+  }
+
+  statement {
     sid    = "WorldDataObjects"
     effect = "Allow"
     actions = [

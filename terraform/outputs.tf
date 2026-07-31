@@ -28,6 +28,10 @@ output "parameter_store_names" {
     server_password             = aws_ssm_parameter.server_password.name
     admin_password              = aws_ssm_parameter.admin_password.name
     runtime_status              = aws_ssm_parameter.server_status.name
+    discord_client_secret       = aws_ssm_parameter.discord_client_secret.name
+    abacatepay_api_key          = aws_ssm_parameter.abacatepay_api_key.name
+    abacatepay_webhook_secret   = aws_ssm_parameter.abacatepay_webhook_secret.name
+    abacatepay_public_key       = aws_ssm_parameter.abacatepay_public_key.name
   }
 }
 
@@ -77,4 +81,14 @@ output "gamewake_control_plane" {
 output "aurora_master_secret_arn" {
   description = "ARN do segredo gerenciado pelo RDS; o valor nunca e exposto pelo Terraform."
   value       = aws_rds_cluster.gamewake.master_user_secret[0].secret_arn
+}
+
+output "gamewake_api" {
+  description = "Endpoints publicos autenticados na aplicacao; nenhum segredo e exposto."
+  value = {
+    base_url               = aws_lambda_function_url.gamewake_api.function_url
+    discord_interactions   = "${aws_lambda_function_url.gamewake_api.function_url}discord/interactions"
+    discord_oauth_callback = "${aws_lambda_function_url.gamewake_api.function_url}auth/discord/callback"
+    abacatepay_webhook     = "${aws_lambda_function_url.gamewake_api.function_url}webhooks/abacatepay"
+  }
 }

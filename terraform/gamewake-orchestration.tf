@@ -120,6 +120,18 @@ data "aws_iam_policy_document" "operation_worker" {
   }
 
   statement {
+    sid    = "ManagePerWorldConfiguration"
+    effect = "Allow"
+    actions = [
+      "ssm:GetParameter",
+      "ssm:PutParameter",
+    ]
+    resources = [
+      "arn:${data.aws_partition.current.partition}:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${local.parameter_path}/gamewake/worlds/*",
+    ]
+  }
+
+  statement {
     sid    = "ManageWorldData"
     effect = "Allow"
     actions = [
@@ -191,11 +203,13 @@ resource "aws_lambda_function" "operation_worker" {
 
   environment {
     variables = {
-      AURORA_CLUSTER_ARN         = aws_rds_cluster.gamewake.arn
-      AURORA_DATABASE_NAME       = var.aurora_database_name
-      AURORA_SECRET_ARN          = aws_rds_cluster.gamewake.master_user_secret[0].secret_arn
-      RUNTIME_LAUNCH_TEMPLATE_ID = aws_launch_template.gamewake_runtime.id
-      WORLD_DATA_BUCKET          = aws_s3_bucket.world_data.id
+      AURORA_CLUSTER_ARN              = aws_rds_cluster.gamewake.arn
+      AURORA_DATABASE_NAME            = var.aurora_database_name
+      AURORA_SECRET_ARN               = aws_rds_cluster.gamewake.master_user_secret[0].secret_arn
+      GAMEWAKE_WORLD_PARAMETER_PREFIX = "${local.parameter_path}/gamewake/worlds"
+      PALWORLD_BASE_CONFIG_JSON       = local.palworld_config_payload
+      RUNTIME_LAUNCH_TEMPLATE_ID      = aws_launch_template.gamewake_runtime.id
+      WORLD_DATA_BUCKET               = aws_s3_bucket.world_data.id
     }
   }
 

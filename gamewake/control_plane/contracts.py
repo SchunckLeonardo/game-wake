@@ -13,3 +13,7 @@ class ConnectionDetails:
 
 class ConnectionDetailsProvider(Protocol):
     def issue(self, world: World, *, viewer_user_id: str) -> ConnectionDetails: ...
+
+
+class OperationDispatcher(Protocol):
+    def start(self, account_id: str, operation_id: str) -> object: ...

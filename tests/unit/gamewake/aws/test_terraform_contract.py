@@ -62,3 +62,30 @@ def test_legacy_always_on_server_is_disabled_by_default():
     assert 'variable "enable_legacy_single_server"' in variables
     assert "default     = false" in variables
     assert "count = var.enable_legacy_single_server ? 1 : 0" in legacy
+
+
+def test_public_api_uses_kms_sessions_exact_cors_and_managed_provider_secrets():
+    api = source("gamewake-api.tf")
+    parameters = source("parameter-store.tf")
+
+    assert 'resource "aws_lambda_function" "gamewake_api"' in api
+    assert 'resource "aws_lambda_function_url" "gamewake_api"' in api
+    assert 'authorization_type = "NONE"' in api
+    assert "allow_origins     = [var.gamewake_console_url]" in api
+    assert 'key_usage                = "GENERATE_VERIFY_MAC"' in api
+    assert 'customer_master_key_spec = "HMAC_256"' in api
+    assert "GAMEWAKE_WORLD_PARAMETER_PREFIX" in api
+    assert 'resource "aws_ssm_parameter" "discord_client_secret"' in parameters
+    assert 'resource "aws_ssm_parameter" "abacatepay_api_key"' in parameters
+
+
+def test_disposable_world_configuration_is_isolated_under_a_tenant_path():
+    orchestration = source("gamewake-orchestration.tf")
+    runtime = source("gamewake-runtime.tf")
+    api = source("gamewake-api.tf")
+
+    expected_path = "${local.parameter_path}/gamewake/worlds/*"
+    assert expected_path in orchestration
+    assert expected_path in runtime
+    assert expected_path in api
+    assert "PALWORLD_BASE_CONFIG_JSON" in orchestration

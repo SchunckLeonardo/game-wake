@@ -2,7 +2,8 @@
 
 from .api import ApiRequest, ApiResponse, GameWakeApi
 from .application import GameWakeApplication
-from .contracts import ConnectionDetails, ConnectionDetailsProvider
+from .contracts import ConnectionDetails, ConnectionDetailsProvider, OperationDispatcher
+from .http import GameWakeHttpHandler
 
 __all__ = [
     "ApiRequest",
@@ -11,4 +12,6 @@ __all__ = [
     "ConnectionDetailsProvider",
     "GameWakeApi",
     "GameWakeApplication",
+    "GameWakeHttpHandler",
+    "OperationDispatcher",
 ]

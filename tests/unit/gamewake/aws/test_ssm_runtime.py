@@ -1,9 +1,15 @@
 import json
+from types import SimpleNamespace
 
 import pytest
 
-from gamewake.aws import S3WorldStateStore, SsmCommandRunner, SsmPalworldTemplate
-from gamewake.worlds import Runtime, World, WorldStatus
+from gamewake.aws import (
+    Ec2SsmConnectionDetailsProvider,
+    S3WorldStateStore,
+    SsmCommandRunner,
+    SsmPalworldTemplate,
+)
+from gamewake.worlds import ConfigurationRevision, Runtime, World, WorldStatus
 
 
 def world(*, state_id="state-123", checksum="sha256:abc123"):
@@ -40,6 +46,8 @@ class FakeSsmClient:
         self.send_calls = []
         self.invocation_calls = []
         self.waiter = FakeWaiter()
+        self.parameters = {}
+        self.put_calls = []
 
     def send_command(self, **kwargs):
         self.send_calls.append(kwargs)
@@ -56,6 +64,18 @@ class FakeSsmClient:
             "StandardOutputContent": self.output,
             "StandardErrorContent": "failure details",
         }
+
+    def get_parameter(self, **kwargs):
+        if kwargs["Name"] not in self.parameters:
+            error = RuntimeError("missing")
+            error.response = {"Error": {"Code": "ParameterNotFound"}}
+            raise error
+        return {"Parameter": {"Value": self.parameters[kwargs["Name"]]}}
+
+    def put_parameter(self, **kwargs):
+        self.put_calls.append(kwargs)
+        self.parameters[kwargs["Name"]] = kwargs["Value"]
+        return {"Version": 1}
 
 
 def test_command_runner_uses_a_remote_idempotency_guard_and_waits_for_success():
@@ -125,6 +145,104 @@ def test_palworld_template_maps_domain_actions_to_idempotent_host_actions():
         ("i-123", "save", "op:save", ()),
         ("i-123", "stop", "op:stop", ()),
     ]
+
+
+class ConfigurationRepository:
+    def get_configuration(self, account_id, world_id, revision_id):
+        assert (account_id, world_id, revision_id) == (
+            "account-123",
+            "world-123",
+            "configuration-pending",
+        )
+        return ConfigurationRevision(
+            id=revision_id,
+            account_id=account_id,
+            world_id=world_id,
+            game_template_id="palworld:1",
+            number=2,
+            entries=(("server_name", "Palpagos"), ("enemy_drop_item_rate", 3.0)),
+            idempotency_key="config-2",
+            created_at=SimpleNamespace(),
+        )
+
+
+def test_palworld_template_publishes_per_world_configuration_and_secrets_before_applying():
+    runner = RecordingRunner()
+    client = FakeSsmClient()
+    target = world()
+    target = type(target)(
+        **{
+            **target.__dict__,
+            "pending_configuration_revision_id": "configuration-pending",
+        }
+    )
+    template = SsmPalworldTemplate(
+        runner,
+        repository=ConfigurationRepository(),
+        parameter_prefix="/gamewake/prod/worlds",
+        base_configuration={"port": 8211, "rest_api_port": 8212},
+        client=client,
+        password_factory=lambda: "generated-secret",
+    )
+
+    template.apply_configuration(target, Runtime("runtime-1", "i-123"), idempotency_key="op")
+
+    parameter_base = "/gamewake/prod/worlds/account-123/world-123"
+    config = json.loads(client.parameters[f"{parameter_base}/config"])
+    assert config == {
+        "port": 8211,
+        "rest_api_port": 8212,
+        "server_name": "Palpagos",
+        "enemy_drop_item_rate": 3.0,
+    }
+    assert client.parameters[f"{parameter_base}/server-password"] == "generated-secret"
+    assert client.parameters[f"{parameter_base}/admin-password"] == "generated-secret"
+    assert runner.calls == [
+        (
+            "i-123",
+            "apply-configuration",
+            "op",
+            (
+                f"{parameter_base}/config",
+                f"{parameter_base}/server-password",
+                f"{parameter_base}/admin-password",
+            ),
+        )
+    ]
+
+
+def test_connection_details_resolve_the_current_public_ip_and_per_world_secret():
+    ssm = FakeSsmClient()
+    ssm.parameters["/gamewake/prod/worlds/account-123/world-123/server-password"] = "grupo-secreto"
+
+    class Ec2:
+        def describe_instances(self, **kwargs):
+            assert kwargs == {"InstanceIds": ["i-123"]}
+            return {
+                "Reservations": [
+                    {
+                        "Instances": [
+                            {
+                                "InstanceId": "i-123",
+                                "PublicIpAddress": "203.0.113.10",
+                                "State": {"Name": "running"},
+                            }
+                        ]
+                    }
+                ]
+            }
+
+    provider = Ec2SsmConnectionDetailsProvider(
+        parameter_prefix="/gamewake/prod/worlds",
+        ec2_client=Ec2(),
+        ssm_client=ssm,
+    )
+
+    details = provider.issue(world(), viewer_user_id="owner")
+
+    assert details.host == "203.0.113.10"
+    assert details.port == 8211
+    assert details.password == "grupo-secreto"
 
 
 def test_world_state_store_restores_the_persisted_object_and_validates_upload():

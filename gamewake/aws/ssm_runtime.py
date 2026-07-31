@@ -4,9 +4,11 @@ import hashlib
 import json
 import shlex
 from collections.abc import Sequence
+from secrets import token_urlsafe
 from typing import Any
 
 from gamewake.worlds import Runtime, StoredWorldState, World
+from gamewake.worlds.contracts import WorldRepository
 
 _HOST_ACTIONS = frozenset(
     {
@@ -78,8 +80,26 @@ class SsmCommandRunner:
 class SsmPalworldTemplate:
     """Palworld lifecycle operations executed through the managed host agent."""
 
-    def __init__(self, runner: SsmCommandRunner) -> None:
+    def __init__(
+        self,
+        runner: SsmCommandRunner,
+        *,
+        repository: WorldRepository | None = None,
+        parameter_prefix: str | None = None,
+        base_configuration: dict[str, Any] | None = None,
+        client: Any | None = None,
+        password_factory: Any = token_urlsafe,
+    ) -> None:
         self._runner = runner
+        self._repository = repository
+        self._parameter_prefix = parameter_prefix.rstrip("/") if parameter_prefix else None
+        self._base_configuration = dict(base_configuration or {})
+        if client is None and repository is not None:
+            import boto3
+
+            client = boto3.client("ssm")
+        self._client = client
+        self._password_factory = password_factory
 
     def apply_configuration(
         self,
@@ -88,12 +108,65 @@ class SsmPalworldTemplate:
         *,
         idempotency_key: str,
     ) -> None:
+        arguments = (world.configuration_revision_id,)
+        if self._repository is not None:
+            revision_id = world.pending_configuration_revision_id or world.configuration_revision_id
+            revision = self._repository.get_configuration(
+                world.account_id,
+                world.id,
+                revision_id,
+            )
+            parameter_base = self._world_parameter_base(world)
+            config_parameter = f"{parameter_base}/config"
+            server_password_parameter = f"{parameter_base}/server-password"
+            admin_password_parameter = f"{parameter_base}/admin-password"
+            configuration = {**self._base_configuration, **revision.values}
+            self._client.put_parameter(
+                Name=config_parameter,
+                Description="Effective non-secret GameWake World configuration",
+                Type="String",
+                Value=json.dumps(configuration, separators=(",", ":"), sort_keys=True),
+                Overwrite=True,
+            )
+            self._ensure_secret(server_password_parameter)
+            self._ensure_secret(admin_password_parameter)
+            arguments = (
+                config_parameter,
+                server_password_parameter,
+                admin_password_parameter,
+            )
         self._runner.run(
             runtime.provider_reference,
             "apply-configuration",
             idempotency_key=idempotency_key,
-            arguments=(world.configuration_revision_id,),
+            arguments=arguments,
         )
+
+    def _world_parameter_base(self, world: World) -> str:
+        if self._parameter_prefix is None:
+            raise RuntimeError("per-World parameter prefix is not configured")
+        return f"{self._parameter_prefix}/{world.account_id}/{world.id}"
+
+    def _ensure_secret(self, name: str) -> None:
+        try:
+            self._client.get_parameter(Name=name, WithDecryption=False)
+            return
+        except Exception as error:
+            code = getattr(error, "response", {}).get("Error", {}).get("Code")
+            if code != "ParameterNotFound":
+                raise
+        try:
+            self._client.put_parameter(
+                Name=name,
+                Description="GameWake managed per-World Palworld credential",
+                Type="SecureString",
+                Value=self._password_factory(),
+                Overwrite=False,
+            )
+        except Exception as error:
+            code = getattr(error, "response", {}).get("Error", {}).get("Code")
+            if code != "ParameterAlreadyExists":
+                raise
 
     def start(
         self,

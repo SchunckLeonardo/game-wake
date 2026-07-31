@@ -15,6 +15,10 @@ region=${AWS_REGION:-us-east-1}
 : "${DISCORD_WEBHOOK_URL:?Defina DISCORD_WEBHOOK_URL no ambiente ou .env}"
 : "${PALWORLD_SERVER_PASSWORD:?Defina PALWORLD_SERVER_PASSWORD no ambiente ou .env}"
 : "${PALWORLD_ADMIN_PASSWORD:?Defina PALWORLD_ADMIN_PASSWORD no ambiente ou .env}"
+: "${DISCORD_CLIENT_SECRET:?Defina DISCORD_CLIENT_SECRET no ambiente ou .env}"
+: "${ABACATEPAY_API_KEY:?Defina ABACATEPAY_API_KEY no ambiente ou .env}"
+: "${ABACATEPAY_WEBHOOK_SECRET:?Defina ABACATEPAY_WEBHOOK_SECRET no ambiente ou .env}"
+: "${ABACATEPAY_PUBLIC_KEY:?Defina ABACATEPAY_PUBLIC_KEY no ambiente ou .env}"
 
 if [[ $PALWORLD_SERVER_PASSWORD == "$PALWORLD_ADMIN_PASSWORD" ]]; then
   echo "As senhas de jogador e administrador devem ser diferentes." >&2
@@ -50,5 +54,9 @@ put_secret() {
 put_secret "$parameter_path/discord/webhook-url" "$DISCORD_WEBHOOK_URL"
 put_secret "$parameter_path/palworld/server-password" "$PALWORLD_SERVER_PASSWORD"
 put_secret "$parameter_path/palworld/admin-password" "$PALWORLD_ADMIN_PASSWORD"
+put_secret "$parameter_path/gamewake/discord-client-secret" "$DISCORD_CLIENT_SECRET"
+put_secret "$parameter_path/gamewake/abacatepay-api-key" "$ABACATEPAY_API_KEY"
+put_secret "$parameter_path/gamewake/abacatepay-webhook-secret" "$ABACATEPAY_WEBHOOK_SECRET"
+put_secret "$parameter_path/gamewake/abacatepay-public-key" "$ABACATEPAY_PUBLIC_KEY"
 
 echo "Segredos atualizados sem exibir valores."

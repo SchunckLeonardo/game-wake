@@ -17,6 +17,14 @@ discord_application_id = "123456789012345678"
 discord_public_key     = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 discord_guild_id       = "123456789012345678"
 
+# Origem publica exata da Console e produtos avulsos configurados na AbacatePay v2.
+gamewake_console_url = "https://app.seu-dominio.com"
+abacatepay_packages = [
+  { id = "credits-25", amount = 25, product_id = "prod_abc123" },
+  { id = "credits-50", amount = 50, product_id = "prod_def456" },
+  { id = "credits-100", amount = 100, product_id = "prod_ghi789" },
+]
+
 # Pelo menos uma das listas deve autorizar alguem.
 discord_allowed_user_ids = [
   "123456789012345678",
