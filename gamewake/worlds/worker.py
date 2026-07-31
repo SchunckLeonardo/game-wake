@@ -1,6 +1,7 @@
 from dataclasses import replace
 
 from .contracts import (
+    BackupStore,
     GameTemplateResolver,
     RuntimeProvider,
     WorldRepository,
@@ -9,7 +10,9 @@ from .contracts import (
 from .model import (
     OperationPhase,
     OperationStatus,
+    OperationType,
     Runtime,
+    StoredWorldState,
     WorldOperation,
     WorldStatus,
 )
@@ -23,11 +26,13 @@ class WorldOperationWorker:
         runtime_provider: RuntimeProvider,
         state_store: WorldStateStore,
         game_templates: GameTemplateResolver,
+        backup_store: BackupStore | None = None,
     ) -> None:
         self._repository = repository
         self._runtime_provider = runtime_provider
         self._state_store = state_store
         self._game_templates = game_templates
+        self._backup_store = backup_store
 
     def run_to_completion(
         self,
@@ -38,6 +43,7 @@ class WorldOperationWorker:
             operation = self._repository.get_operation(account_id, operation_id)
             if operation.status in {
                 OperationStatus.SUCCEEDED,
+                OperationStatus.CANCELLED,
                 OperationStatus.NEEDS_ATTENTION,
             }:
                 return operation
@@ -47,6 +53,9 @@ class WorldOperationWorker:
         operation = self._repository.get_operation(account_id, operation_id)
         world = self._repository.get(account_id, operation.world_id)
         template = self._game_templates.resolve(world.game_template_id)
+
+        if operation.operation_type is OperationType.SLEEP:
+            return self._advance_sleep(operation, world, template)
 
         if operation.phase is OperationPhase.REQUESTED:
             return self._move_to_phase(operation, OperationPhase.PROVISIONING_RUNTIME)
@@ -66,6 +75,7 @@ class WorldOperationWorker:
             updated_world = replace(
                 world,
                 runtime_id=runtime.id,
+                runtime_provider_reference=runtime.provider_reference,
                 version=world.version + 1,
             )
             self._repository.save_operation(
@@ -132,6 +142,137 @@ class WorldOperationWorker:
 
         raise RuntimeError(f"unsupported operation phase: {operation.phase}")
 
+    def _advance_sleep(self, operation, world, template) -> WorldOperation:
+        runtime = self._runtime_for(operation)
+        if operation.phase is OperationPhase.REQUESTED:
+            return self._move_to_phase(operation, OperationPhase.CHECKING_PLAYERS)
+
+        if operation.phase is OperationPhase.CHECKING_PLAYERS:
+            if template.player_count(world, runtime) > 0 and not operation.force:
+                cancelled = replace(
+                    operation,
+                    status=OperationStatus.CANCELLED,
+                    phase=OperationPhase.COMPLETE,
+                    version=operation.version + 1,
+                )
+                online = replace(
+                    world,
+                    status=WorldStatus.ONLINE,
+                    version=world.version + 1,
+                )
+                self._repository.save_operation(
+                    cancelled,
+                    expected_operation_version=operation.version,
+                    world=online,
+                    expected_world_version=world.version,
+                )
+                return cancelled
+            return self._move_to_phase(operation, OperationPhase.SAVING_GAME)
+
+        if operation.phase is OperationPhase.SAVING_GAME:
+            template.save(
+                world,
+                runtime,
+                idempotency_key=self._effect_key(operation, "save"),
+            )
+            return self._move_to_phase(operation, OperationPhase.STOPPING_GAME)
+
+        if operation.phase is OperationPhase.STOPPING_GAME:
+            template.stop(
+                world,
+                runtime,
+                idempotency_key=self._effect_key(operation, "stop"),
+            )
+            return self._move_to_phase(operation, OperationPhase.PERSISTING_WORLD)
+
+        if operation.phase is OperationPhase.PERSISTING_WORLD:
+            state = self._state_store.persist_and_validate(
+                world,
+                runtime,
+                idempotency_key=self._effect_key(operation, "persist"),
+            )
+            if not state.validated:
+                return self._needs_attention(operation, world)
+            persisted = replace(
+                operation,
+                phase=OperationPhase.CREATING_BACKUP,
+                stored_state_id=state.id,
+                stored_state_checksum=state.checksum,
+                version=operation.version + 1,
+            )
+            self._repository.save_operation(
+                persisted,
+                expected_operation_version=operation.version,
+            )
+            return persisted
+
+        if operation.phase is OperationPhase.CREATING_BACKUP:
+            if self._backup_store is None:
+                raise RuntimeError("safe sleep requires a Backup Store")
+            backup = self._backup_store.create_automatic(
+                world,
+                self._stored_state_for(operation),
+                idempotency_key=self._effect_key(operation, "backup"),
+            )
+            backed_up = replace(
+                operation,
+                phase=OperationPhase.RELEASING_RUNTIME,
+                backup_id=backup.id,
+                version=operation.version + 1,
+            )
+            self._repository.save_operation(
+                backed_up,
+                expected_operation_version=operation.version,
+            )
+            return backed_up
+
+        if operation.phase is OperationPhase.RELEASING_RUNTIME:
+            self._runtime_provider.release(
+                runtime,
+                idempotency_key=self._effect_key(operation, "release"),
+            )
+            completed = replace(
+                operation,
+                status=OperationStatus.SUCCEEDED,
+                phase=OperationPhase.COMPLETE,
+                version=operation.version + 1,
+            )
+            sleeping = replace(
+                world,
+                status=WorldStatus.SLEEPING,
+                runtime_id=None,
+                runtime_provider_reference=None,
+                version=world.version + 1,
+            )
+            self._repository.save_operation(
+                completed,
+                expected_operation_version=operation.version,
+                world=sleeping,
+                expected_world_version=world.version,
+            )
+            return completed
+
+        raise RuntimeError(f"unsupported sleep phase: {operation.phase}")
+
+    def _needs_attention(self, operation, world) -> WorldOperation:
+        failed = replace(
+            operation,
+            status=OperationStatus.NEEDS_ATTENTION,
+            version=operation.version + 1,
+        )
+        attention = replace(
+            world,
+            status=WorldStatus.NEEDS_ATTENTION,
+            version=world.version + 1,
+        )
+        self._repository.save_operation(
+            failed,
+            expected_operation_version=operation.version,
+            world=attention,
+            expected_world_version=world.version,
+        )
+        return failed
+
     def _move_to_phase(
         self,
         operation: WorldOperation,
@@ -156,6 +297,16 @@ class WorldOperationWorker:
         return Runtime(
             id=operation.runtime_id,
             provider_reference=operation.runtime_provider_reference,
+        )
+
+    @staticmethod
+    def _stored_state_for(operation: WorldOperation) -> StoredWorldState:
+        if operation.stored_state_id is None or operation.stored_state_checksum is None:
+            raise RuntimeError("the operation has no validated stored state")
+        return StoredWorldState(
+            id=operation.stored_state_id,
+            checksum=operation.stored_state_checksum,
+            validated=True,
         )
 
     @staticmethod

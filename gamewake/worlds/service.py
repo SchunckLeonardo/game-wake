@@ -44,6 +44,7 @@ class Worlds:
             runtime_profile_id=runtime_profile_id,
             status=WorldStatus.SLEEPING,
             runtime_id=None,
+            runtime_provider_reference=None,
             version=1,
         )
         self._repository.create(world)
@@ -97,6 +98,49 @@ class Worlds:
             replace(
                 world,
                 status=WorldStatus.WAKING,
+                version=world.version + 1,
+            ),
+            operation,
+            expected_world_version=world.version,
+        )
+
+    def request_sleep(
+        self,
+        account_id: str,
+        world_id: str,
+        *,
+        actor_user_id: str,
+        idempotency_key: str,
+        force: bool = False,
+    ) -> WorldOperation:
+        permission = Permission.FORCE_SLEEP_WORLD if force else Permission.SLEEP_EMPTY_WORLD
+        if not self._access.authorize(
+            account_id,
+            user_id=actor_user_id,
+            permission=permission,
+            world_id=world_id,
+        ):
+            raise PermissionDeniedError("the User cannot sleep this World")
+        world = self._repository.get(account_id, world_id)
+        if world.status is not WorldStatus.ONLINE:
+            raise ValueError("only an Online World can begin safe sleep")
+        operation = WorldOperation(
+            id=str(uuid4()),
+            account_id=account_id,
+            world_id=world_id,
+            operation_type=OperationType.SLEEP,
+            status=OperationStatus.PENDING,
+            phase=OperationPhase.REQUESTED,
+            idempotency_key=idempotency_key,
+            version=1,
+            runtime_id=world.runtime_id,
+            runtime_provider_reference=world.runtime_provider_reference,
+            force=force,
+        )
+        return self._repository.begin_operation(
+            replace(
+                world,
+                status=WorldStatus.GOING_TO_SLEEP,
                 version=world.version + 1,
             ),
             operation,

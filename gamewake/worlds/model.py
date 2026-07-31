@@ -20,6 +20,7 @@ class OperationStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     SUCCEEDED = "succeeded"
+    CANCELLED = "cancelled"
     NEEDS_ATTENTION = "needs_attention"
 
 
@@ -31,6 +32,9 @@ class OperationPhase(StrEnum):
     STARTING_GAME = "starting_game"
     CHECKING_GAME_HEALTH = "checking_game_health"
     ONLINE = "online"
+    CHECKING_PLAYERS = "checking_players"
+    SAVING_GAME = "saving_game"
+    STOPPING_GAME = "stopping_game"
     PERSISTING_WORLD = "persisting_world"
     CREATING_BACKUP = "creating_backup"
     RELEASING_RUNTIME = "releasing_runtime"
@@ -47,6 +51,7 @@ class World:
     runtime_profile_id: str
     status: WorldStatus
     runtime_id: str | None
+    runtime_provider_reference: str | None
     version: int
 
 
@@ -54,6 +59,22 @@ class World:
 class Runtime:
     id: str
     provider_reference: str
+
+
+@dataclass(frozen=True)
+class StoredWorldState:
+    id: str
+    checksum: str
+    validated: bool
+
+
+@dataclass(frozen=True)
+class Backup:
+    id: str
+    account_id: str
+    world_id: str
+    state_id: str
+    checksum: str
 
 
 @dataclass(frozen=True)
@@ -68,3 +89,7 @@ class WorldOperation:
     version: int
     runtime_id: str | None = None
     runtime_provider_reference: str | None = None
+    force: bool = False
+    stored_state_id: str | None = None
+    stored_state_checksum: str | None = None
+    backup_id: str | None = None

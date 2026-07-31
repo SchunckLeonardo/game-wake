@@ -2,7 +2,7 @@ from typing import Protocol
 
 from gamewake.accounts import Permission
 
-from .model import Runtime, World, WorldOperation
+from .model import Backup, Runtime, StoredWorldState, World, WorldOperation
 
 
 class AccessControl(Protocol):
@@ -52,6 +52,8 @@ class WorldRepository(Protocol):
 class RuntimeProvider(Protocol):
     def provision(self, world: World, *, idempotency_key: str) -> Runtime: ...
 
+    def release(self, runtime: Runtime, *, idempotency_key: str) -> None: ...
+
 
 class WorldStateStore(Protocol):
     def restore(
@@ -61,6 +63,14 @@ class WorldStateStore(Protocol):
         *,
         idempotency_key: str,
     ) -> None: ...
+
+    def persist_and_validate(
+        self,
+        world: World,
+        runtime: Runtime,
+        *,
+        idempotency_key: str,
+    ) -> StoredWorldState: ...
 
 
 class GameTemplate(Protocol):
@@ -82,6 +92,34 @@ class GameTemplate(Protocol):
 
     def is_healthy(self, world: World, runtime: Runtime) -> bool: ...
 
+    def player_count(self, world: World, runtime: Runtime) -> int: ...
+
+    def save(
+        self,
+        world: World,
+        runtime: Runtime,
+        *,
+        idempotency_key: str,
+    ) -> None: ...
+
+    def stop(
+        self,
+        world: World,
+        runtime: Runtime,
+        *,
+        idempotency_key: str,
+    ) -> None: ...
+
 
 class GameTemplateResolver(Protocol):
     def resolve(self, game_template_id: str) -> GameTemplate: ...
+
+
+class BackupStore(Protocol):
+    def create_automatic(
+        self,
+        world: World,
+        state: StoredWorldState,
+        *,
+        idempotency_key: str,
+    ) -> Backup: ...
