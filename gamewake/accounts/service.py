@@ -1,3 +1,4 @@
+from dataclasses import replace
 from uuid import uuid4
 
 from .model import (
@@ -9,6 +10,7 @@ from .model import (
     PermissionDeniedError,
     PredefinedRole,
 )
+from .policy import Permission, permissions_for
 from .repository import AccountRepository, AccountSnapshot
 
 
@@ -32,6 +34,56 @@ class Accounts:
 
     def list_invitations(self, account_id: str) -> list[Invitation]:
         return list(self._repository.get(account_id).invitations)
+
+    def authorize(
+        self,
+        account_id: str,
+        *,
+        user_id: str,
+        permission: Permission,
+    ) -> bool:
+        snapshot = self._repository.get(account_id)
+        membership = next(
+            (
+                membership
+                for membership in snapshot.memberships
+                if membership.user_id == user_id
+            ),
+            None,
+        )
+        return membership is not None and permission in permissions_for(membership.roles)
+
+    def assign_predefined_role(
+        self,
+        account_id: str,
+        *,
+        actor_user_id: str,
+        membership_id: str,
+        role: PredefinedRole,
+    ) -> Membership:
+        if not self.authorize(
+            account_id,
+            user_id=actor_user_id,
+            permission=Permission.MANAGE_ROLES,
+        ):
+            raise PermissionDeniedError("assigning roles requires role management permission")
+
+        snapshot = self._repository.get(account_id)
+        membership = next(
+            membership
+            for membership in snapshot.memberships
+            if membership.id == membership_id
+        )
+        updated = replace(membership, roles=membership.roles | {role})
+        memberships = tuple(
+            updated if item.id == membership_id else item
+            for item in snapshot.memberships
+        )
+        self._repository.save(
+            replace(snapshot, memberships=memberships),
+            expected_version=snapshot.version,
+        )
+        return updated
 
     def invite_members(
         self,

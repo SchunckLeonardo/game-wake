@@ -10,6 +10,7 @@ from .model import (
     PermissionDeniedError,
     PredefinedRole,
 )
+from .policy import Permission
 from .service import Accounts
 
 __all__ = [
@@ -20,6 +21,7 @@ __all__ = [
     "InvitationStatus",
     "LastOwnerRemovalError",
     "Membership",
+    "Permission",
     "PermissionDeniedError",
     "PredefinedRole",
 ]
