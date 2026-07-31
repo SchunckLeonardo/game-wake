@@ -10,6 +10,7 @@ from .model import (
     Runtime,
     StoredWorldState,
     World,
+    WorldExport,
     WorldOperation,
 )
 
@@ -31,6 +32,8 @@ class WorldRepository(Protocol):
     def get(self, account_id: str, world_id: str) -> World: ...
 
     def save(self, world: World, expected_version: int) -> None: ...
+
+    def delete(self, account_id: str, world_id: str) -> None: ...
 
     def begin_operation(
         self,
@@ -159,3 +162,56 @@ class BackupStore(Protocol):
         *,
         idempotency_key: str,
     ) -> Backup: ...
+
+
+class WorldArchiveStore(BackupStore, Protocol):
+    def create_manual(
+        self,
+        world: World,
+        state: StoredWorldState,
+        *,
+        idempotency_key: str,
+    ) -> Backup: ...
+
+    def create_restore_point(
+        self,
+        world: World,
+        state: StoredWorldState,
+        *,
+        idempotency_key: str,
+    ) -> Backup: ...
+
+    def create_final(
+        self,
+        world: World,
+        state: StoredWorldState,
+        *,
+        idempotency_key: str,
+    ) -> Backup: ...
+
+    def list_backups(self, account_id: str, world_id: str) -> tuple[Backup, ...]: ...
+
+    def restore(
+        self,
+        world: World,
+        backup: Backup,
+        *,
+        idempotency_key: str,
+    ) -> StoredWorldState: ...
+
+    def create_export(
+        self,
+        world: World,
+        state: StoredWorldState,
+        configuration: ConfigurationRevision,
+        *,
+        idempotency_key: str,
+    ) -> WorldExport: ...
+
+    def delete_world_data(
+        self,
+        account_id: str,
+        world_id: str,
+        *,
+        idempotency_key: str,
+    ) -> None: ...

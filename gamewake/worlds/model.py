@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -9,6 +11,14 @@ class WorldStatus(StrEnum):
     ONLINE = "online"
     GOING_TO_SLEEP = "going_to_sleep"
     NEEDS_ATTENTION = "needs_attention"
+    PENDING_DELETION = "pending_deletion"
+
+
+class BackupKind(StrEnum):
+    AUTOMATIC = "automatic"
+    MANUAL = "manual"
+    RESTORE_POINT = "restore_point"
+    FINAL = "final"
 
 
 class OperationType(StrEnum):
@@ -59,6 +69,9 @@ class World:
     stored_state_id: str | None
     stored_state_checksum: str | None
     version: int
+    deletion_scheduled_for: datetime | None = None
+    final_backup_id: str | None = None
+    applied_data_operations: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -81,6 +94,29 @@ class Backup:
     world_id: str
     state_id: str
     checksum: str
+    kind: BackupKind = BackupKind.AUTOMATIC
+    size_bytes: int = 0
+    created_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class WorldExportManifest:
+    format_version: int
+    game_template_id: str
+    configuration_revision_id: str
+    configuration: tuple[tuple[str, ConfigurationValue], ...]
+    world_state_id: str
+    world_state_checksum: str
+
+
+@dataclass(frozen=True)
+class WorldExport:
+    id: str
+    account_id: str
+    world_id: str
+    download_url: str
+    manifest: WorldExportManifest
+    created_at: datetime
 
 
 ConfigurationValue = str | int | float | bool

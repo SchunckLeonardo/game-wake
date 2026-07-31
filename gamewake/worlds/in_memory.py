@@ -27,6 +27,26 @@ class InMemoryWorldRepository:
             raise RuntimeError("World was changed concurrently")
         self._worlds[key] = world
 
+    def delete(self, account_id: str, world_id: str) -> None:
+        with self._lock:
+            key = (account_id, world_id)
+            del self._worlds[key]
+            operation_ids = [
+                operation.id
+                for operation in self._operations.values()
+                if operation.account_id == account_id and operation.world_id == world_id
+            ]
+            for operation_id in operation_ids:
+                del self._operations[operation_id]
+            configuration_ids = [
+                revision.id
+                for revision in self._configurations.values()
+                if revision.account_id == account_id and revision.world_id == world_id
+            ]
+            for revision_id in configuration_ids:
+                del self._configurations[revision_id]
+            self._active_operations.pop(key, None)
+
     def begin_operation(
         self,
         world: World,
