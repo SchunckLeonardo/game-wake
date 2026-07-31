@@ -17,15 +17,25 @@ from .model import (
     User,
 )
 from .policy import CustomRole, Permission
+from .security import (
+    ActivityAction,
+    ActivityEvent,
+    InMemorySecurityNotifier,
+    SensitiveActionConfirmation,
+    SensitiveActionConfirmationError,
+)
 from .service import Accounts
 
 __all__ = [
     "Account",
     "Accounts",
+    "ActivityAction",
+    "ActivityEvent",
     "CustomRole",
     "DiscordGuildAlreadyLinkedError",
     "IdentityProvider",
     "InMemoryAccountRepository",
+    "InMemorySecurityNotifier",
     "Invitation",
     "InvitationStatus",
     "LastOwnerRemovalError",
@@ -36,5 +46,7 @@ __all__ = [
     "PredefinedRole",
     "ResourceScope",
     "RoleAssignment",
+    "SensitiveActionConfirmation",
+    "SensitiveActionConfirmationError",
     "User",
 ]

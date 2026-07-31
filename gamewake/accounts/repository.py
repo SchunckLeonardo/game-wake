@@ -3,6 +3,7 @@ from typing import Protocol
 
 from .model import Account, IdentityProvider, Invitation, LinkedIdentity, Membership, User
 from .policy import CustomRole
+from .security import ActivityEvent
 
 
 @dataclass(frozen=True)
@@ -11,6 +12,7 @@ class AccountSnapshot:
     memberships: tuple[Membership, ...]
     invitations: tuple[Invitation, ...]
     custom_roles: tuple[CustomRole, ...]
+    activity_events: tuple[ActivityEvent, ...]
     version: int
 
 

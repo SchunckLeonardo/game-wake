@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 import pytest
 
 from gamewake.accounts import (
@@ -7,6 +9,7 @@ from gamewake.accounts import (
     LastOwnerRemovalError,
     PermissionDeniedError,
     PredefinedRole,
+    SensitiveActionConfirmation,
 )
 
 
@@ -25,9 +28,19 @@ def test_the_last_owner_cannot_be_removed_from_an_account():
     accounts = Accounts(InMemoryAccountRepository())
     account = accounts.create_account(name="Sexta com os amigos", owner_user_id="user-owner")
     [owner] = accounts.list_memberships(account.id)
+    now = datetime.now(UTC)
 
     with pytest.raises(LastOwnerRemovalError):
-        accounts.remove_membership(account.id, owner.id)
+        accounts.remove_membership(
+            account.id,
+            owner.id,
+            actor_user_id="user-owner",
+            confirmation=SensitiveActionConfirmation(
+                actor_user_id="user-owner",
+                reauthenticated_at=now,
+                confirmed_resource_name=account.name,
+            ),
+        )
 
     assert accounts.list_memberships(account.id) == [owner]
 
