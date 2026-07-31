@@ -73,6 +73,7 @@ class GameWakeApplication:
         discord_guild_id: str,
         discord_user_id: str,
         display_name: str,
+        discord_channel_id: str | None = None,
     ) -> tuple[Account, User]:
         user = self.accounts.sign_in_with_discord(
             discord_user_id=discord_user_id,
@@ -84,6 +85,7 @@ class GameWakeApplication:
                 name=f"Grupo de {display_name}",
                 owner_user_id=user.id,
                 discord_guild_id=discord_guild_id,
+                discord_channel_id=discord_channel_id,
             )
         return account, user
 

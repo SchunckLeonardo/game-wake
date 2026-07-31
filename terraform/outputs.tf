@@ -29,6 +29,7 @@ output "parameter_store_names" {
     admin_password              = aws_ssm_parameter.admin_password.name
     runtime_status              = aws_ssm_parameter.server_status.name
     discord_client_secret       = aws_ssm_parameter.discord_client_secret.name
+    discord_bot_token           = aws_ssm_parameter.discord_bot_token.name
     abacatepay_api_key          = aws_ssm_parameter.abacatepay_api_key.name
     abacatepay_webhook_secret   = aws_ssm_parameter.abacatepay_webhook_secret.name
     abacatepay_public_key       = aws_ssm_parameter.abacatepay_public_key.name
@@ -75,6 +76,8 @@ output "gamewake_control_plane" {
     runtime_launch_template_id = aws_launch_template.gamewake_runtime.id
     world_data_bucket          = aws_s3_bucket.world_data.id
     reconciliation_schedule    = aws_scheduler_schedule.reconciliation.arn
+    operations_dashboard       = aws_cloudwatch_dashboard.gamewake.dashboard_name
+    operations_alert_topic_arn = aws_sns_topic.operations_alerts.arn
   }
 }
 

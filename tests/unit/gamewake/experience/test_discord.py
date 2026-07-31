@@ -40,6 +40,7 @@ def test_start_command_bootstraps_the_guild_account_with_the_caller_as_owner():
         DiscordInteraction(
             id="start-1",
             guild_id="guild-new",
+            channel_id="channel-gamewake",
             discord_user_id="discord-owner",
             display_name="Leonardo",
             command="comecar",
@@ -48,6 +49,7 @@ def test_start_command_bootstraps_the_guild_account_with_the_caller_as_owner():
 
     account = accounts.find_account_by_discord_guild("guild-new")
     assert account is not None
+    assert account.discord_channel_id == "channel-gamewake"
     owner = accounts.sign_in_with_discord(
         discord_user_id="discord-owner",
         display_name="Leonardo",

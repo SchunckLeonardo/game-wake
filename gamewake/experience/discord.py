@@ -18,6 +18,7 @@ class DiscordInteraction:
     discord_user_id: str
     display_name: str
     command: str
+    channel_id: str | None = None
     selected_users: tuple[DiscordUser, ...] = ()
     world_id: str | None = None
 
@@ -50,6 +51,7 @@ class DiscordCommandController:
                     discord_guild_id=interaction.guild_id,
                     discord_user_id=interaction.discord_user_id,
                     display_name=interaction.display_name,
+                    discord_channel_id=interaction.channel_id,
                 )
                 return DiscordCommandResponse(
                     content=(
@@ -323,6 +325,7 @@ class DiscordInteractionAdapter:
             DiscordInteraction(
                 id=str(payload.get("id") or "unknown"),
                 guild_id=str(payload.get("guild_id") or ""),
+                channel_id=str(payload.get("channel_id") or "") or None,
                 discord_user_id=str(member_user.get("id") or ""),
                 display_name=str(
                     member_user.get("global_name") or member_user.get("username") or "Discord User"

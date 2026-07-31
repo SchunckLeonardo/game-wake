@@ -449,6 +449,21 @@ variable "cloudwatch_log_retention_days" {
   }
 }
 
+variable "operations_alarm_email" {
+  description = "Email opcional que recebe alarmes operacionais da Closed Beta via SNS. A assinatura precisa ser confirmada."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition = (
+      var.operations_alarm_email == null ||
+      can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.operations_alarm_email))
+    )
+    error_message = "operations_alarm_email deve ser null ou um email valido."
+  }
+}
+
 variable "lambda_timeout_seconds" {
   description = "Timeout curto para respeitar a janela de resposta do Discord."
   type        = number

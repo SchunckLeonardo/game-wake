@@ -131,6 +131,13 @@ class WorldOperationWorker:
 
     def advance(self, account_id: str, operation_id: str) -> WorldOperation:
         operation = self._repository.get_operation(account_id, operation_id)
+        if operation.status in {
+            OperationStatus.SUCCEEDED,
+            OperationStatus.CANCELLED,
+            OperationStatus.FAILED,
+            OperationStatus.NEEDS_ATTENTION,
+        }:
+            return operation
         world = self._repository.get(account_id, operation.world_id)
         template = self._game_templates.resolve(world.game_template_id)
 

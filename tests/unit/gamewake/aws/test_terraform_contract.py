@@ -34,6 +34,8 @@ def test_standard_workflow_invokes_the_worker_with_structured_logs():
     assert "WORLD_DATA_BUCKET" in orchestration
     assert 'fileset("${path.module}/../gamewake/persistence/sql", "*.sql")' in orchestration
     assert "0001_initial.sql" not in orchestration
+    assert "DISCORD_BOT_TOKEN_PARAMETER_NAME" in orchestration
+    assert "ReadDiscordNotificationToken" in orchestration
 
 
 def test_world_data_is_kms_encrypted_versioned_and_never_public():
@@ -84,6 +86,7 @@ def test_public_api_uses_kms_sessions_exact_cors_and_managed_provider_secrets():
     assert '"s3:GetObject"' in api
     assert '"s3:PutObject"' in api
     assert 'resource "aws_ssm_parameter" "discord_client_secret"' in parameters
+    assert 'resource "aws_ssm_parameter" "discord_bot_token"' in parameters
     assert 'resource "aws_ssm_parameter" "abacatepay_api_key"' in parameters
 
 
@@ -138,3 +141,7 @@ def test_closed_beta_observability_covers_api_worker_database_and_dead_letters()
     assert 'resource "aws_cloudwatch_metric_alarm" "operation_worker_errors"' in cloudwatch
     assert 'resource "aws_cloudwatch_metric_alarm" "operations_dead_letters"' in cloudwatch
     assert 'resource "aws_cloudwatch_metric_alarm" "aurora_capacity"' in cloudwatch
+    assert 'resource "aws_sns_topic" "operations_alerts"' in cloudwatch
+    assert 'resource "aws_sns_topic_subscription" "operations_email"' in cloudwatch
+    assert "alarm_actions" in cloudwatch
+    assert "[aws_sns_topic.operations_alerts.arn]" in cloudwatch

@@ -91,6 +91,28 @@ class Billing:
         return SimpleNamespace(id="storage-charge-1")
 
 
+class Repository:
+    def get_operation(self, account_id, operation_id):
+        return SimpleNamespace(id=operation_id, world_id="world-1")
+
+    def get(self, account_id, world_id):
+        return SimpleNamespace(id=world_id)
+
+
+class AccountRepository:
+    def get(self, account_id):
+        return SimpleNamespace(account=SimpleNamespace(id=account_id))
+
+
+class Notifier:
+    def __init__(self):
+        self.calls = []
+
+    def notify(self, account, world, operation):
+        self.calls.append((account.id, world.id, operation.id))
+        return True
+
+
 def test_worker_composition_source_includes_persistent_runtime_usage_billing():
     source = Path(gamewake_worker.__file__).read_text()
 
@@ -108,6 +130,9 @@ def services(orchestrator=None):
         storage=Storage(),
         billing=Billing(),
         storage_rate_per_gib_month=Decimal("2.00"),
+        world_repository=Repository(),
+        account_repository=AccountRepository(),
+        notifier=Notifier(),
         orchestrator_factory=lambda arn: orchestrator,
     )
 
@@ -149,6 +174,24 @@ def test_default_action_advances_exactly_one_world_operation_phase():
         "phase": "starting_game",
         "terminal": False,
     }
+
+
+def test_terminal_operation_notifies_the_accounts_discord_channel():
+    composed = services()
+    composed.worker.advance = lambda account_id, operation_id: SimpleNamespace(
+        status=OperationStatus.SUCCEEDED,
+        phase=OperationPhase.COMPLETE,
+        world_id="world-1",
+    )
+
+    result = gamewake_worker.handle_event(
+        {"account_id": "account-1", "operation_id": "operation-1"},
+        services=composed,
+    )
+
+    assert result["terminal"] is True
+    assert result["notified"] is True
+    assert composed.notifier.calls == [("account-1", "world-1", "operation-1")]
 
 
 def test_monitor_sessions_dispatches_safe_sleep_operations():

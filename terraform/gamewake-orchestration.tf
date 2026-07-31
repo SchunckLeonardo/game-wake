@@ -132,6 +132,13 @@ data "aws_iam_policy_document" "operation_worker" {
   }
 
   statement {
+    sid       = "ReadDiscordNotificationToken"
+    effect    = "Allow"
+    actions   = ["ssm:GetParameter"]
+    resources = [aws_ssm_parameter.discord_bot_token.arn]
+  }
+
+  statement {
     sid    = "ManageWorldData"
     effect = "Allow"
     actions = [
@@ -203,16 +210,17 @@ resource "aws_lambda_function" "operation_worker" {
 
   environment {
     variables = {
-      AURORA_CLUSTER_ARN              = aws_rds_cluster.gamewake.arn
-      AURORA_DATABASE_NAME            = var.aurora_database_name
-      AURORA_SECRET_ARN               = aws_rds_cluster.gamewake.master_user_secret[0].secret_arn
-      GAMEWAKE_WORLD_PARAMETER_PREFIX = "${local.parameter_path}/gamewake/worlds"
-      PALWORLD_BASE_CONFIG_JSON       = local.palworld_config_payload
-      RUNTIME_LAUNCH_TEMPLATE_ID      = aws_launch_template.gamewake_runtime.id
-      STORAGE_ALLOWANCE_BYTES         = tostring(var.storage_allowance_bytes)
-      STORAGE_GRACE_DAYS              = tostring(var.storage_grace_days)
-      STORAGE_RATE_PER_GIB_MONTH_BRL  = tostring(var.storage_rate_per_gib_month_brl)
-      WORLD_DATA_BUCKET               = aws_s3_bucket.world_data.id
+      AURORA_CLUSTER_ARN               = aws_rds_cluster.gamewake.arn
+      AURORA_DATABASE_NAME             = var.aurora_database_name
+      AURORA_SECRET_ARN                = aws_rds_cluster.gamewake.master_user_secret[0].secret_arn
+      DISCORD_BOT_TOKEN_PARAMETER_NAME = aws_ssm_parameter.discord_bot_token.name
+      GAMEWAKE_WORLD_PARAMETER_PREFIX  = "${local.parameter_path}/gamewake/worlds"
+      PALWORLD_BASE_CONFIG_JSON        = local.palworld_config_payload
+      RUNTIME_LAUNCH_TEMPLATE_ID       = aws_launch_template.gamewake_runtime.id
+      STORAGE_ALLOWANCE_BYTES          = tostring(var.storage_allowance_bytes)
+      STORAGE_GRACE_DAYS               = tostring(var.storage_grace_days)
+      STORAGE_RATE_PER_GIB_MONTH_BRL   = tostring(var.storage_rate_per_gib_month_brl)
+      WORLD_DATA_BUCKET                = aws_s3_bucket.world_data.id
     }
   }
 

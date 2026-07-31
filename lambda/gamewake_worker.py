@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -18,6 +19,7 @@ from gamewake.aws import (
     SsmPalworldTemplate,
 )
 from gamewake.billing import Billing, BillingRuntimeUsageRecorder, InsufficientFundsError
+from gamewake.experience import DiscordChannelNotifier, DiscordRestMessageClient
 from gamewake.orchestration import (
     StepFunctionsOperationOrchestrator,
     advance_operation,
@@ -58,6 +60,9 @@ class _Services:
     storage: StoragePolicyService
     billing: Billing
     storage_rate_per_gib_month: Decimal
+    world_repository: PostgresWorldRepository
+    account_repository: PostgresAccountRepository
+    notifier: DiscordChannelNotifier
 
 
 def _required(environ: dict[str, str], name: str) -> str:
@@ -65,6 +70,15 @@ def _required(environ: dict[str, str], name: str) -> str:
     if not value:
         raise RuntimeError(f"missing required environment variable: {name}")
     return value
+
+
+def _secret(ssm: Any, environ: dict[str, str], parameter_environment_name: str) -> str:
+    return str(
+        ssm.get_parameter(
+            Name=_required(environ, parameter_environment_name),
+            WithDecryption=True,
+        )["Parameter"]["Value"]
+    )
 
 
 def build_services(
@@ -80,12 +94,14 @@ def build_services(
         client=client_factory("rds-data"),
     )
     repository = PostgresWorldRepository(database)
-    runner = SsmCommandRunner(client=client_factory("ssm"))
+    account_repository = PostgresAccountRepository(database)
+    ssm = client_factory("ssm")
+    runner = SsmCommandRunner(client=ssm)
     archive = S3WorldArchiveStore(
         _required(environ, "WORLD_DATA_BUCKET"),
         client=client_factory("s3"),
     )
-    accounts = Accounts(PostgresAccountRepository(database))
+    accounts = Accounts(account_repository)
     billing = Billing(PostgresBillingRepository(database))
     storage = StoragePolicyService(
         repository,
@@ -118,7 +134,7 @@ def build_services(
                 repository=repository,
                 parameter_prefix=_required(environ, "GAMEWAKE_WORLD_PARAMETER_PREFIX"),
                 base_configuration=json.loads(_required(environ, "PALWORLD_BASE_CONFIG_JSON")),
-                client=client_factory("ssm"),
+                client=ssm,
             )
         ),
         backup_store=archive,
@@ -136,6 +152,11 @@ def build_services(
         storage=storage,
         billing=billing,
         storage_rate_per_gib_month=Decimal(_required(environ, "STORAGE_RATE_PER_GIB_MONTH_BRL")),
+        world_repository=repository,
+        account_repository=account_repository,
+        notifier=DiscordChannelNotifier(
+            DiscordRestMessageClient(_secret(ssm, environ, "DISCORD_BOT_TOKEN_PARAMETER_NAME"))
+        ),
     )
 
 
@@ -255,7 +276,22 @@ def handle_event(event: dict[str, Any], *, services: Any) -> dict[str, Any]:
         }
     if action not in {"advance", "record_failure"}:
         raise ValueError(f"unsupported operation worker action: {action}")
-    return advance_operation(event, worker=services.worker)
+    result = advance_operation(event, worker=services.worker)
+    if result["terminal"] is True:
+        account_id = str(result["account_id"])
+        operation_id = str(result["operation_id"])
+        operation = services.world_repository.get_operation(account_id, operation_id)
+        world = services.world_repository.get(account_id, operation.world_id)
+        account = services.account_repository.get(account_id).account
+        try:
+            result["notified"] = services.notifier.notify(account, world, operation)
+        except Exception:
+            logging.exception(
+                "terminal Discord notification failed",
+                extra={"account_id": account_id, "operation_id": operation_id},
+            )
+            result["notified"] = False
+    return result
 
 
 _services: _Services | None = None

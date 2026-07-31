@@ -48,6 +48,7 @@ class Account:
     id: str
     name: str
     discord_guild_id: str | None = None
+    discord_channel_id: str | None = None
 
 
 @dataclass(frozen=True)

@@ -36,6 +36,7 @@ runtime_profile_hourly_rates = {
 storage_allowance_bytes = 10737418240
 storage_grace_days      = 30
 storage_rate_per_gib_month_brl = 2
+operations_alarm_email         = "operacoes@example.com"
 
 # Pelo menos uma das listas deve autorizar alguem.
 discord_allowed_user_ids = [

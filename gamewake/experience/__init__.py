@@ -8,12 +8,15 @@ from .discord import (
     DiscordUser,
     DiscordWorldOption,
 )
+from .notifications import DiscordChannelNotifier, DiscordRestMessageClient
 
 __all__ = [
+    "DiscordChannelNotifier",
     "DiscordCommandController",
     "DiscordCommandResponse",
     "DiscordInteraction",
     "DiscordInteractionAdapter",
+    "DiscordRestMessageClient",
     "DiscordUser",
     "DiscordWorldOption",
 ]

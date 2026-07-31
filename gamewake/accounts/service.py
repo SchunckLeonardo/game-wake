@@ -197,11 +197,13 @@ class Accounts:
         name: str,
         owner_user_id: str,
         discord_guild_id: str | None = None,
+        discord_channel_id: str | None = None,
     ) -> Account:
         account = Account(
             id=str(uuid4()),
             name=name,
             discord_guild_id=discord_guild_id,
+            discord_channel_id=discord_channel_id,
         )
         owner_membership_id = str(uuid4())
         owner = Membership(
