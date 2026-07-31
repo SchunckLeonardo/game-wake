@@ -9,6 +9,7 @@ def read(path):
 
 def test_ci_runs_unit_postgres_web_and_browser_acceptance_suites():
     workflow = read(".github/workflows/tests.yml")
+    postgres_job = workflow.split("postgres-integration:", 1)[1].split("python-quality:", 1)[0]
 
     assert "unit-tests:" in workflow
     assert "postgres-integration:" in workflow
@@ -20,6 +21,8 @@ def test_ci_runs_unit_postgres_web_and_browser_acceptance_suites():
     assert "npx playwright install --with-deps chromium" in workflow
     assert "POSTGRES_INTEGRATION_RESULT" in workflow
     assert "WEB_E2E_RESULT" in workflow
+    assert "lambda/requirements.txt" in postgres_job
+    assert "lambda/requirements-dev.txt" in postgres_job
 
 
 def test_codeql_analyzes_python_and_typescript():

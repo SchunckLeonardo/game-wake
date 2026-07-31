@@ -70,7 +70,7 @@ jobs:
           cache-dependency-path: lambda/requirements-dev.txt
 
       - name: Install test dependencies
-        run: python -m pip install -r lambda/requirements-dev.txt
+        run: python -m pip install -r lambda/requirements.txt -r lambda/requirements-dev.txt
 
       - name: Run real PostgreSQL repository contracts
         run: python -m pytest -q -m integration
