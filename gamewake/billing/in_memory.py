@@ -17,6 +17,8 @@ class InMemoryBillingRepository:
                 reservations=(),
                 quotes=(),
                 usages=(),
+                contributions=(),
+                payment_events=(),
                 version=0,
             ),
         )
@@ -32,5 +34,19 @@ class InMemoryBillingRepository:
                 reservations=snapshot.reservations,
                 quotes=snapshot.quotes,
                 usages=snapshot.usages,
+                contributions=snapshot.contributions,
+                payment_events=snapshot.payment_events,
                 version=expected_version + 1,
+            )
+
+    def find_contribution(self, contribution_id: str):
+        with self._lock:
+            return next(
+                (
+                    contribution
+                    for snapshot in self._wallets.values()
+                    for contribution in snapshot.contributions
+                    if contribution.id == contribution_id
+                ),
+                None,
             )

@@ -27,6 +27,74 @@ class ReservationStatus(StrEnum):
     RELEASED = "released"
 
 
+class ContributionStatus(StrEnum):
+    CREATING_CHECKOUT = "creating_checkout"
+    PENDING = "pending"
+    COMPLETED = "completed"
+    REFUND_REQUESTED = "refund_requested"
+    REFUNDED = "refunded"
+    DISPUTED = "disputed"
+    NEEDS_REVIEW = "needs_review"
+
+
+@dataclass(frozen=True)
+class ContributionPackage:
+    id: str
+    amount: Decimal
+    provider_product_id: str
+
+
+@dataclass(frozen=True)
+class ContributionCheckoutRequest:
+    external_id: str
+    provider_product_id: str
+    expected_amount: Decimal
+    return_url: str
+    completion_url: str
+
+
+@dataclass(frozen=True)
+class PaymentCheckout:
+    id: str
+    external_id: str
+    url: str
+    amount: Decimal
+
+
+@dataclass(frozen=True)
+class PaymentMethodSummary:
+    method: str
+    card_last_four: str | None = None
+    card_brand: str | None = None
+
+
+@dataclass(frozen=True)
+class WalletContribution:
+    id: str
+    account_id: str
+    payer_user_id: str
+    package_id: str
+    amount: Decimal
+    provider_product_id: str
+    provider_checkout_id: str | None
+    checkout_url: str | None
+    return_url: str
+    completion_url: str
+    status: ContributionStatus
+    idempotency_key: str
+    created_at: datetime
+    payment_method: PaymentMethodSummary | None
+    provider_refund_id: str | None
+
+
+@dataclass(frozen=True)
+class ProcessedPaymentEvent:
+    id: str
+    event_type: str
+    contribution_id: str
+    processed_at: datetime
+
+
 @dataclass(frozen=True)
 class LedgerEntry:
     id: str
@@ -84,6 +152,8 @@ class WalletSnapshot:
     reservations: tuple[UsageReservation, ...]
     quotes: tuple[SessionQuote, ...]
     usages: tuple[RuntimeUsage, ...]
+    contributions: tuple[WalletContribution, ...]
+    payment_events: tuple[ProcessedPaymentEvent, ...]
     version: int
 
 

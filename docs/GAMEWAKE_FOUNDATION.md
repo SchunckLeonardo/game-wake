@@ -169,11 +169,15 @@ Um World é criado a partir de um Game Template e não troca de jogo. Palworld �
 - O saldo é derivado de um Wallet Ledger imutável; correções são lançamentos compensatórios.
 - AbacatePay API v2 é o Payment Provider do MVP para checkout avulso por Pix e cartão.
 - Eventos do provedor são autenticados, deduplicados e reconciliados; o saldo da AbacatePay não é a Wallet.
+- O Checkout v2 usa pacotes de crédito em BRL mapeados a produtos avulsos da AbacatePay. O valor retornado e pago deve coincidir exatamente com o pacote antes de qualquer crédito.
+- O webhook exige simultaneamente o `webhookSecret` da URL e a assinatura HMAC-SHA256 em Base64 do corpo bruto. Eventos são deduplicados pelo `id` da AbacatePay.
+- Apenas o pagador vê seu link de checkout e o resumo do meio de pagamento. O grupo vê somente a movimentação segura da Wallet.
+- Reembolso solicitado pelo produto é sempre integral e somente é permitido enquanto todo o crédito daquela contribuição estiver disponível. Reembolso ou disputa externos sem saldo suficiente congelam o saldo disponível em `Needs Review`, sem tornar a Wallet negativa, até a conciliação.
 - Auto Recharge fica fora do MVP até existir suporte documentado para cobrança segura sob demanda em um meio salvo.
 - A Storage Allowance cobre o grupo comum. Apenas excedente consome créditos por GB/mês.
 - Excedente sem saldo inicia 30 dias de Storage Grace Period; depois disso, somente Backups automáticos antigos podem ser podados. Estado atual e Backups manuais nunca são removidos automaticamente.
 
-Referências verificadas da integração: [checkout Pix/cartão](https://docs.abacatepay.com/pages/payment/create), [webhooks e assinatura HMAC](https://docs.abacatepay.com/pages/webhooks), [reembolso integral](https://docs.abacatepay.com/pages/transparents/refund) e [assinaturas cíclicas](https://docs.abacatepay.com/pages/subscriptions/create).
+Referências verificadas da integração: [checkout Pix/cartão](https://docs.abacatepay.com/pages/payment/create), [segurança dos webhooks](https://docs.abacatepay.com/pages/webhooks/security), [eventos de Checkout](https://docs.abacatepay.com/pages/webhooks/events/checkout), [reembolso integral](https://docs.abacatepay.com/pages/payment/refund) e [assinaturas cíclicas](https://docs.abacatepay.com/pages/subscriptions/create).
 
 ## Discord e GameWake Console
 
