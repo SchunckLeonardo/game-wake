@@ -4,7 +4,7 @@ import json
 import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 import boto3
@@ -17,7 +17,7 @@ from gamewake.aws import (
     SsmCommandRunner,
     SsmPalworldTemplate,
 )
-from gamewake.billing import Billing, BillingRuntimeUsageRecorder
+from gamewake.billing import Billing, BillingRuntimeUsageRecorder, InsufficientFundsError
 from gamewake.orchestration import (
     StepFunctionsOperationOrchestrator,
     advance_operation,
@@ -57,6 +57,7 @@ class _Services:
     world_data: WorldData
     storage: StoragePolicyService
     billing: Billing
+    storage_rate_per_gib_month: Decimal
 
 
 def _required(environ: dict[str, str], name: str) -> str:
@@ -134,6 +135,7 @@ def build_services(
         world_data=world_data,
         storage=storage,
         billing=billing,
+        storage_rate_per_gib_month=Decimal(_required(environ, "STORAGE_RATE_PER_GIB_MONTH_BRL")),
     )
 
 
@@ -162,7 +164,8 @@ def handle_event(event: dict[str, Any], *, services: Any) -> dict[str, Any]:
         state_machine_arn = event.get("state_machine_arn")
         if not isinstance(state_machine_arn, str) or not state_machine_arn:
             raise ValueError("state_machine_arn is required for session monitoring")
-        idle_minutes = int(event.get("idle_minutes", 20))
+        raw_idle_minutes = event.get("idle_minutes")
+        idle_minutes = int(raw_idle_minutes) if raw_idle_minutes is not None else None
         with services.database.transaction() as transaction:
             worlds = transaction.fetch_all(
                 """
@@ -209,16 +212,47 @@ def handle_event(event: dict[str, Any], *, services: Any) -> dict[str, Any]:
             )
             for world in pending_deletions
         )
+        storage_charges = 0
+        billing_month = f"{observed_at.year:04d}-{observed_at.month:02d}"
         for account in accounts:
             account_id = str(account["id"])
-            services.storage.evaluate(
+            status = services.storage.evaluate(
                 account_id,
-                wallet_can_fund=(
-                    services.billing.get_wallet(account_id).available_balance > Decimal("0.00")
-                ),
+                wallet_can_fund=False,
                 observed_at=observed_at,
             )
-        return {"purged": purged, "storage_accounts": len(accounts)}
+            if status.excess_bytes <= 0:
+                continue
+            estimated_charge = (
+                services.storage_rate_per_gib_month
+                * Decimal(status.excess_bytes)
+                / Decimal(1024**3)
+            ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            funded = estimated_charge == Decimal("0.00")
+            if not funded:
+                try:
+                    services.billing.charge_monthly_storage(
+                        account_id,
+                        excess_bytes=status.excess_bytes,
+                        rate_per_gib_month=services.storage_rate_per_gib_month,
+                        billing_month=billing_month,
+                        idempotency_key=f"storage:{account_id}:{billing_month}",
+                    )
+                    funded = True
+                    storage_charges += 1
+                except InsufficientFundsError:
+                    funded = False
+            if funded:
+                services.storage.evaluate(
+                    account_id,
+                    wallet_can_fund=True,
+                    observed_at=observed_at,
+                )
+        return {
+            "purged": purged,
+            "storage_accounts": len(accounts),
+            "storage_charges": storage_charges,
+        }
     if action not in {"advance", "record_failure"}:
         raise ValueError(f"unsupported operation worker action: {action}")
     return advance_operation(event, worker=services.worker)

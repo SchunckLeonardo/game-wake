@@ -126,6 +126,32 @@ class Worlds:
             )
         ]
 
+    def update_runtime_settings(
+        self,
+        account_id: str,
+        world_id: str,
+        *,
+        actor_user_id: str,
+        auto_sleep_minutes: int | None,
+    ) -> World:
+        if auto_sleep_minutes not in {None, 10, 20, 30, 60}:
+            raise ValueError("Auto Sleep must be 10, 20, 30, 60 minutes, or off")
+        if not self._access.authorize(
+            account_id,
+            user_id=actor_user_id,
+            permission=Permission.EDIT_WORLD,
+            world_id=world_id,
+        ):
+            raise PermissionDeniedError("editing World settings requires Manager permission")
+        world = self._repository.get(account_id, world_id)
+        updated = replace(
+            world,
+            auto_sleep_minutes=auto_sleep_minutes,
+            version=world.version + 1,
+        )
+        self._repository.save(updated, expected_version=world.version)
+        return updated
+
     def get_configuration(
         self,
         account_id: str,

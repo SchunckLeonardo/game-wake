@@ -13,6 +13,8 @@ export function OnboardingFlow() {
   const [accountId, setAccountId] = useState("demo");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
+  const [verifiedEmail, setVerifiedEmail] = useState("");
 
   async function createWorld() {
     if (!worldName.trim() || submitting) return;
@@ -27,7 +29,10 @@ export function OnboardingFlow() {
         method: "POST",
         body: JSON.stringify({ name: groupName.trim() }),
       });
-      const account = (await accountResponse.json()) as { account: { id: string } };
+      const account = (await accountResponse.json()) as {
+        account: { id: string };
+        ownerRecovery?: { verifiedEmail: string; codes: string[] } | null;
+      };
       await gameWakeFetch(`/api/v1/accounts/${account.account.id}/worlds`, {
         method: "POST",
         body: JSON.stringify({
@@ -39,6 +44,8 @@ export function OnboardingFlow() {
         }),
       });
       setAccountId(account.account.id);
+      setRecoveryCodes(account.ownerRecovery?.codes ?? []);
+      setVerifiedEmail(account.ownerRecovery?.verifiedEmail ?? "");
       setStep(3);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Não foi possível criar o World.");
@@ -127,6 +134,13 @@ export function OnboardingFlow() {
             <span className="section-index">GAMEWAKE CONFIGURADO</span>
             <h1>Tudo pronto para jogar</h1>
             <p><strong>{worldName}</strong> pertence ao grupo <strong>{groupName}</strong>. Agora convide os amigos ou acorde o World.</p>
+            {recoveryCodes.length > 0 && (
+              <div className="recovery-panel">
+                <h2>Guarde seus códigos de recuperação</h2>
+                <p>Proteção do Owner vinculada ao e-mail verificado {verifiedEmail}. Eles aparecem apenas agora.</p>
+                <pre className="recovery-codes">{recoveryCodes.join("\n")}</pre>
+              </div>
+            )}
             <div className="success-actions"><Link className="button button-primary" href={accountId === "demo" ? "/accounts/demo?demo=1" : `/accounts/${accountId}`}>Abrir Console</Link><button className="button button-outline" type="button">Convidar amigos</button></div>
           </div>
         )}

@@ -76,6 +76,7 @@ class World:
     deletion_scheduled_for: datetime | None = None
     final_backup_id: str | None = None
     applied_data_operations: tuple[str, ...] = ()
+    auto_sleep_minutes: int | None = 20
 
 
 @dataclass(frozen=True)

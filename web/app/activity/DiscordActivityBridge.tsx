@@ -45,7 +45,7 @@ export function DiscordActivityBridge({ onAuthenticated }: DiscordActivityBridge
           response_type: "code",
           state: crypto.randomUUID(),
           prompt: "none",
-          scope: ["identify", "guilds"],
+          scope: ["identify", "email", "guilds"],
         });
         const response = await fetch(
           gameWakeApiUrl("/api/v1/auth/discord/activity/token"),

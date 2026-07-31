@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
@@ -321,6 +322,53 @@ def test_session_monitor_starts_safe_sleep_after_the_world_is_empty_for_the_limi
     assert sleep is not None
     assert sleep.operation_type.value == "sleep"
     assert sleep.force is False
+
+
+def test_session_monitor_allows_auto_sleep_to_be_disabled_per_world():
+    now = datetime(2026, 7, 31, 20, 0, tzinfo=UTC)
+    events = []
+    accounts = Accounts(InMemoryAccountRepository())
+    account = accounts.create_account(name="Grupo", owner_user_id="owner")
+    repository = InMemoryWorldRepository()
+    worlds = Worlds(repository, access=accounts)
+    world = worlds.create_world(
+        account.id,
+        actor_user_id="owner",
+        name="Palpagos",
+        game_template_id="palworld:1",
+        region="sa-east-1",
+        runtime_profile_id="palworld-small",
+    )
+    worker = WorldOperationWorker(
+        repository,
+        runtime_provider=RuntimeProvider(events),
+        state_store=StateStore(events),
+        game_templates=TemplateCatalog(PalworldTemplate(events)),
+        backup_store=BackupStore(events),
+        clock=lambda: now,
+    )
+    wake = worlds.request_wake(
+        account.id,
+        world.id,
+        actor_user_id="owner",
+        idempotency_key="wake-1",
+    )
+    worker.run_to_completion(account.id, wake.id)
+    online = repository.get(account.id, world.id)
+    repository.save(
+        replace(online, auto_sleep_minutes=None, version=online.version + 1),
+        expected_version=online.version,
+    )
+
+    first = worker.monitor_session(account.id, world.id, observed_at=now)
+    much_later = worker.monitor_session(
+        account.id,
+        world.id,
+        observed_at=now + timedelta(hours=2),
+    )
+
+    assert first is None
+    assert much_later is None
 
 
 def test_balance_guard_can_force_safe_sleep_even_while_players_are_connected():

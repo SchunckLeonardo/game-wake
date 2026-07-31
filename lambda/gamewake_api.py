@@ -29,6 +29,7 @@ from gamewake.persistence import (
     AuroraDataApi,
     PostgresAccountRepository,
     PostgresBillingRepository,
+    PostgresRecoverySecretStore,
     PostgresStoragePolicyRepository,
     PostgresWorldRepository,
 )
@@ -81,7 +82,10 @@ def build_handler(*, client_factory: Any = boto3.client) -> GameWakeHttpHandler:
         client=client_factory("rds-data"),
     )
     account_repository = PostgresAccountRepository(database)
-    accounts = Accounts(account_repository)
+    accounts = Accounts(
+        account_repository,
+        recovery_secret_store=PostgresRecoverySecretStore(database),
+    )
     billing = Billing(
         PostgresBillingRepository(database),
         payment_provider=AbacatePayPaymentProvider(

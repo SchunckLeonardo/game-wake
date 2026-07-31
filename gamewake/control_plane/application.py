@@ -12,7 +12,7 @@ from gamewake.accounts import (
     SensitiveActionConfirmation,
     User,
 )
-from gamewake.billing import Billing, Wallet, WalletContribution
+from gamewake.billing import Billing, Wallet, WalletContribution, WorldBudgetStatus
 from gamewake.game_catalog import GameCatalog, GameTemplateDefinition
 from gamewake.worlds import (
     Backup,
@@ -120,6 +120,19 @@ class GameWakeApplication:
             discord_guild_id=discord_guild_id,
         )
 
+    def enable_owner_recovery(
+        self,
+        account_id: str,
+        *,
+        owner_user_id: str,
+        verified_email: str,
+    ) -> tuple[str, ...]:
+        return self.accounts.enable_owner_recovery(
+            account_id,
+            owner_user_id=owner_user_id,
+            verified_email=verified_email,
+        )
+
     def list_accounts(self, *, viewer_user_id: str) -> list[Account]:
         return self.accounts.list_accounts(viewer_user_id)
 
@@ -181,6 +194,38 @@ class GameWakeApplication:
             membership_id=membership_id,
             role=role,
             world_id=world_id,
+            confirmation=confirmation,
+        )
+
+    def remove_role_assignment(
+        self,
+        account_id: str,
+        *,
+        actor_user_id: str,
+        membership_id: str,
+        role_assignment_id: str,
+        confirmation: SensitiveActionConfirmation,
+    ) -> Membership:
+        return self.accounts.remove_role_assignment(
+            account_id,
+            actor_user_id=actor_user_id,
+            membership_id=membership_id,
+            role_assignment_id=role_assignment_id,
+            confirmation=confirmation,
+        )
+
+    def remove_membership(
+        self,
+        account_id: str,
+        *,
+        actor_user_id: str,
+        membership_id: str,
+        confirmation: SensitiveActionConfirmation,
+    ) -> None:
+        self.accounts.remove_membership(
+            account_id,
+            membership_id,
+            actor_user_id=actor_user_id,
             confirmation=confirmation,
         )
 
@@ -257,9 +302,70 @@ class GameWakeApplication:
             viewer_user_id=viewer_user_id,
         )
 
+    def update_world_settings(
+        self,
+        account_id: str,
+        world_id: str,
+        *,
+        actor_user_id: str,
+        auto_sleep_minutes: int | None,
+    ) -> World:
+        return self.worlds.update_runtime_settings(
+            account_id,
+            world_id,
+            actor_user_id=actor_user_id,
+            auto_sleep_minutes=auto_sleep_minutes,
+        )
+
     def get_wallet(self, account_id: str, *, viewer_user_id: str) -> Wallet:
         self.accounts.list_memberships(account_id, viewer_user_id=viewer_user_id)
         return self.billing.get_wallet(account_id)
+
+    def get_world_budget(
+        self,
+        account_id: str,
+        world_id: str,
+        *,
+        viewer_user_id: str,
+    ) -> WorldBudgetStatus | None:
+        self.worlds.get_world(
+            account_id,
+            world_id,
+            viewer_user_id=viewer_user_id,
+        )
+        return self.billing.get_world_budget_status(account_id, world_id)
+
+    def set_world_budget(
+        self,
+        account_id: str,
+        world_id: str,
+        *,
+        actor_user_id: str,
+        monthly_limit: Decimal,
+        idempotency_key: str,
+    ) -> WorldBudgetStatus:
+        self.worlds.get_world(
+            account_id,
+            world_id,
+            viewer_user_id=actor_user_id,
+        )
+        if not self.accounts.authorize(
+            account_id,
+            user_id=actor_user_id,
+            permission=Permission.MANAGE_WORLD_BUDGET,
+            world_id=world_id,
+        ):
+            raise PermissionError("changing a World Budget requires Owner permission")
+        self.billing.set_world_budget(
+            account_id,
+            world_id=world_id,
+            monthly_limit=monthly_limit,
+            idempotency_key=idempotency_key,
+        )
+        status = self.billing.get_world_budget_status(account_id, world_id)
+        if status is None:
+            raise RuntimeError("World Budget was not persisted")
+        return status
 
     def create_contribution(
         self,

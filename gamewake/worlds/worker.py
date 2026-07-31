@@ -64,12 +64,13 @@ class WorldOperationWorker:
         world_id: str,
         *,
         observed_at: datetime | None = None,
-        idle_minutes: int = 20,
+        idle_minutes: int | None = None,
     ) -> WorldOperation | None:
-        if idle_minutes <= 0:
-            raise ValueError("idle minutes must be positive")
         now = observed_at or self._clock()
         world = self._repository.get(account_id, world_id)
+        effective_idle_minutes = world.auto_sleep_minutes if idle_minutes is None else idle_minutes
+        if effective_idle_minutes is not None and effective_idle_minutes <= 0:
+            raise ValueError("idle minutes must be positive")
         if world.status is not WorldStatus.ONLINE:
             return None
         runtime = Runtime(
@@ -87,8 +88,10 @@ class WorldOperationWorker:
             else None
         )
         balance_requires_sleep = bool(getattr(balance_decision, "should_sleep", False))
-        idle_requires_sleep = empty_since is not None and now - empty_since >= timedelta(
-            minutes=idle_minutes
+        idle_requires_sleep = (
+            effective_idle_minutes is not None
+            and empty_since is not None
+            and now - empty_since >= timedelta(minutes=effective_idle_minutes)
         )
         if not balance_requires_sleep and not idle_requires_sleep:
             if empty_since != world.empty_since:

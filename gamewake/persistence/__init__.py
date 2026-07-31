@@ -4,6 +4,7 @@ from .migrations import Migration, MigrationRunner, load_migrations
 from .postgres import (
     PostgresAccountRepository,
     PostgresBillingRepository,
+    PostgresRecoverySecretStore,
     PostgresStoragePolicyRepository,
     PostgresWorldRepository,
 )
@@ -16,6 +17,7 @@ __all__ = [
     "MigrationRunner",
     "PostgresAccountRepository",
     "PostgresBillingRepository",
+    "PostgresRecoverySecretStore",
     "PostgresStoragePolicyRepository",
     "PostgresWorldRepository",
     "PsycopgDatabase",

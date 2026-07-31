@@ -40,6 +40,9 @@ test("group contributes, invites friends, wakes, connects, configures and sleeps
   await navigation(page, "wallet").click();
   await page.getByRole("button", { name: "R$ 50" }).click();
   await expect(page.getByTestId("create-checkout")).toHaveText("Contribuir R$ 50,00");
+  await page.getByLabel("Limite mensal do World").fill("100");
+  await page.getByRole("button", { name: "Salvar orçamento" }).click();
+  await expect(page.getByRole("button", { name: "Orçamento salvo ✓" })).toBeVisible();
 
   await navigation(page, "members").click();
   await page.getByTestId("invite-friends").click();
@@ -93,6 +96,29 @@ test("OAuth callback stores the short-lived session and routes an existing membe
   expect(await page.evaluate(() => sessionStorage.getItem("gamewake_session"))).toBe(
     "signed-session",
   );
+});
+
+test("OAuth callback makes one-time Owner recovery codes impossible to miss", async ({
+  page,
+}) => {
+  const recovery = Buffer.from(JSON.stringify([
+    {
+      accountId: "account-live",
+      verifiedEmail: "owner@example.com",
+      codes: ["RECOVERY-ONE", "RECOVERY-TWO"],
+    },
+  ])).toString("base64url");
+  await page.route("**/api/v1/me/accounts", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ accounts: [{ id: "account-live" }] }),
+  }));
+
+  await page.goto(`/auth/callback#session=signed-session&ownerRecovery=${recovery}`);
+
+  await expect(page.getByRole("heading", { name: "Guarde seus códigos de recuperação" })).toBeVisible();
+  await expect(page.getByText("RECOVERY-ONE")).toBeVisible();
+  await page.getByRole("button", { name: "Já guardei, continuar" }).click();
+  await expect(page).toHaveURL(/\/accounts\/account-live$/);
 });
 
 test("authenticated onboarding creates a real account and Palworld through the API", async ({
@@ -191,9 +217,13 @@ test("authenticated Console loads and mutates the real World through bearer API"
     await route.fulfill({
       status: 202,
       contentType: "application/json",
-      body: JSON.stringify({ operation: { id: "operation-live", status: "pending" } }),
+      body: JSON.stringify({ operation: { id: "operation-live", type: "wake", status: "running", phase: "restoring_world", createdAt: "2026-07-31T20:00:00Z" } }),
     });
   });
+  await page.route("**/api/v1/accounts/account-live/worlds/world-live/operations", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ operations: [{ id: "operation-live", type: "wake", status: "running", phase: "restoring_world", createdAt: "2026-07-31T20:00:00Z" }] }),
+  }));
   await page.route("**/api/v1/accounts/account-live/worlds/world-live/wake/estimate", async (route) => {
     await route.fulfill({
       contentType: "application/json",
@@ -210,6 +240,52 @@ test("authenticated Console loads and mutates the real World through bearer API"
 
   expect(wakeBody).toMatchObject({ idempotencyKey: expect.any(String) });
   await expect(page.getByRole("status")).toContainText("Restaurando World");
+});
+
+test("live Console switches Worlds and persists Auto Sleep and World Budget", async ({ page }) => {
+  let settingsBody: unknown;
+  let budgetBody: unknown;
+  await page.addInitScript(() => sessionStorage.setItem("gamewake_session", "signed-session"));
+  await page.route("**/api/v1/me/accounts", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ accounts: [{ id: "account-live", name: "Grupo real" }] }),
+  }));
+  await page.route("**/api/v1/accounts/account-live/wallet", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ wallet: { availableBalance: "30.00", statement: [] } }),
+  }));
+  await page.route("**/api/v1/accounts/account-live/worlds", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ worlds: [
+      { id: "world-one", name: "Palpagos", region: "sa-east-1", status: "sleeping", autoSleepMinutes: 20 },
+      { id: "world-two", name: "Ilha Dois", region: "sa-east-1", status: "sleeping", autoSleepMinutes: 30 },
+    ] }),
+  }));
+  await page.route("**/api/v1/accounts/account-live/worlds/world-two/settings", async (route) => {
+    settingsBody = route.request().postDataJSON();
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ world: { id: "world-two", name: "Ilha Dois", region: "sa-east-1", status: "sleeping", autoSleepMinutes: 60 } }),
+    });
+  });
+  await page.route("**/api/v1/accounts/account-live/worlds/world-two/budget", async (route) => {
+    if (route.request().method() === "PUT") budgetBody = route.request().postDataJSON();
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ budget: { worldId: "world-two", period: "2026-07", monthlyLimit: "90.00", spent: "10.00", reserved: "0.00", committed: "10.00", percentage: "11.11", wakeAllowed: true } }),
+    });
+  });
+
+  await page.goto("/accounts/account-live");
+  await page.getByRole("tab", { name: /Ilha Dois/ }).click();
+  await expect(page.getByRole("heading", { name: "Ilha Dois" })).toBeVisible();
+  await page.getByLabel("Auto Sleep").selectOption("60");
+  await expect.poll(() => settingsBody).toEqual({ autoSleepMinutes: 60 });
+
+  await navigation(page, "wallet").click();
+  await page.getByLabel("Limite mensal do World").fill("90.00");
+  await page.getByRole("button", { name: "Salvar orçamento" }).click();
+  await expect.poll(() => budgetBody).toMatchObject({ monthlyLimit: "90.00", idempotencyKey: expect.any(String) });
 });
 
 test("Discord-bootstrapped account creates its first World from the Console", async ({
@@ -260,6 +336,8 @@ test("live Console reads members, custom roles, backups and redacted activity", 
   let invitationBody: unknown;
   let roleBody: unknown;
   let assignmentBody: unknown;
+  let removedRoleBody: unknown;
+  let removedMembershipBody: unknown;
   let backupBody: unknown;
   let deletionBody: unknown;
   await page.addInitScript(() => sessionStorage.setItem("gamewake_session", "signed-session"));
@@ -288,8 +366,8 @@ test("live Console reads members, custom roles, backups and redacted activity", 
       contentType: "application/json",
       body: JSON.stringify({
         memberships: [
-          { id: "member-owner", userId: "user-owner", roles: [{ role: "owner", kind: "predefined", worldId: null }] },
-          { id: "member-friend", userId: "user-friend", roles: [{ role: "player", kind: "predefined", worldId: null }] },
+          { id: "member-owner", userId: "user-owner", roles: [{ id: "assignment-owner", role: "owner", kind: "predefined", worldId: null }] },
+          { id: "member-friend", userId: "user-friend", roles: [{ id: "assignment-player", role: "player", kind: "predefined", worldId: null }] },
         ],
       }),
     }),
@@ -303,12 +381,23 @@ test("live Console reads members, custom roles, backups and redacted activity", 
           id: "member-friend",
           userId: "user-friend",
           roles: [
-            { role: "player", kind: "predefined", worldId: null },
-            { role: "role-saves", kind: "custom", worldId: null },
+            { id: "assignment-player", role: "player", kind: "predefined", worldId: null },
+            { id: "assignment-custom", role: "role-saves", kind: "custom", worldId: null },
           ],
         },
       }),
     });
+  });
+  await page.route("**/api/v1/accounts/account-live/memberships/member-friend/roles/assignment-custom", (route) => {
+    removedRoleBody = route.request().postDataJSON();
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ membership: { id: "member-friend", userId: "user-friend", roles: [{ id: "assignment-player", role: "player", kind: "predefined", worldId: null }] } }),
+    });
+  });
+  await page.route("**/api/v1/accounts/account-live/memberships/member-friend", (route) => {
+    removedMembershipBody = route.request().postDataJSON();
+    return route.fulfill({ contentType: "application/json", body: JSON.stringify({ removed: true }) });
   });
   await page.route("**/api/v1/accounts/account-live/roles", (route) => {
     if (route.request().method() === "POST") {
@@ -401,6 +490,11 @@ test("live Console reads members, custom roles, backups and redacted activity", 
     customRoleId: "role-saves",
     confirmedResourceName: "Grupo real",
   });
+  await page.getByRole("button", { name: "Remover Role role-saves de user-friend" }).click();
+  await expect.poll(() => removedRoleBody).toEqual({ confirmedResourceName: "Grupo real" });
+  await page.getByRole("button", { name: "Remover membro user-friend" }).click();
+  await expect.poll(() => removedMembershipBody).toEqual({ confirmedResourceName: "Grupo real" });
+  await expect(page.getByText("user-friend")).toHaveCount(0);
   await navigation(page, "backups").click();
   await expect(page.locator(".backup-row strong", { hasText: "Backup manual" })).toBeVisible();
   await page.getByRole("button", { name: "+ Backup manual" }).click();

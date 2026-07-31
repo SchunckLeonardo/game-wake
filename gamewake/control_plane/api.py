@@ -12,7 +12,7 @@ from gamewake.accounts import (
     PredefinedRole,
     SensitiveActionConfirmation,
 )
-from gamewake.billing import Wallet, WalletContribution
+from gamewake.billing import Wallet, WalletContribution, WorldBudgetStatus
 from gamewake.game_catalog import GameTemplateDefinition
 from gamewake.worlds import Backup, ConfigurationRevision, World, WorldExport, WorldOperation
 
@@ -27,6 +27,7 @@ class ApiRequest:
     user_id: str
     body: dict[str, Any] = field(default_factory=dict)
     authenticated_at: datetime | None = None
+    verified_email: str | None = None
 
 
 @dataclass(frozen=True)
@@ -68,7 +69,21 @@ class GameWakeApi:
                 name=self._required_string(request.body, "name"),
                 discord_guild_id=self._optional_string(request.body, "discordGuildId"),
             )
-            return ApiResponse(201, {"account": self._account(account)})
+            recovery = None
+            if request.verified_email is not None:
+                codes = self._application.enable_owner_recovery(
+                    account.id,
+                    owner_user_id=request.user_id,
+                    verified_email=request.verified_email,
+                )
+                recovery = {
+                    "verifiedEmail": request.verified_email,
+                    "codes": list(codes),
+                }
+            return ApiResponse(
+                201,
+                {"account": self._account(account), "ownerRecovery": recovery},
+            )
         if len(parts) < 4:
             raise KeyError(request.path)
         account_id = parts[3]
@@ -152,6 +167,30 @@ class GameWakeApi:
                     confirmation=confirmation,
                 )
             return ApiResponse(200, {"membership": self._membership(membership)})
+        if (
+            request.method == "DELETE"
+            and len(parts) == 8
+            and parts[4] == "memberships"
+            and parts[6] == "roles"
+        ):
+            confirmation = self._sensitive_confirmation(request, "removing roles")
+            membership = self._application.remove_role_assignment(
+                account_id,
+                actor_user_id=request.user_id,
+                membership_id=parts[5],
+                role_assignment_id=parts[7],
+                confirmation=confirmation,
+            )
+            return ApiResponse(200, {"membership": self._membership(membership)})
+        if request.method == "DELETE" and len(parts) == 6 and parts[4] == "memberships":
+            confirmation = self._sensitive_confirmation(request, "removing a member")
+            self._application.remove_membership(
+                account_id,
+                actor_user_id=request.user_id,
+                membership_id=parts[5],
+                confirmation=confirmation,
+            )
+            return ApiResponse(200, {"removed": True})
         if request.method == "GET" and parts[4:] == ("activity",):
             events = self._application.list_activity(
                 account_id,
@@ -219,6 +258,35 @@ class GameWakeApi:
         if len(parts) < 6 or parts[4] != "worlds":
             raise KeyError(request.path)
         world_id = parts[5]
+        if request.method == "PATCH" and parts[6:] == ("settings",):
+            auto_sleep_minutes = request.body.get("autoSleepMinutes")
+            if auto_sleep_minutes is not None and (
+                isinstance(auto_sleep_minutes, bool) or not isinstance(auto_sleep_minutes, int)
+            ):
+                raise ValueError("autoSleepMinutes must be an integer or null")
+            world = self._application.update_world_settings(
+                account_id,
+                world_id,
+                actor_user_id=request.user_id,
+                auto_sleep_minutes=auto_sleep_minutes,
+            )
+            return ApiResponse(200, {"world": self._world(world)})
+        if request.method == "GET" and parts[6:] == ("budget",):
+            budget = self._application.get_world_budget(
+                account_id,
+                world_id,
+                viewer_user_id=request.user_id,
+            )
+            return ApiResponse(200, {"budget": self._world_budget(budget)})
+        if request.method == "PUT" and parts[6:] == ("budget",):
+            budget = self._application.set_world_budget(
+                account_id,
+                world_id,
+                actor_user_id=request.user_id,
+                monthly_limit=self._decimal(request.body, "monthlyLimit"),
+                idempotency_key=self._required_string(request.body, "idempotencyKey"),
+            )
+            return ApiResponse(200, {"budget": self._world_budget(budget)})
         if request.method == "GET" and parts[6:] == ("wake", "estimate"):
             estimate = self._application.wake_estimate(
                 account_id,
@@ -367,6 +435,35 @@ class GameWakeApi:
         return value
 
     @staticmethod
+    def _decimal(body: dict[str, Any], key: str):
+        from decimal import Decimal, InvalidOperation
+
+        value = body.get(key)
+        if isinstance(value, bool) or not isinstance(value, str | int | float):
+            raise ValueError(f"{key} must be a decimal value")
+        try:
+            return Decimal(str(value))
+        except InvalidOperation as error:
+            raise ValueError(f"{key} must be a decimal value") from error
+
+    @classmethod
+    def _sensitive_confirmation(
+        cls,
+        request: ApiRequest,
+        action: str,
+    ) -> SensitiveActionConfirmation:
+        if request.authenticated_at is None:
+            raise PermissionError(f"{action} requires recent Discord authentication")
+        return SensitiveActionConfirmation(
+            actor_user_id=request.user_id,
+            reauthenticated_at=request.authenticated_at,
+            confirmed_resource_name=cls._required_string(
+                request.body,
+                "confirmedResourceName",
+            ),
+        )
+
+    @staticmethod
     def _account(account: Account) -> dict[str, Any]:
         return {
             "id": account.id,
@@ -396,6 +493,7 @@ class GameWakeApi:
             "configurationRevisionId": world.configuration_revision_id,
             "pendingConfigurationRevisionId": world.pending_configuration_revision_id,
             "storedStateId": world.stored_state_id,
+            "autoSleepMinutes": world.auto_sleep_minutes,
             "deletionScheduledFor": (
                 world.deletion_scheduled_for.isoformat()
                 if world.deletion_scheduled_for is not None
@@ -502,6 +600,21 @@ class GameWakeApi:
                 }
                 for entry in wallet.statement
             ],
+        }
+
+    @staticmethod
+    def _world_budget(budget: WorldBudgetStatus | None) -> dict[str, Any] | None:
+        if budget is None:
+            return None
+        return {
+            "worldId": budget.world_id,
+            "period": budget.period,
+            "monthlyLimit": str(budget.monthly_limit),
+            "spent": str(budget.spent),
+            "reserved": str(budget.reserved),
+            "committed": str(budget.committed),
+            "percentage": str(budget.percentage),
+            "wakeAllowed": budget.wake_allowed,
         }
 
     @staticmethod

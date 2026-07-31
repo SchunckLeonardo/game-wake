@@ -34,6 +34,7 @@ from gamewake.persistence import (
     MigrationRunner,
     PostgresAccountRepository,
     PostgresBillingRepository,
+    PostgresRecoverySecretStore,
     PostgresStoragePolicyRepository,
     PostgresWorldRepository,
     PsycopgDatabase,
@@ -65,7 +66,11 @@ def database():
     with database.transaction() as transaction:
         transaction.execute("DROP SCHEMA public CASCADE")
         transaction.execute("CREATE SCHEMA public")
-    assert MigrationRunner(database).apply() == ("0001_initial", "0002_account_memberships")
+    assert MigrationRunner(database).apply() == (
+        "0001_initial",
+        "0002_account_memberships",
+        "0003_owner_recovery",
+    )
     assert MigrationRunner(database).apply() == ()
     return database
 
@@ -89,6 +94,27 @@ def create_account(database, account_id: str) -> PostgresAccountRepository:
     repository = PostgresAccountRepository(database)
     repository.create(Account(account_id, account_id), owner(account_id))
     return repository
+
+
+def test_owner_recovery_hashes_are_persistent_and_single_use(database) -> None:
+    accounts = PostgresAccountRepository(database)
+    user = User("recovery-user", "Recovery Owner")
+    accounts.create_user(
+        user,
+        LinkedIdentity(
+            "recovery-identity",
+            user.id,
+            IdentityProvider.DISCORD,
+            "recovery-discord",
+        ),
+    )
+    recovery = PostgresRecoverySecretStore(database)
+    recovery.put(user.id, "owner@example.com", frozenset({"hash-1", "hash-2"}))
+
+    assert recovery.is_enabled(user.id) is True
+    assert recovery.consume(user.id, "hash-1") is True
+    assert recovery.consume(user.id, "hash-1") is False
+    assert recovery.is_enabled(user.id) is True
 
 
 def test_accounts_identities_activity_and_concurrency_are_transactional(database) -> None:

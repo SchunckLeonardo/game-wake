@@ -148,6 +148,37 @@ def test_web_onboarding_invites_friends_and_configures_first_world_through_one_a
     assert effective.body["revision"]["number"] == 2
 
 
+def test_web_onboarding_enables_recovery_for_a_sole_owner_with_verified_discord_email():
+    accounts = Accounts(
+        InMemoryAccountRepository(),
+        recovery_secret_store=InMemoryRecoverySecretStore(),
+    )
+    catalog = GameCatalog.with_palworld()
+    api = GameWakeApi(
+        GameWakeApplication(
+            accounts=accounts,
+            worlds=Worlds(InMemoryWorldRepository(), access=accounts, game_catalog=catalog),
+            billing=Billing(InMemoryBillingRepository()),
+            game_catalog=catalog,
+        )
+    )
+
+    response = api.handle(
+        ApiRequest(
+            "POST",
+            "/api/v1/accounts",
+            "owner",
+            {"name": "Grupo"},
+            verified_email="owner@example.com",
+        )
+    )
+
+    assert response.status == 201
+    assert response.body["ownerRecovery"]["verifiedEmail"] == "owner@example.com"
+    assert len(response.body["ownerRecovery"]["codes"]) == 8
+    assert accounts.owner_recovery_ready(response.body["account"]["id"]) is True
+
+
 def test_world_queries_and_wake_dispatch_use_the_same_persisted_operation():
     accounts = Accounts(InMemoryAccountRepository())
     owner = accounts.sign_in_with_discord(discord_user_id="discord-owner", display_name="Leonardo")
@@ -233,6 +264,150 @@ def test_wallet_endpoint_exposes_safe_ledger_values_as_decimal_strings():
     assert response.body["wallet"]["currency"] == "BRL"
     assert response.body["wallet"]["availableBalance"] == "25.00"
     assert response.body["wallet"]["statement"][0]["amount"] == "25.00"
+
+
+def test_owner_sets_and_reads_the_monthly_world_budget_through_the_api():
+    accounts = Accounts(InMemoryAccountRepository())
+    account = accounts.create_account(name="Grupo", owner_user_id="owner")
+    catalog = GameCatalog.with_palworld()
+    worlds = Worlds(InMemoryWorldRepository(), access=accounts, game_catalog=catalog)
+    world = worlds.create_world(
+        account.id,
+        actor_user_id="owner",
+        name="Palpagos",
+        game_template_id="palworld:1",
+        region="sa-east-1",
+        runtime_profile_id="palworld-small",
+    )
+    api = GameWakeApi(
+        GameWakeApplication(
+            accounts=accounts,
+            worlds=worlds,
+            billing=Billing(InMemoryBillingRepository()),
+            game_catalog=catalog,
+        )
+    )
+
+    configured = api.handle(
+        ApiRequest(
+            "PUT",
+            f"/api/v1/accounts/{account.id}/worlds/{world.id}/budget",
+            "owner",
+            {"monthlyLimit": "75.00", "idempotencyKey": "web:budget:1"},
+        )
+    )
+    status = api.handle(
+        ApiRequest(
+            "GET",
+            f"/api/v1/accounts/{account.id}/worlds/{world.id}/budget",
+            "owner",
+        )
+    )
+
+    assert configured.status == 200
+    assert configured.body["budget"] == {
+        "worldId": world.id,
+        "period": configured.body["budget"]["period"],
+        "monthlyLimit": "75.00",
+        "spent": "0.00",
+        "reserved": "0.00",
+        "committed": "0.00",
+        "percentage": "0.00",
+        "wakeAllowed": True,
+    }
+    assert status == configured
+
+
+def test_manager_configures_per_world_auto_sleep_from_supported_choices():
+    accounts = Accounts(InMemoryAccountRepository())
+    account = accounts.create_account(name="Grupo", owner_user_id="owner")
+    catalog = GameCatalog.with_palworld()
+    worlds = Worlds(InMemoryWorldRepository(), access=accounts, game_catalog=catalog)
+    world = worlds.create_world(
+        account.id,
+        actor_user_id="owner",
+        name="Palpagos",
+        game_template_id="palworld:1",
+        region="sa-east-1",
+        runtime_profile_id="palworld-small",
+    )
+    api = GameWakeApi(
+        GameWakeApplication(
+            accounts=accounts,
+            worlds=worlds,
+            billing=Billing(InMemoryBillingRepository()),
+            game_catalog=catalog,
+        )
+    )
+
+    configured = api.handle(
+        ApiRequest(
+            "PATCH",
+            f"/api/v1/accounts/{account.id}/worlds/{world.id}/settings",
+            "owner",
+            {"autoSleepMinutes": 60},
+        )
+    )
+    disabled = api.handle(
+        ApiRequest(
+            "PATCH",
+            f"/api/v1/accounts/{account.id}/worlds/{world.id}/settings",
+            "owner",
+            {"autoSleepMinutes": None},
+        )
+    )
+    invalid = api.handle(
+        ApiRequest(
+            "PATCH",
+            f"/api/v1/accounts/{account.id}/worlds/{world.id}/settings",
+            "owner",
+            {"autoSleepMinutes": 15},
+        )
+    )
+
+    assert configured.status == 200
+    assert configured.body["world"]["autoSleepMinutes"] == 60
+    assert disabled.body["world"]["autoSleepMinutes"] is None
+    assert invalid.status == 400
+
+
+def test_owner_revokes_a_membership_through_a_step_up_authenticated_api_request():
+    now = datetime(2026, 7, 31, 20, 0, tzinfo=UTC)
+    accounts = Accounts(InMemoryAccountRepository(), clock=lambda: now)
+    account = accounts.create_account(name="Grupo", owner_user_id="owner")
+    invitation = accounts.invite_members(
+        account.id,
+        inviter_user_id="owner",
+        invited_user_ids=["friend"],
+    )[0]
+    membership = accounts.accept_invitation(
+        account.id,
+        invitation.id,
+        invited_user_id="friend",
+    )
+    catalog = GameCatalog.with_palworld()
+    api = GameWakeApi(
+        GameWakeApplication(
+            accounts=accounts,
+            worlds=Worlds(InMemoryWorldRepository(), access=accounts, game_catalog=catalog),
+            billing=Billing(InMemoryBillingRepository()),
+            game_catalog=catalog,
+        )
+    )
+
+    response = api.handle(
+        ApiRequest(
+            "DELETE",
+            f"/api/v1/accounts/{account.id}/memberships/{membership.id}",
+            "owner",
+            {"confirmedResourceName": "Grupo"},
+            authenticated_at=now,
+        )
+    )
+
+    assert response.status == 200
+    assert response.body == {"removed": True}
+    assert accounts.list_memberships(account.id, viewer_user_id="owner")[0].user_id == "owner"
 
 
 def test_any_account_member_can_create_only_an_allowlisted_credit_package():

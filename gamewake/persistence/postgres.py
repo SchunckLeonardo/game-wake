@@ -262,6 +262,72 @@ class PostgresAccountRepository:
             )
 
 
+class PostgresRecoverySecretStore:
+    """Stores only verified email metadata and one-way recovery-code hashes."""
+
+    def __init__(self, database: Database) -> None:
+        self._database = database
+
+    def put(
+        self,
+        owner_user_id: str,
+        verified_email: str,
+        recovery_code_hashes: frozenset[str],
+    ) -> None:
+        if not verified_email or not recovery_code_hashes:
+            raise ValueError("verified email and recovery codes are required")
+        with self._database.transaction() as transaction:
+            transaction.execute(
+                """
+                INSERT INTO owner_recovery_profiles (owner_user_id, verified_email)
+                VALUES (:owner_user_id, :verified_email)
+                ON CONFLICT (owner_user_id) DO UPDATE
+                SET verified_email = EXCLUDED.verified_email,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                {"owner_user_id": owner_user_id, "verified_email": verified_email},
+            )
+            transaction.execute(
+                "DELETE FROM owner_recovery_codes WHERE owner_user_id = :owner_user_id",
+                {"owner_user_id": owner_user_id},
+            )
+            for code_hash in sorted(recovery_code_hashes):
+                transaction.execute(
+                    """
+                    INSERT INTO owner_recovery_codes (owner_user_id, code_hash)
+                    VALUES (:owner_user_id, :code_hash)
+                    """,
+                    {"owner_user_id": owner_user_id, "code_hash": code_hash},
+                )
+
+    def is_enabled(self, owner_user_id: str) -> bool:
+        with self._database.transaction() as transaction:
+            row = transaction.fetch_one(
+                """
+                SELECT 1 AS enabled
+                FROM owner_recovery_profiles
+                WHERE owner_user_id = :owner_user_id
+                  AND EXISTS (
+                      SELECT 1 FROM owner_recovery_codes
+                      WHERE owner_recovery_codes.owner_user_id = :owner_user_id
+                  )
+                """,
+                {"owner_user_id": owner_user_id},
+            )
+        return row is not None
+
+    def consume(self, owner_user_id: str, recovery_code_hash: str) -> bool:
+        with self._database.transaction() as transaction:
+            deleted = transaction.execute(
+                """
+                DELETE FROM owner_recovery_codes
+                WHERE owner_user_id = :owner_user_id AND code_hash = :code_hash
+                """,
+                {"owner_user_id": owner_user_id, "code_hash": recovery_code_hash},
+            )
+        return deleted == 1
+
+
 class PostgresWorldRepository:
     def __init__(self, database: Database) -> None:
         self._database = database

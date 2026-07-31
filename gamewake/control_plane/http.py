@@ -67,8 +67,23 @@ class GameWakeHttpHandler:
                     discord_user_id=identity.discord_user_id,
                     display_name=identity.display_name,
                 )
-                session = self._sessions.issue(user.id)
-                return self._redirect(f"{self._console_url}/auth/callback#session={session}")
+                recovery = self._bootstrap_owner_recovery(
+                    user.id,
+                    getattr(identity, "verified_email", None),
+                )
+                session = self._sessions.issue(
+                    user.id,
+                    verified_email=getattr(identity, "verified_email", None),
+                )
+                fragment = f"session={session}"
+                if recovery:
+                    encoded_recovery = (
+                        base64.urlsafe_b64encode(json.dumps(recovery, ensure_ascii=False).encode())
+                        .rstrip(b"=")
+                        .decode()
+                    )
+                    fragment += f"&ownerRecovery={encoded_recovery}"
+                return self._redirect(f"{self._console_url}/auth/callback#{fragment}")
             if method == "POST" and path == "/discord/interactions":
                 if self._discord is None or self._verify_discord is None:
                     return self._error(503, "not_configured", "Discord is not configured")
@@ -92,7 +107,10 @@ class GameWakeHttpHandler:
                     discord_user_id=grant.identity.discord_user_id,
                     display_name=grant.identity.display_name,
                 )
-                session = self._sessions.issue(user.id)
+                session = self._sessions.issue(
+                    user.id,
+                    verified_email=getattr(grant.identity, "verified_email", None),
+                )
                 return self._response(
                     200,
                     {"accessToken": grant.access_token, "session": session},
@@ -111,6 +129,7 @@ class GameWakeHttpHandler:
                         user_id=claims.subject,
                         body=body,
                         authenticated_at=getattr(claims, "issued_at", None),
+                        verified_email=getattr(claims, "verified_email", None),
                     )
                 )
                 return self._response(response.status, response.body, headers=cors)
@@ -120,6 +139,34 @@ class GameWakeHttpHandler:
         except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
             code = "invalid_json" if raw_body else "invalid_request"
             return self._error(400, code, "Invalid request", cors)
+
+    def _bootstrap_owner_recovery(
+        self,
+        user_id: str,
+        verified_email: str | None,
+    ) -> list[dict[str, object]]:
+        if verified_email is None:
+            return []
+        recovered: list[dict[str, object]] = []
+        for account in self._application.list_accounts(viewer_user_id=user_id):
+            if self._application.accounts.owner_recovery_ready(account.id):
+                continue
+            try:
+                codes = self._application.enable_owner_recovery(
+                    account.id,
+                    owner_user_id=user_id,
+                    verified_email=verified_email,
+                )
+            except PermissionError:
+                continue
+            recovered.append(
+                {
+                    "accountId": account.id,
+                    "verifiedEmail": verified_email,
+                    "codes": list(codes),
+                }
+            )
+        return recovered
 
     @staticmethod
     def _raw_body(event: dict[str, Any]) -> bytes:

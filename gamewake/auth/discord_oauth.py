@@ -51,6 +51,7 @@ class UrllibOAuthHttpClient:
 class DiscordIdentity:
     discord_user_id: str
     display_name: str
+    verified_email: str | None = None
 
 
 @dataclass(frozen=True)
@@ -79,7 +80,7 @@ class DiscordOAuthClient:
                 "client_id": self._client_id,
                 "response_type": "code",
                 "redirect_uri": redirect_uri,
-                "scope": "identify",
+                "scope": "identify email",
                 "state": state,
             }
         )
@@ -118,7 +119,13 @@ class DiscordOAuthClient:
         display_name = user.get("global_name") or user.get("username")
         if not isinstance(user_id, str) or not isinstance(display_name, str):
             raise RuntimeError("Discord OAuth returned an invalid User")
+        raw_email = user.get("email")
+        verified_email = (
+            raw_email
+            if user.get("verified") is True and isinstance(raw_email, str) and "@" in raw_email
+            else None
+        )
         return DiscordOAuthGrant(
-            identity=DiscordIdentity(user_id, display_name),
+            identity=DiscordIdentity(user_id, display_name, verified_email),
             access_token=access_token,
         )

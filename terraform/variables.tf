@@ -334,6 +334,17 @@ variable "storage_grace_days" {
   }
 }
 
+variable "storage_rate_per_gib_month_brl" {
+  description = "Preco mensal em BRL por GiB que excede a Storage Allowance. Validar margem antes da beta."
+  type        = number
+  default     = 2
+
+  validation {
+    condition     = var.storage_rate_per_gib_month_brl > 0
+    error_message = "storage_rate_per_gib_month_brl deve ser positivo."
+  }
+}
+
 variable "aurora_database_name" {
   description = "Banco PostgreSQL usado pelo control plane do GameWake."
   type        = string

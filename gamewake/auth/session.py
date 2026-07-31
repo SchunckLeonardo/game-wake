@@ -18,6 +18,7 @@ class SessionClaims:
     subject: str
     issued_at: datetime
     expires_at: datetime
+    verified_email: str | None = None
 
 
 def _encode(value: bytes) -> str:
@@ -48,7 +49,13 @@ class KmsSessionCodec:
         self._client = client
         self._clock = clock or (lambda: datetime.now(UTC))
 
-    def issue(self, subject: str, *, ttl: timedelta = timedelta(hours=12)) -> str:
+    def issue(
+        self,
+        subject: str,
+        *,
+        ttl: timedelta = timedelta(hours=12),
+        verified_email: str | None = None,
+    ) -> str:
         if not subject or ttl <= timedelta(0):
             raise ValueError("session subject and positive TTL are required")
         now = self._clock()
@@ -59,6 +66,7 @@ class KmsSessionCodec:
                 "iat": int(now.timestamp()),
                 "exp": int((now + ttl).timestamp()),
                 "jti": token_urlsafe(16),
+                "verified_email": verified_email,
             },
             separators=(",", ":"),
             sort_keys=True,
@@ -95,4 +103,9 @@ class KmsSessionCodec:
             subject=str(subject),
             issued_at=issued_at,
             expires_at=expires_at,
+            verified_email=(
+                str(claims["verified_email"])
+                if isinstance(claims.get("verified_email"), str)
+                else None
+            ),
         )

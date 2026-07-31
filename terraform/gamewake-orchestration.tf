@@ -211,6 +211,7 @@ resource "aws_lambda_function" "operation_worker" {
       RUNTIME_LAUNCH_TEMPLATE_ID      = aws_launch_template.gamewake_runtime.id
       STORAGE_ALLOWANCE_BYTES         = tostring(var.storage_allowance_bytes)
       STORAGE_GRACE_DAYS              = tostring(var.storage_grace_days)
+      STORAGE_RATE_PER_GIB_MONTH_BRL  = tostring(var.storage_rate_per_gib_month_brl)
       WORLD_DATA_BUCKET               = aws_s3_bucket.world_data.id
     }
   }

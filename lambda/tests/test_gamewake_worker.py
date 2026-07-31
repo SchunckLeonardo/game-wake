@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import gamewake_worker
 
+from gamewake.billing import InsufficientFundsError
 from gamewake.worlds import OperationPhase, OperationStatus
 
 
@@ -57,7 +58,7 @@ class Worker:
         )
 
     def monitor_session(self, account_id, world_id, **kwargs):
-        assert kwargs["idle_minutes"] == 20
+        assert kwargs["idle_minutes"] is None
         return SimpleNamespace(id=f"sleep-{world_id}")
 
 
@@ -76,13 +77,18 @@ class Storage:
 
     def evaluate(self, account_id, *, wallet_can_fund, observed_at):
         self.calls.append((account_id, wallet_can_fund, observed_at))
+        return SimpleNamespace(excess_bytes=1024**3 if account_id == "account-1" else 2 * 1024**3)
 
 
 class Billing:
-    def get_wallet(self, account_id):
-        return SimpleNamespace(
-            available_balance=Decimal("1.00") if account_id == "account-1" else Decimal("0.00")
-        )
+    def __init__(self):
+        self.storage_calls = []
+
+    def charge_monthly_storage(self, account_id, **kwargs):
+        self.storage_calls.append((account_id, kwargs))
+        if account_id == "account-2":
+            raise InsufficientFundsError("insufficient")
+        return SimpleNamespace(id="storage-charge-1")
 
 
 def test_worker_composition_source_includes_persistent_runtime_usage_billing():
@@ -101,6 +107,7 @@ def services(orchestrator=None):
         world_data=WorldData(),
         storage=Storage(),
         billing=Billing(),
+        storage_rate_per_gib_month=Decimal("2.00"),
         orchestrator_factory=lambda arn: orchestrator,
     )
 
@@ -170,12 +177,33 @@ def test_daily_data_maintenance_purges_due_deletions_and_evaluates_storage_grace
         services=composed,
     )
 
-    assert result == {"purged": 2, "storage_accounts": 2}
+    assert result == {"purged": 2, "storage_accounts": 2, "storage_charges": 1}
     assert composed.world_data.calls == [
         ("account-1", "world-delete-1", observed_at),
         ("account-2", "world-delete-2", observed_at),
     ]
     assert composed.storage.calls == [
+        ("account-1", False, observed_at),
         ("account-1", True, observed_at),
         ("account-2", False, observed_at),
+    ]
+    assert composed.billing.storage_calls == [
+        (
+            "account-1",
+            {
+                "excess_bytes": 1024**3,
+                "rate_per_gib_month": Decimal("2.00"),
+                "billing_month": "2026-08",
+                "idempotency_key": "storage:account-1:2026-08",
+            },
+        ),
+        (
+            "account-2",
+            {
+                "excess_bytes": 2 * 1024**3,
+                "rate_per_gib_month": Decimal("2.00"),
+                "billing_month": "2026-08",
+                "idempotency_key": "storage:account-2:2026-08",
+            },
+        ),
     ]

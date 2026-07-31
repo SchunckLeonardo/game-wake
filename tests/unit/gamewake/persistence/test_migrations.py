@@ -9,6 +9,7 @@ def test_initial_postgres_migration_covers_durable_mvp_state() -> None:
     assert [migration.id for migration in migrations] == [
         "0001_initial",
         "0002_account_memberships",
+        "0003_owner_recovery",
     ]
     sql = "\n".join(migrations[0].statements).lower()
     for table in (
@@ -32,6 +33,9 @@ def test_initial_postgres_migration_covers_durable_mvp_state() -> None:
     assert "reject_immutable_row_mutation" in sql
     assert "wallet_ledger_entries_are_immutable" in sql
     assert "activity_events_are_immutable" in sql
+    owner_recovery = "\n".join(migrations[2].statements).lower()
+    assert "create table owner_recovery_profiles" in owner_recovery
+    assert "create table owner_recovery_codes" in owner_recovery
 
 
 def test_every_migration_statement_is_non_empty_and_source_is_versioned() -> None:

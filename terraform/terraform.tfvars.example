@@ -35,6 +35,7 @@ runtime_profile_hourly_rates = {
 # 10 GiB incluidos por conta; excedente sem saldo entra em 30 dias de tolerancia.
 storage_allowance_bytes = 10737418240
 storage_grace_days      = 30
+storage_rate_per_gib_month_brl = 2
 
 # Pelo menos uma das listas deve autorizar alguem.
 discord_allowed_user_ids = [

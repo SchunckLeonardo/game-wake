@@ -87,7 +87,6 @@ resource "aws_scheduler_schedule" "session_monitor" {
     role_arn = aws_iam_role.scheduler.arn
     input = jsonencode({
       action            = "monitor_sessions"
-      idle_minutes      = var.autostop_idle_minutes
       state_machine_arn = aws_sfn_state_machine.world_operation.arn
     })
 

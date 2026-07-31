@@ -9,10 +9,15 @@ class FakeHttpClient:
         self.calls.append((method, url, headers, form))
         if url.endswith("/oauth2/token"):
             return {"access_token": "discord-access"}
-        return {"id": "discord-user-123", "global_name": "Leonardo"}
+        return {
+            "id": "discord-user-123",
+            "global_name": "Leonardo",
+            "email": "leo@example.com",
+            "verified": True,
+        }
 
 
-def test_oauth_url_and_code_exchange_use_the_minimal_identify_scope():
+def test_oauth_url_and_code_exchange_use_verified_discord_email_for_owner_recovery():
     http = FakeHttpClient()
     client = DiscordOAuthClient(
         client_id="app-123",
@@ -27,10 +32,11 @@ def test_oauth_url_and_code_exchange_use_the_minimal_identify_scope():
         "one-time-code", redirect_uri="https://api.example/auth/discord/callback"
     )
 
-    assert "scope=identify" in url
+    assert "scope=identify+email" in url
     assert "state=signed-state" in url
     assert identity.discord_user_id == "discord-user-123"
     assert identity.display_name == "Leonardo"
+    assert identity.verified_email == "leo@example.com"
     assert http.calls[0][3]["grant_type"] == "authorization_code"
     assert http.calls[1][2] == {"Authorization": "Bearer discord-access"}
 

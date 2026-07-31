@@ -7,13 +7,34 @@ import {
 } from "../../gamewakeApi";
 
 type AccountList = { accounts: Array<{ id: string }> };
+type OwnerRecovery = {
+  accountId: string;
+  verifiedEmail: string;
+  codes: string[];
+};
+
+function decodeRecovery(value: string | null): OwnerRecovery[] {
+  if (!value) return [];
+  try {
+    const normalized = value.replaceAll("-", "+").replaceAll("_", "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    const decoded = JSON.parse(window.atob(padded));
+    return Array.isArray(decoded) ? decoded : [];
+  } catch {
+    return [];
+  }
+}
 
 export function AuthCallback() {
   const [message, setMessage] = useState("Validando sua conta do Discord…");
+  const [ownerRecovery, setOwnerRecovery] = useState<OwnerRecovery[]>([]);
+  const [destination, setDestination] = useState("/onboarding");
 
   useEffect(() => {
     async function finishSignIn() {
-      const session = new URLSearchParams(window.location.hash.slice(1)).get("session");
+      const fragment = new URLSearchParams(window.location.hash.slice(1));
+      const session = fragment.get("session");
+      const recovery = decodeRecovery(fragment.get("ownerRecovery"));
       if (!session) {
         setMessage("O Discord não retornou uma sessão válida. Tente entrar novamente.");
         return;
@@ -23,9 +44,14 @@ export function AuthCallback() {
       try {
         const response = await gameWakeFetch("/api/v1/me/accounts");
         const { accounts } = (await response.json()) as AccountList;
-        window.location.replace(
-          accounts.length === 0 ? "/onboarding" : `/accounts/${accounts[0].id}`,
-        );
+        const next = accounts.length === 0 ? "/onboarding" : `/accounts/${accounts[0].id}`;
+        if (recovery.length > 0) {
+          setOwnerRecovery(recovery);
+          setDestination(next);
+          setMessage("Esses códigos aparecem apenas agora.");
+          return;
+        }
+        window.location.replace(next);
       } catch (error) {
         window.sessionStorage.removeItem(GAMEWAKE_SESSION_KEY);
         setMessage(error instanceof Error ? error.message : "Não foi possível entrar.");
@@ -34,6 +60,21 @@ export function AuthCallback() {
 
     void finishSignIn();
   }, []);
+
+  if (ownerRecovery.length > 0) {
+    return (
+      <main className="onboarding-shell">
+        <section className="onboarding-card">
+          <span className="onboarding-symbol" aria-hidden="true">⌘</span>
+          <span className="section-index">OWNER RECOVERY</span>
+          <h1>Guarde seus códigos de recuperação</h1>
+          <p>Seu e-mail verificado é <strong>{ownerRecovery[0].verifiedEmail}</strong>. Cada código funciona uma única vez; o GameWake não consegue exibi-los novamente.</p>
+          <pre className="recovery-codes">{ownerRecovery.flatMap((item) => item.codes).join("\n")}</pre>
+          <button className="button button-primary full-button" onClick={() => window.location.replace(destination)} type="button">Já guardei, continuar</button>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main className="onboarding-shell">

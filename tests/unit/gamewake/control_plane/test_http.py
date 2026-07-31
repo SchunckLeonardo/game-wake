@@ -1,3 +1,4 @@
+import base64
 import json
 from types import SimpleNamespace
 
@@ -89,6 +90,52 @@ def test_discord_oauth_issues_a_kms_session_only_after_code_exchange():
     assert callback["headers"]["location"] == (
         "https://app.gamewake.example/auth/callback#session=token:user-123"
     )
+
+
+def test_oauth_bootstraps_owner_recovery_from_verified_discord_email_once():
+    class VerifiedOAuth(OAuth):
+        def authenticate(self, code, *, redirect_uri):
+            identity = super().authenticate(code, redirect_uri=redirect_uri)
+            identity.verified_email = "owner@example.com"
+            return identity
+
+    class RecoveryAccounts(Accounts):
+        def owner_recovery_ready(self, account_id):
+            assert account_id == "account-1"
+            return False
+
+    application = SimpleNamespace(
+        accounts=RecoveryAccounts(),
+        list_accounts=lambda **kwargs: (SimpleNamespace(id="account-1"),),
+        enable_owner_recovery=lambda account_id, **kwargs: ("code-one", "code-two"),
+    )
+    transport = GameWakeHttpHandler(
+        application=application,
+        api=Api(),
+        sessions=Sessions(),
+        oauth=VerifiedOAuth(),
+        console_url="https://app.gamewake.example",
+        oauth_redirect_uri="https://api.gamewake.example/auth/discord/callback",
+    )
+
+    callback = transport.handle(
+        event(
+            "GET",
+            "/auth/discord/callback",
+            query={"code": "discord-code", "state": "token:oauth"},
+        )
+    )
+    fragment = callback["headers"]["location"].split("#", 1)[1]
+    encoded = dict(item.split("=", 1) for item in fragment.split("&"))["ownerRecovery"]
+    recovery = json.loads(base64.urlsafe_b64decode(encoded + "=="))
+
+    assert recovery == [
+        {
+            "accountId": "account-1",
+            "verifiedEmail": "owner@example.com",
+            "codes": ["code-one", "code-two"],
+        }
+    ]
 
 
 def test_api_requires_a_bearer_session_and_applies_exact_origin_cors():
