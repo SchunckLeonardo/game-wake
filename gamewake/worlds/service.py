@@ -90,6 +90,8 @@ class Worlds:
             phase=OperationPhase.REQUESTED,
             idempotency_key=idempotency_key,
             version=1,
+            runtime_id=None,
+            runtime_provider_reference=None,
         )
         return self._repository.begin_operation(
             replace(

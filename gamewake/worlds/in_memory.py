@@ -63,3 +63,33 @@ class InMemoryWorldRepository:
             for operation in self._operations.values()
             if operation.account_id == account_id and operation.world_id == world_id
         )
+
+    def get_operation(self, account_id: str, operation_id: str) -> WorldOperation:
+        operation = self._operations[operation_id]
+        if operation.account_id != account_id:
+            raise KeyError(operation_id)
+        return operation
+
+    def save_operation(
+        self,
+        operation: WorldOperation,
+        *,
+        expected_operation_version: int,
+        world: World | None = None,
+        expected_world_version: int | None = None,
+    ) -> None:
+        with self._lock:
+            current_operation = self._operations[operation.id]
+            if current_operation.version != expected_operation_version:
+                raise RuntimeError("World Operation was changed concurrently")
+            if world is not None:
+                world_key = (world.account_id, world.id)
+                current_world = self._worlds[world_key]
+                if current_world.version != expected_world_version:
+                    raise RuntimeError("World was changed concurrently")
+                self._worlds[world_key] = world
+            self._operations[operation.id] = operation
+            if operation.status not in {OperationStatus.PENDING, OperationStatus.RUNNING}:
+                world_key = (operation.account_id, operation.world_id)
+                if self._active_operations.get(world_key) == operation.id:
+                    del self._active_operations[world_key]

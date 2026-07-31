@@ -28,6 +28,7 @@ class OperationPhase(StrEnum):
     PROVISIONING_RUNTIME = "provisioning_runtime"
     RESTORING_WORLD = "restoring_world"
     APPLYING_CONFIGURATION = "applying_configuration"
+    STARTING_GAME = "starting_game"
     CHECKING_GAME_HEALTH = "checking_game_health"
     ONLINE = "online"
     PERSISTING_WORLD = "persisting_world"
@@ -50,6 +51,12 @@ class World:
 
 
 @dataclass(frozen=True)
+class Runtime:
+    id: str
+    provider_reference: str
+
+
+@dataclass(frozen=True)
 class WorldOperation:
     id: str
     account_id: str
@@ -59,3 +66,5 @@ class WorldOperation:
     phase: OperationPhase
     idempotency_key: str
     version: int
+    runtime_id: str | None = None
+    runtime_provider_reference: str | None = None
