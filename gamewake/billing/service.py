@@ -94,10 +94,7 @@ class Billing:
                 None,
             )
             if existing is not None:
-                if (
-                    existing.payer_user_id != payer_user_id
-                    or existing.package_id != package_id
-                ):
+                if existing.payer_user_id != payer_user_id or existing.package_id != package_id:
                     raise ValueError("idempotency key was used for another contribution")
                 return existing
             if self._try_save(
@@ -129,8 +126,7 @@ class Billing:
             if current.status is ContributionStatus.PENDING:
                 return current
             contributions = tuple(
-                pending if item.id == contribution.id else item
-                for item in snapshot.contributions
+                pending if item.id == contribution.id else item for item in snapshot.contributions
             )
             if self._try_save(
                 replace(snapshot, contributions=contributions),
@@ -171,9 +167,7 @@ class Billing:
         if self._payment_provider is None:
             raise RuntimeError("Payment Provider is not configured")
         snapshot = self._repository.get(account_id)
-        contribution = next(
-            item for item in snapshot.contributions if item.id == contribution_id
-        )
+        contribution = next(item for item in snapshot.contributions if item.id == contribution_id)
         if contribution.payer_user_id != requesting_user_id:
             raise PermissionError("only the payer can request this refund")
         if contribution.status in {
@@ -194,9 +188,7 @@ class Billing:
         )
         for _ in range(100):
             snapshot = self._repository.get(account_id)
-            current = next(
-                item for item in snapshot.contributions if item.id == contribution_id
-            )
+            current = next(item for item in snapshot.contributions if item.id == contribution_id)
             if current.status in {
                 ContributionStatus.REFUND_REQUESTED,
                 ContributionStatus.REFUNDED,
@@ -210,8 +202,7 @@ class Billing:
                 provider_refund_id=refund_id,
             )
             contributions = tuple(
-                requested if item.id == contribution_id else item
-                for item in snapshot.contributions
+                requested if item.id == contribution_id else item for item in snapshot.contributions
             )
             if self._try_save(
                 replace(snapshot, contributions=contributions),
@@ -356,8 +347,7 @@ class Billing:
                 processed_at=self._clock(),
             )
             contributions = tuple(
-                updated if item.id == contribution.id else item
-                for item in snapshot.contributions
+                updated if item.id == contribution.id else item for item in snapshot.contributions
             )
             if self._try_save(
                 replace(
@@ -437,9 +427,7 @@ class Billing:
         if available_balance < contribution.amount:
             return replace(contribution, status=ContributionStatus.NEEDS_REVIEW), entries
         entry_type = (
-            LedgerEntryType.REFUND
-            if event_type == "checkout.refunded"
-            else LedgerEntryType.DISPUTE
+            LedgerEntryType.REFUND if event_type == "checkout.refunded" else LedgerEntryType.DISPUTE
         )
         entry = LedgerEntry(
             id=str(uuid4()),
@@ -477,11 +465,7 @@ class Billing:
         for _ in range(100):
             snapshot = self._repository.get(account_id)
             existing = next(
-                (
-                    quote
-                    for quote in snapshot.quotes
-                    if quote.idempotency_key == idempotency_key
-                ),
+                (quote for quote in snapshot.quotes if quote.idempotency_key == idempotency_key),
                 None,
             )
             if existing is not None:
@@ -563,8 +547,7 @@ class Billing:
                 updated_at=self._clock(),
             )
             budgets = tuple(
-                budget if item.world_id == world_id else item
-                for item in snapshot.world_budgets
+                budget if item.world_id == world_id else item for item in snapshot.world_budgets
             )
             if current is None:
                 budgets = (*budgets, budget)
@@ -617,11 +600,7 @@ class Billing:
         for _ in range(100):
             snapshot = self._repository.get(account_id)
             existing = next(
-                (
-                    entry
-                    for entry in snapshot.entries
-                    if entry.idempotency_key == idempotency_key
-                ),
+                (entry for entry in snapshot.entries if entry.idempotency_key == idempotency_key),
                 None,
             )
             if existing is not None:
@@ -658,19 +637,15 @@ class Billing:
         except ValueError as error:
             raise ValueError("billing month must use YYYY-MM") from error
         rate = self._positive_money(rate_per_gib_month)
-        amount = (
-            rate * Decimal(excess_bytes) / Decimal(1024**3)
-        ).quantize(_CENT, rounding=ROUND_HALF_UP)
+        amount = (rate * Decimal(excess_bytes) / Decimal(1024**3)).quantize(
+            _CENT, rounding=ROUND_HALF_UP
+        )
         if amount <= 0:
             raise ValueError("storage charge rounds below one cent")
         for _ in range(100):
             snapshot = self._repository.get(account_id)
             existing = next(
-                (
-                    entry
-                    for entry in snapshot.entries
-                    if entry.idempotency_key == idempotency_key
-                ),
+                (entry for entry in snapshot.entries if entry.idempotency_key == idempotency_key),
                 None,
             )
             if existing is not None:
@@ -720,8 +695,7 @@ class Billing:
                 raise InsufficientFundsError("Wallet has insufficient available balance")
             if (
                 world_id is not None
-                and self._world_budget_available(snapshot, world_id, self._clock())
-                < normalized
+                and self._world_budget_available(snapshot, world_id, self._clock()) < normalized
             ):
                 raise WorldBudgetExceeded("World Budget cannot fund this reservation")
             reservation = UsageReservation(
@@ -764,19 +738,13 @@ class Billing:
         for _ in range(100):
             snapshot = self._repository.get(account_id)
             quote = next(item for item in snapshot.quotes if item.id == quote_id)
-            reservation = next(
-                item for item in snapshot.reservations if item.id == reservation_id
-            )
+            reservation = next(item for item in snapshot.reservations if item.id == reservation_id)
             if reservation.quote_id != quote.id:
                 raise ValueError("Usage Reservation does not belong to Session Quote")
             if reservation.status is not ReservationStatus.ACTIVE:
                 raise ValueError("Balance Guard requires an active Usage Reservation")
             guard = next(
-                (
-                    item
-                    for item in snapshot.balance_guards
-                    if item.reservation_id == reservation.id
-                ),
+                (item for item in snapshot.balance_guards if item.reservation_id == reservation.id),
                 BalanceGuardState(
                     reservation_id=reservation.id,
                     notified_alert_minutes=(),
@@ -784,9 +752,7 @@ class Billing:
             )
             elapsed_seconds = ceil(elapsed)
             required_amount = (
-                quote.hourly_rate
-                * Decimal(elapsed_seconds + safe_sleep_seconds)
-                / Decimal(3600)
+                quote.hourly_rate * Decimal(elapsed_seconds + safe_sleep_seconds) / Decimal(3600)
             ).quantize(_CENT, rounding=ROUND_UP)
             additional_hold = max(Decimal("0.00"), required_amount - reservation.amount)
             wallet_available = self._available_balance(snapshot)
@@ -797,35 +763,25 @@ class Billing:
                 else None
             )
             can_extend_wallet = additional_hold <= wallet_available
-            can_extend_budget = (
-                budget_available is None or additional_hold <= budget_available
-            )
+            can_extend_budget = budget_available is None or additional_hold <= budget_available
             can_extend = can_extend_wallet and can_extend_budget
             reserved_amount = required_amount if can_extend else reservation.amount
-            wallet_after = (
-                wallet_available - additional_hold if can_extend else Decimal("0.00")
-            )
+            wallet_after = wallet_available - additional_hold if can_extend else Decimal("0.00")
             budget_after = (
                 budget_available - additional_hold
                 if can_extend and budget_available is not None
                 else None
             )
             available_after = (
-                min(wallet_after, budget_after)
-                if budget_after is not None
-                else wallet_after
+                min(wallet_after, budget_after) if budget_after is not None else wallet_after
             )
             rate_per_minute = quote.hourly_rate / Decimal(60)
             remaining_minutes_decimal = (
-                available_after / rate_per_minute
-                if rate_per_minute > 0
-                else Decimal("0.00")
+                available_after / rate_per_minute if rate_per_minute > 0 else Decimal("0.00")
             )
             remaining_minutes = max(0, int(remaining_minutes_decimal))
             eligible = {
-                threshold
-                for threshold in (30, 10, 5)
-                if remaining_minutes_decimal <= threshold
+                threshold for threshold in (30, 10, 5) if remaining_minutes_decimal <= threshold
             }
             already_notified = set(guard.notified_alert_minutes)
             newly_eligible = eligible - already_notified
@@ -856,13 +812,9 @@ class Billing:
                 eligible_budget_alerts = {
                     threshold for threshold in (50, 80, 100) if percentage >= threshold
                 }
-                notified_budget_alerts = set(
-                    budget_alert_state.notified_percentages
-                )
+                notified_budget_alerts = set(budget_alert_state.notified_percentages)
                 new_budget_eligible = eligible_budget_alerts - notified_budget_alerts
-                budget_new_alerts = (
-                    (max(new_budget_eligible),) if new_budget_eligible else ()
-                )
+                budget_new_alerts = (max(new_budget_eligible),) if new_budget_eligible else ()
                 budget_alert_state = replace(
                     budget_alert_state,
                     notified_percentages=tuple(
@@ -872,9 +824,7 @@ class Billing:
             safe_sleep_reserved = can_extend
             should_sleep = not can_extend or (
                 available_after
-                < quote.hourly_rate
-                * Decimal(guard_interval_seconds)
-                / Decimal(3600)
+                < quote.hourly_rate * Decimal(guard_interval_seconds) / Decimal(3600)
             )
             if should_sleep:
                 budget_is_limiter = budget_after is not None and budget_after <= wallet_after
@@ -897,17 +847,14 @@ class Billing:
             )
             extended = replace(reservation, amount=reserved_amount)
             reservations = tuple(
-                extended if item.id == reservation.id else item
-                for item in snapshot.reservations
+                extended if item.id == reservation.id else item for item in snapshot.reservations
             )
             updated_guard = replace(guard, notified_alert_minutes=notified)
             balance_guards = tuple(
                 updated_guard if item.reservation_id == reservation.id else item
                 for item in snapshot.balance_guards
             )
-            if not any(
-                item.reservation_id == reservation.id for item in snapshot.balance_guards
-            ):
+            if not any(item.reservation_id == reservation.id for item in snapshot.balance_guards):
                 balance_guards = (*balance_guards, updated_guard)
             budget_alerts = snapshot.world_budget_alerts
             if budget_alert_state is not None:
@@ -949,17 +896,14 @@ class Billing:
     ) -> UsageReservation:
         for _ in range(100):
             snapshot = self._repository.get(account_id)
-            reservation = next(
-                item for item in snapshot.reservations if item.id == reservation_id
-            )
+            reservation = next(item for item in snapshot.reservations if item.id == reservation_id)
             if reservation.status is ReservationStatus.RELEASED:
                 return reservation
             if reservation.status is ReservationStatus.CAPTURED:
                 raise ValueError("captured Usage Reservation cannot be released")
             released = replace(reservation, status=ReservationStatus.RELEASED)
             reservations = tuple(
-                released if item.id == reservation_id else item
-                for item in snapshot.reservations
+                released if item.id == reservation_id else item for item in snapshot.reservations
             )
             if self._try_save(
                 replace(snapshot, reservations=reservations),
@@ -1020,9 +964,7 @@ class Billing:
         elapsed = (recovered_at - unavailable_at).total_seconds()
         if elapsed <= 120:
             return None
-        reference = (
-            f"{usage_id}:{unavailable_at.isoformat()}:{recovered_at.isoformat()}"
-        )
+        reference = f"{usage_id}:{unavailable_at.isoformat()}:{recovered_at.isoformat()}"
         for _ in range(100):
             snapshot = self._repository.get(account_id)
             usage = next(item for item in snapshot.usages if item.id == usage_id)
@@ -1044,9 +986,9 @@ class Billing:
                 return existing
             quote = next(item for item in snapshot.quotes if item.id == usage.quote_id)
             unavailable_seconds = ceil(elapsed)
-            amount = (
-                quote.hourly_rate * Decimal(unavailable_seconds) / Decimal(3600)
-            ).quantize(_CENT, rounding=ROUND_HALF_UP)
+            amount = (quote.hourly_rate * Decimal(unavailable_seconds) / Decimal(3600)).quantize(
+                _CENT, rounding=ROUND_HALF_UP
+            )
             amount = min(amount, usage.amount)
             if amount <= 0:
                 return None
@@ -1078,18 +1020,12 @@ class Billing:
         for _ in range(100):
             snapshot = self._repository.get(account_id)
             existing = next(
-                (
-                    entry
-                    for entry in snapshot.entries
-                    if entry.idempotency_key == idempotency_key
-                ),
+                (entry for entry in snapshot.entries if entry.idempotency_key == idempotency_key),
                 None,
             )
             if existing is not None:
                 return existing
-            reservation = next(
-                item for item in snapshot.reservations if item.id == reservation_id
-            )
+            reservation = next(item for item in snapshot.reservations if item.id == reservation_id)
             if reservation.status is not ReservationStatus.ACTIVE:
                 raise ValueError("Usage Reservation is no longer active")
             if normalized > reservation.amount:
@@ -1105,8 +1041,7 @@ class Billing:
             )
             captured = replace(reservation, status=ReservationStatus.CAPTURED)
             reservations = tuple(
-                captured if item.id == reservation_id else item
-                for item in snapshot.reservations
+                captured if item.id == reservation_id else item for item in snapshot.reservations
             )
             if self._try_save(
                 replace(
@@ -1136,24 +1071,18 @@ class Billing:
         for _ in range(100):
             snapshot = self._repository.get(account_id)
             existing = next(
-                (
-                    usage
-                    for usage in snapshot.usages
-                    if usage.idempotency_key == idempotency_key
-                ),
+                (usage for usage in snapshot.usages if usage.idempotency_key == idempotency_key),
                 None,
             )
             if existing is not None:
                 return existing
             quote = next(item for item in snapshot.quotes if item.id == quote_id)
-            reservation = next(
-                item for item in snapshot.reservations if item.id == reservation_id
-            )
+            reservation = next(item for item in snapshot.reservations if item.id == reservation_id)
             if reservation.status is not ReservationStatus.ACTIVE:
                 raise ValueError("Usage Reservation is no longer active")
-            amount = (
-                quote.hourly_rate * Decimal(billable_seconds) / Decimal(3600)
-            ).quantize(_CENT, rounding=ROUND_HALF_UP)
+            amount = (quote.hourly_rate * Decimal(billable_seconds) / Decimal(3600)).quantize(
+                _CENT, rounding=ROUND_HALF_UP
+            )
             if amount > reservation.amount:
                 raise ValueError("Runtime Usage exceeds its active reservation")
             charge = LedgerEntry(
@@ -1180,8 +1109,7 @@ class Billing:
             )
             captured = replace(reservation, status=ReservationStatus.CAPTURED)
             reservations = tuple(
-                captured if item.id == reservation_id else item
-                for item in snapshot.reservations
+                captured if item.id == reservation_id else item for item in snapshot.reservations
             )
             if self._try_save(
                 replace(
@@ -1272,10 +1200,7 @@ class Billing:
                         LedgerEntryType.WAKE_GUARANTEE,
                         LedgerEntryType.AVAILABILITY_CREDIT,
                     }
-                    and (
-                        entry.reference == usage.id
-                        or entry.reference.startswith(f"{usage.id}:")
-                    )
+                    and (entry.reference == usage.id or entry.reference.startswith(f"{usage.id}:"))
                 ),
                 start=Decimal("0.00"),
             )

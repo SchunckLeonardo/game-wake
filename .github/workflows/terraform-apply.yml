@@ -41,6 +41,8 @@ jobs:
       TF_VAR_discord_guild_id: ${{ vars.DISCORD_GUILD_ID }}
       TF_VAR_discord_allowed_user_ids: ${{ vars.DISCORD_ALLOWED_USER_IDS_JSON }}
       TF_VAR_discord_allowed_role_ids: ${{ vars.DISCORD_ALLOWED_ROLE_IDS_JSON }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_STATE_KEY: ${{ vars.TF_STATE_KEY }}
     steps:
       - name: Check explicit confirmation
         env:
@@ -75,16 +77,14 @@ jobs:
       - name: Package Lambda
         run: ./scripts/package-lambda.sh
 
-      - name: Require a persistent remote backend
-        run: |
-          if ! grep -Eq '^[[:space:]]*backend "s3"' terraform/versions.tf; then
-            echo "GitHub runners cannot safely mutate infrastructure with local state." >&2
-            echo "Enable and migrate the documented S3 backend before this workflow." >&2
-            exit 1
-          fi
-
       - name: Initialize Terraform
-        run: terraform -chdir=terraform init
+        run: >-
+          terraform -chdir=terraform init
+          -backend-config="bucket=$TF_STATE_BUCKET"
+          -backend-config="key=$TF_STATE_KEY"
+          -backend-config="region=$TF_VAR_aws_region"
+          -backend-config="encrypt=true"
+          -backend-config="use_lockfile=true"
 
       - name: Create and display saved plan
         env:

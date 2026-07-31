@@ -142,9 +142,7 @@ class InMemoryWorldArchiveStore:
 
     def storage_usage(self, account_id: str, worlds: tuple[World, ...]) -> int:
         active_worlds = {
-            world.id
-            for world in worlds
-            if world.status is not WorldStatus.PENDING_DELETION
+            world.id for world in worlds if world.status is not WorldStatus.PENDING_DELETION
         }
         current_states = sum(
             self._state_sizes.get(world.stored_state_id, 0)
@@ -166,9 +164,7 @@ class InMemoryWorldArchiveStore:
         bytes_to_free: int,
     ) -> tuple[Backup, ...]:
         active_world_ids = {
-            world.id
-            for world in worlds
-            if world.status is not WorldStatus.PENDING_DELETION
+            world.id for world in worlds if world.status is not WorldStatus.PENDING_DELETION
         }
         candidates = sorted(
             (

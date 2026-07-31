@@ -59,9 +59,8 @@ class WorldData:
             actor_user_id,
             Permission.CREATE_BACKUP,
         )
-        if (
-            self._storage_gate is not None
-            and not self._storage_gate.can_create_manual_backup(account_id)
+        if self._storage_gate is not None and not self._storage_gate.can_create_manual_backup(
+            account_id
         ):
             raise StorageBlockedError("Storage Grace Period blocks manual Backups")
         world = self._repository.get(account_id, world_id)

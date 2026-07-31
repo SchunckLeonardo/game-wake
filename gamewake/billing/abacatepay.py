@@ -148,9 +148,7 @@ class AbacatePayPaymentProvider:
             amount = Decimal(int(data["amount"])) / Decimal(100)
             paid_cents = data.get("paidAmount")
             paid_amount = (
-                Decimal(int(paid_cents)) / Decimal(100)
-                if paid_cents is not None
-                else None
+                Decimal(int(paid_cents)) / Decimal(100) if paid_cents is not None else None
             )
             return PaymentCheckout(
                 id=str(data["id"]),

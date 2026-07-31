@@ -10,8 +10,11 @@ if [[ -x .venv/bin/python ]]; then
 fi
 
 "$python_bin" -m pytest -q
-"$python_bin" -m ruff check lambda server scripts shared palworld
-"$python_bin" -m ruff format --check lambda server scripts shared palworld
+"$python_bin" -m ruff check gamewake lambda server scripts shared tests palworld
+"$python_bin" -m ruff format --check gamewake lambda server scripts shared tests palworld
+
+npm --prefix web run lint
+npm --prefix web run test
 
 bash -n scripts/*.sh server/*.sh terraform/user-data.sh.tpl
 shellcheck scripts/*.sh server/*.sh

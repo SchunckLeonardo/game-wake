@@ -248,8 +248,11 @@ def test_non_forced_sleep_is_cancelled_when_players_are_online():
 
     assert cancelled.status is OperationStatus.CANCELLED
     assert events == ["players"]
-    assert worlds.get_world(
-        account.id,
-        world.id,
-        viewer_user_id="owner",
-    ).status is WorldStatus.ONLINE
+    assert (
+        worlds.get_world(
+            account.id,
+            world.id,
+            viewer_user_id="owner",
+        ).status
+        is WorldStatus.ONLINE
+    )

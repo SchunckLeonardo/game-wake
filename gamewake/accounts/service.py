@@ -144,9 +144,7 @@ class Accounts:
             or not self._is_account_owner(snapshot, actor_owner_user_id)
             or not self._is_account_owner(snapshot, lost_owner_user_id)
         ):
-            raise PermissionDeniedError(
-                "a different current Owner must authorize this recovery"
-            )
+            raise PermissionDeniedError("a different current Owner must authorize this recovery")
         self._verify_sensitive_confirmation(
             actor_user_id=actor_owner_user_id,
             expected_resource_name=snapshot.account.name,
@@ -232,10 +230,7 @@ class Accounts:
         viewer_user_id: str,
     ) -> list[Membership]:
         snapshot = self._repository.get(account_id)
-        if not any(
-            membership.user_id == viewer_user_id
-            for membership in snapshot.memberships
-        ):
+        if not any(membership.user_id == viewer_user_id for membership in snapshot.memberships):
             raise PermissionDeniedError("memberships are visible only inside their account")
         return list(snapshot.memberships)
 
@@ -250,9 +245,7 @@ class Accounts:
             user_id=viewer_user_id,
             permission=Permission.MANAGE_MEMBERSHIPS,
         ):
-            raise PermissionDeniedError(
-                "invitations require membership management permission"
-            )
+            raise PermissionDeniedError("invitations require membership management permission")
         return list(self._repository.get(account_id).invitations)
 
     def list_activity_events(
@@ -262,10 +255,7 @@ class Accounts:
         viewer_user_id: str,
     ) -> list[ActivityEvent]:
         snapshot = self._repository.get(account_id)
-        if not any(
-            membership.user_id == viewer_user_id
-            for membership in snapshot.memberships
-        ):
+        if not any(membership.user_id == viewer_user_id for membership in snapshot.memberships):
             raise PermissionDeniedError("activity is visible only to account members")
         return list(snapshot.activity_events)
 
@@ -279,11 +269,7 @@ class Accounts:
     ) -> bool:
         snapshot = self._repository.get(account_id)
         membership = next(
-            (
-                membership
-                for membership in snapshot.memberships
-                if membership.user_id == user_id
-            ),
+            (membership for membership in snapshot.memberships if membership.user_id == user_id),
             None,
         )
         return membership is not None and permission in permissions_for(
@@ -351,9 +337,7 @@ class Accounts:
         )
         custom_role = next(role for role in snapshot.custom_roles if role.id == custom_role_id)
         membership = next(
-            membership
-            for membership in snapshot.memberships
-            if membership.id == membership_id
+            membership for membership in snapshot.memberships if membership.id == membership_id
         )
         updated = replace(
             membership,
@@ -367,8 +351,7 @@ class Accounts:
             ),
         )
         memberships = tuple(
-            updated if item.id == membership_id else item
-            for item in snapshot.memberships
+            updated if item.id == membership_id else item for item in snapshot.memberships
         )
         self._repository.save(
             replace(snapshot, memberships=memberships),
@@ -400,9 +383,7 @@ class Accounts:
             confirmation=confirmation,
         )
         membership = next(
-            membership
-            for membership in snapshot.memberships
-            if membership.id == membership_id
+            membership for membership in snapshot.memberships if membership.id == membership_id
         )
         updated = replace(
             membership,
@@ -416,8 +397,7 @@ class Accounts:
             ),
         )
         memberships = tuple(
-            updated if item.id == membership_id else item
-            for item in snapshot.memberships
+            updated if item.id == membership_id else item for item in snapshot.memberships
         )
         self._repository.save(
             replace(snapshot, memberships=memberships),
@@ -446,14 +426,8 @@ class Accounts:
             expected_resource_name=snapshot.account.name,
             confirmation=confirmation,
         )
-        membership = next(
-            item for item in snapshot.memberships if item.id == membership_id
-        )
-        assignment = next(
-            item
-            for item in membership.assignments
-            if item.id == role_assignment_id
-        )
+        membership = next(item for item in snapshot.memberships if item.id == membership_id)
+        assignment = next(item for item in membership.assignments if item.id == role_assignment_id)
         if (
             assignment.predefined_role is PredefinedRole.OWNER
             and assignment.scope.world_id is None
@@ -464,14 +438,11 @@ class Accounts:
         updated = replace(
             membership,
             assignments=tuple(
-                item
-                for item in membership.assignments
-                if item.id != role_assignment_id
+                item for item in membership.assignments if item.id != role_assignment_id
             ),
         )
         memberships = tuple(
-            updated if item.id == membership_id else item
-            for item in snapshot.memberships
+            updated if item.id == membership_id else item for item in snapshot.memberships
         )
         event = ActivityEvent(
             id=str(uuid4()),
@@ -540,9 +511,7 @@ class Accounts:
     ) -> Membership:
         snapshot = self._repository.get(account_id)
         invitation = next(
-            invitation
-            for invitation in snapshot.invitations
-            if invitation.id == invitation_id
+            invitation for invitation in snapshot.invitations if invitation.id == invitation_id
         )
         if invitation.invited_user_id != invited_user_id:
             raise PermissionDeniedError("only the invited User can accept this Invitation")
@@ -568,8 +537,7 @@ class Accounts:
             ),
         )
         invitations = tuple(
-            accepted if item.id == invitation.id else item
-            for item in snapshot.invitations
+            accepted if item.id == invitation.id else item for item in snapshot.invitations
         )
         self._repository.save(
             replace(
@@ -604,17 +572,13 @@ class Accounts:
             confirmation=confirmation,
         )
         membership = next(
-            membership
-            for membership in snapshot.memberships
-            if membership.id == membership_id
+            membership for membership in snapshot.memberships if membership.id == membership_id
         )
         if PredefinedRole.OWNER in membership.roles and self._owner_count(snapshot) == 1:
             raise LastOwnerRemovalError("an account must retain at least one Owner")
 
         remaining = tuple(
-            membership
-            for membership in snapshot.memberships
-            if membership.id != membership_id
+            membership for membership in snapshot.memberships if membership.id != membership_id
         )
         event = ActivityEvent(
             id=str(uuid4()),
@@ -625,9 +589,7 @@ class Accounts:
             occurred_at=self._clock(),
         )
         owner_user_ids = frozenset(
-            item.user_id
-            for item in snapshot.memberships
-            if PredefinedRole.OWNER in item.roles
+            item.user_id for item in snapshot.memberships if PredefinedRole.OWNER in item.roles
         )
         self._repository.save(
             replace(

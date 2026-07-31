@@ -76,16 +76,11 @@ class InMemoryAccountRepository:
         self._identities = {
             key: current
             for key, current in self._identities.items()
-            if not (
-                current.user_id == identity.user_id
-                and current.provider is identity.provider
-            )
+            if not (current.user_id == identity.user_id and current.provider is identity.provider)
         }
         self._identities[(identity.provider, identity.provider_user_id)] = identity
 
     def list_linked_identities(self, user_id: str) -> tuple[LinkedIdentity, ...]:
         return tuple(
-            identity
-            for identity in self._identities.values()
-            if identity.user_id == user_id
+            identity for identity in self._identities.values() if identity.user_id == user_id
         )

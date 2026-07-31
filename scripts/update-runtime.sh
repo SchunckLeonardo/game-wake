@@ -79,6 +79,7 @@ runtime_sources=(
   server/autostop.sh
   server/notify-discord.sh
   server/healthcheck.sh
+  server/gamewake-operation.sh
   server/palworld.service
   server/palworld-notify.service
   server/palworld-autostop.service
@@ -96,7 +97,7 @@ install_script=$(printf '%s\n' \
   'runtime_dir=$(mktemp -d)' \
   'trap '\''rm -rf "$runtime_dir"'\'' EXIT' \
   "printf '%s' '$runtime_payload' | base64 --decode | tar -xz -C \"\$runtime_dir\"" \
-  'install -d -m 0755 /usr/local/lib/palworld /usr/local/sbin' \
+  'install -d -m 0755 /usr/local/lib/palworld /usr/local/sbin /opt/gamewake/bin' \
   'install -m 0644 "$runtime_dir/server/palworld-common.sh" /usr/local/lib/palworld/palworld-common.sh' \
   'install -m 0755 "$runtime_dir/server/render_settings.py" /usr/local/lib/palworld/render_settings.py' \
   'install -m 0755 "$runtime_dir/server/install-palworld.sh" /usr/local/sbin/install-palworld.sh' \
@@ -107,6 +108,7 @@ install_script=$(printf '%s\n' \
   'install -m 0755 "$runtime_dir/server/autostop.sh" /usr/local/sbin/autostop.sh' \
   'install -m 0755 "$runtime_dir/server/notify-discord.sh" /usr/local/sbin/notify-discord.sh' \
   'install -m 0755 "$runtime_dir/server/healthcheck.sh" /usr/local/sbin/healthcheck.sh' \
+  'install -m 0755 "$runtime_dir/server/gamewake-operation.sh" /opt/gamewake/bin/gamewake-operation' \
   'install -m 0644 "$runtime_dir/server/palworld.service" /etc/systemd/system/palworld.service' \
   'install -m 0644 "$runtime_dir/server/palworld-notify.service" /etc/systemd/system/palworld-notify.service' \
   'install -m 0644 "$runtime_dir/server/palworld-autostop.service" /etc/systemd/system/palworld-autostop.service' \
@@ -116,6 +118,7 @@ install_script=$(printf '%s\n' \
   'chown root:root /usr/local/lib/palworld/palworld-common.sh /usr/local/lib/palworld/render_settings.py' \
   'chown root:root /usr/local/sbin/{install,configure,start,stop,backup}-palworld.sh' \
   'chown root:root /usr/local/sbin/{autostop,notify-discord,healthcheck}.sh' \
+  'chown root:root /opt/gamewake/bin/gamewake-operation' \
   'chown root:root /etc/systemd/system/palworld*.service /etc/systemd/system/palworld*.timer' \
   'systemctl daemon-reload')
 install_command=$(ssm_bash_command "$install_script")

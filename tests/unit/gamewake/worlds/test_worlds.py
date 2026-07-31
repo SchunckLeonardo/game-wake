@@ -21,11 +21,14 @@ def test_an_owner_creates_a_sleeping_world_without_a_runtime():
     assert world.account_id == account.id
     assert world.status is WorldStatus.SLEEPING
     assert world.runtime_id is None
-    assert worlds.get_world(
-        account.id,
-        world.id,
-        viewer_user_id="owner",
-    ) == world
+    assert (
+        worlds.get_world(
+            account.id,
+            world.id,
+            viewer_user_id="owner",
+        )
+        == world
+    )
 
 
 def test_a_user_from_another_account_cannot_observe_a_world():

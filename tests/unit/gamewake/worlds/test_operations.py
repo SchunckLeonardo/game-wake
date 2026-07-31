@@ -45,8 +45,11 @@ def test_concurrent_wake_commands_join_one_world_operation():
     )
     assert operation.status is OperationStatus.PENDING
     assert operation.phase is OperationPhase.REQUESTED
-    assert worlds.get_world(
-        account.id,
-        world.id,
-        viewer_user_id="owner",
-    ).status is WorldStatus.WAKING
+    assert (
+        worlds.get_world(
+            account.id,
+            world.id,
+            viewer_user_id="owner",
+        ).status
+        is WorldStatus.WAKING
+    )

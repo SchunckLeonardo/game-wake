@@ -99,14 +99,20 @@ def test_automatic_recovery_stops_after_three_attempts_in_fifteen_minutes():
     assert all(attempt.operation_type is OperationType.RECOVER for attempt in attempts)
     assert provider.provision_calls == 1
     assert template.start_calls == 4
-    assert worlds.get_world(
-        account.id,
-        world.id,
-        viewer_user_id="owner",
-    ).status is WorldStatus.NEEDS_ATTENTION
-    assert worlds.request_automatic_recovery(
-        account.id,
-        world.id,
-        detected_at=now + timedelta(minutes=4),
-        idempotency_key="health-event-4",
-    ) is None
+    assert (
+        worlds.get_world(
+            account.id,
+            world.id,
+            viewer_user_id="owner",
+        ).status
+        is WorldStatus.NEEDS_ATTENTION
+    )
+    assert (
+        worlds.request_automatic_recovery(
+            account.id,
+            world.id,
+            detected_at=now + timedelta(minutes=4),
+            idempotency_key="health-event-4",
+        )
+        is None
+    )

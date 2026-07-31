@@ -21,9 +21,7 @@ class InMemoryWorldRepository:
         return self._worlds[(account_id, world_id)]
 
     def list_worlds(self, account_id: str) -> tuple[World, ...]:
-        return tuple(
-            world for world in self._worlds.values() if world.account_id == account_id
-        )
+        return tuple(world for world in self._worlds.values() if world.account_id == account_id)
 
     def save(self, world: World, expected_version: int) -> None:
         key = (world.account_id, world.id)

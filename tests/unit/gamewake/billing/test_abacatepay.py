@@ -77,9 +77,7 @@ def test_webhook_rejects_an_invalid_signature_before_processing_the_event():
         public_hmac_key="public-hmac-key",
         event_processor=processed.append,
     )
-    raw_body = json.dumps(
-        {"id": "log_1", "event": "checkout.completed", "data": {}}
-    ).encode()
+    raw_body = json.dumps({"id": "log_1", "event": "checkout.completed", "data": {}}).encode()
 
     with pytest.raises(InvalidWebhookSignature):
         handler.handle(

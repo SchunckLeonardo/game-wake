@@ -175,18 +175,24 @@ def test_due_pending_deletion_removes_game_data_but_not_before_deadline():
         idempotency_key="delete-1",
     )
 
-    assert data.purge_due_deletion(
-        account.id,
-        world.id,
-        observed_at=now + timedelta(days=6),
-    ) is False
+    assert (
+        data.purge_due_deletion(
+            account.id,
+            world.id,
+            observed_at=now + timedelta(days=6),
+        )
+        is False
+    )
     assert repository.get(account.id, world.id).status is WorldStatus.PENDING_DELETION
 
-    assert data.purge_due_deletion(
-        account.id,
-        world.id,
-        observed_at=now + timedelta(days=7),
-    ) is True
+    assert (
+        data.purge_due_deletion(
+            account.id,
+            world.id,
+            observed_at=now + timedelta(days=7),
+        )
+        is True
+    )
     with pytest.raises(KeyError):
         repository.get(account.id, world.id)
     assert archive.was_world_deleted(account.id, world.id)

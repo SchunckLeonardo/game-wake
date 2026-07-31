@@ -87,9 +87,7 @@ def test_completed_webhook_credits_the_wallet_exactly_once_when_replayed():
     billing = Billing(
         InMemoryBillingRepository(),
         payment_provider=provider,
-        contribution_packages=(
-            ContributionPackage("credit-50", Decimal("50.00"), "prod_50_brl"),
-        ),
+        contribution_packages=(ContributionPackage("credit-50", Decimal("50.00"), "prod_50_brl"),),
     )
     contribution = billing.create_contribution(
         "account-1",
@@ -180,9 +178,7 @@ def test_refund_and_dispute_webhooks_append_exactly_one_compensating_entry(
     billing = Billing(
         InMemoryBillingRepository(),
         payment_provider=provider,
-        contribution_packages=(
-            ContributionPackage("credit-50", Decimal("50.00"), "prod_50_brl"),
-        ),
+        contribution_packages=(ContributionPackage("credit-50", Decimal("50.00"), "prod_50_brl"),),
     )
     contribution = billing.create_contribution(
         "account-1",
@@ -230,9 +226,7 @@ def test_payer_can_request_only_an_integral_refund_of_unspent_credit():
     billing = Billing(
         InMemoryBillingRepository(),
         payment_provider=provider,
-        contribution_packages=(
-            ContributionPackage("credit-50", Decimal("50.00"), "prod_50_brl"),
-        ),
+        contribution_packages=(ContributionPackage("credit-50", Decimal("50.00"), "prod_50_brl"),),
     )
     contribution = billing.create_contribution(
         "account-1",
@@ -277,9 +271,7 @@ def test_provider_reversal_with_committed_credit_freezes_funding_without_negativ
     billing = Billing(
         InMemoryBillingRepository(),
         payment_provider=provider,
-        contribution_packages=(
-            ContributionPackage("credit-50", Decimal("50.00"), "prod_50_brl"),
-        ),
+        contribution_packages=(ContributionPackage("credit-50", Decimal("50.00"), "prod_50_brl"),),
     )
     contribution = billing.create_contribution(
         "account-1",
@@ -347,9 +339,7 @@ def test_reconciliation_recovers_a_checkout_after_the_create_response_was_lost()
     billing = Billing(
         repository,
         payment_provider=provider,
-        contribution_packages=(
-            ContributionPackage("credit-50", Decimal("50.00"), "prod_50_brl"),
-        ),
+        contribution_packages=(ContributionPackage("credit-50", Decimal("50.00"), "prod_50_brl"),),
     )
     with pytest.raises(RuntimeError):
         billing.create_contribution(

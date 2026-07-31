@@ -68,9 +68,7 @@ def test_batch_invitations_stay_independent_and_require_explicit_acceptance():
             account.id,
             viewer_user_id="user-owner",
         )
-    ] == [
-        "user-owner"
-    ]
+    ] == ["user-owner"]
 
     membership = accounts.accept_invitation(
         account.id,
@@ -120,9 +118,7 @@ def test_a_player_cannot_invite_members():
             account.id,
             viewer_user_id="user-owner",
         )
-    ] == [
-        "friend-one"
-    ]
+    ] == ["friend-one"]
 
 
 def test_only_the_invited_user_can_accept_an_invitation():
@@ -151,6 +147,4 @@ def test_only_the_invited_user_can_accept_an_invitation():
             account.id,
             viewer_user_id="user-owner",
         )
-    ] == [
-        "user-owner"
-    ]
+    ] == ["user-owner"]
