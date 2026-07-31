@@ -53,7 +53,10 @@ def test_round_trips_nested_account_snapshot_without_importing_types_from_payloa
     encoded = encode_domain(snapshot)
 
     assert "gamewake.accounts.repository.AccountSnapshot" in encoded
-    assert decode_domain(encoded, AccountSnapshot) == snapshot
+    decoded = decode_domain(encoded, AccountSnapshot)
+    assert decoded == snapshot
+    assert decoded.memberships[0].assignments[0].predefined_role is PredefinedRole.OWNER
+    assert decoded.activity_events[0].action is ActivityAction.OWNER_RECOVERED
 
 
 def test_round_trips_decimal_enum_tuple_and_frozenset_values() -> None:

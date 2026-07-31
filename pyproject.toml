@@ -2,6 +2,7 @@
 addopts = "--strict-markers"
 testpaths = ["tests", "lambda/tests", "server/tests", "scripts/tests"]
 pythonpath = [".", "lambda", "server", "scripts", "shared"]
+markers = ["integration: requires an external service such as PostgreSQL"]
 
 [tool.ruff]
 target-version = "py312"

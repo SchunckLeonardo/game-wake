@@ -66,7 +66,7 @@ def test_executes_typed_named_parameters_and_commits() -> None:
         {
             "name": "created",
             "typeHint": "TIMESTAMP",
-            "value": {"stringValue": "2026-07-31 12:30:00+00:00"},
+            "value": {"stringValue": "2026-07-31 12:30:00"},
         },
         {"name": "day", "typeHint": "DATE", "value": {"stringValue": "2026-07-31"}},
         {

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any, Protocol
 
@@ -35,7 +35,8 @@ def _parameter_value(value: object) -> tuple[dict[str, object], str | None]:
     if isinstance(value, Decimal):
         return {"stringValue": str(value)}, "DECIMAL"
     if isinstance(value, datetime):
-        return {"stringValue": value.isoformat(sep=" ")}, "TIMESTAMP"
+        normalized = value.astimezone(UTC).replace(tzinfo=None) if value.tzinfo else value
+        return {"stringValue": normalized.isoformat(sep=" ")}, "TIMESTAMP"
     if isinstance(value, date):
         return {"stringValue": value.isoformat()}, "DATE"
     if isinstance(value, bytes):

@@ -29,7 +29,7 @@ CREATE TABLE linked_identities (
 -- gamewake:statement
 CREATE TABLE activity_events (
     id TEXT PRIMARY KEY,
-    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    account_id TEXT NOT NULL REFERENCES accounts(id),
     occurred_at TIMESTAMPTZ NOT NULL,
     payload JSONB NOT NULL
 );
@@ -99,7 +99,7 @@ CREATE TABLE wallet_snapshots (
 -- gamewake:statement
 CREATE TABLE wallet_ledger_entries (
     id TEXT PRIMARY KEY,
-    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    account_id TEXT NOT NULL REFERENCES accounts(id),
     entry_type TEXT NOT NULL,
     amount NUMERIC(20, 6) NOT NULL,
     reference TEXT NOT NULL,
