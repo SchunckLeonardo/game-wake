@@ -4,6 +4,7 @@ data "aws_ssm_parameter" "ubuntu_ami" {
 
 locals {
   user_data = templatefile("${path.module}/user-data.sh.tpl", {
+    host_mode                                = "legacy"
     aws_region                               = var.aws_region
     palworld_port                            = var.palworld_port
     palworld_rest_api_port                   = var.palworld_rest_api_port
@@ -59,10 +60,13 @@ locals {
     autostop_timer_b64                       = filebase64("${path.module}/../server/palworld-autostop.timer")
     backup_service_b64                       = filebase64("${path.module}/../server/palworld-backup.service")
     backup_timer_b64                         = filebase64("${path.module}/../server/palworld-backup.timer")
+    gamewake_operation_script_b64            = filebase64("${path.module}/../server/gamewake-operation.sh")
   })
 }
 
 resource "aws_instance" "palworld" {
+  count = var.enable_legacy_single_server ? 1 : 0
+
   ami                         = data.aws_ssm_parameter.ubuntu_ami.value
   instance_type               = var.instance_type
   availability_zone           = aws_subnet.public.availability_zone

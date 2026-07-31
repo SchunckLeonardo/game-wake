@@ -1,11 +1,11 @@
 output "instance_id" {
   description = "ID da unica EC2 controlada pela Lambda."
-  value       = aws_instance.palworld.id
+  value       = var.enable_legacy_single_server ? aws_instance.palworld[0].id : null
 }
 
 output "lambda_function_url" {
   description = "URL publica a configurar como Interactions Endpoint no Discord."
-  value       = aws_lambda_function_url.discord.function_url
+  value       = var.enable_legacy_single_server ? aws_lambda_function_url.discord[0].function_url : null
 }
 
 output "aws_region" {
@@ -43,7 +43,7 @@ output "configure_secrets_command" {
 
 output "session_manager_command" {
   description = "Acesso administrativo sem SSH."
-  value       = "aws ssm start-session --region ${var.aws_region} --target ${aws_instance.palworld.id}"
+  value       = var.enable_legacy_single_server ? "aws ssm start-session --region ${var.aws_region} --target ${aws_instance.palworld[0].id}" : null
 }
 
 output "post_deploy_instructions" {
@@ -60,4 +60,21 @@ output "post_deploy_instructions" {
 output "s3_backup_bucket" {
   description = "Bucket privado de backups quando habilitado."
   value       = var.enable_s3_backup ? aws_s3_bucket.backups[0].id : null
+}
+
+output "gamewake_control_plane" {
+  description = "Recursos nao secretos do control plane multi-tenant."
+  value = {
+    aurora_cluster_arn         = aws_rds_cluster.gamewake.arn
+    operation_worker_name      = aws_lambda_function.operation_worker.function_name
+    state_machine_arn          = aws_sfn_state_machine.world_operation.arn
+    runtime_launch_template_id = aws_launch_template.gamewake_runtime.id
+    world_data_bucket          = aws_s3_bucket.world_data.id
+    reconciliation_schedule    = aws_scheduler_schedule.reconciliation.arn
+  }
+}
+
+output "aurora_master_secret_arn" {
+  description = "ARN do segredo gerenciado pelo RDS; o valor nunca e exposto pelo Terraform."
+  value       = aws_rds_cluster.gamewake.master_user_secret[0].secret_arn
 }

@@ -48,6 +48,13 @@ class StepFunctionsOperationOrchestrator:
             arn = self._execution_arn(name)
         return OperationExecution(name=name, arn=arn)
 
+    def ensure_running(self, account_id: str, operation_id: str) -> OperationExecution:
+        execution = self.start(account_id, operation_id)
+        status = self._client.describe_execution(executionArn=execution.arn)["status"]
+        if status in {"FAILED", "TIMED_OUT", "ABORTED"}:
+            self._client.redrive_execution(executionArn=execution.arn)
+        return execution
+
     @staticmethod
     def execution_name(operation_id: str) -> str:
         cleaned = _UNSAFE_EXECUTION_NAME.sub("-", operation_id).strip("-") or "operation"

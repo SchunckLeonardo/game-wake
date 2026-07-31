@@ -1,4 +1,6 @@
 resource "aws_lambda_function" "discord" {
+  count = var.enable_legacy_single_server ? 1 : 0
+
   function_name = "${local.name_prefix}-discord"
   description   = "Validated Discord interactions for one Palworld EC2 instance"
   role          = aws_iam_role.lambda.arn
@@ -16,7 +18,7 @@ resource "aws_lambda_function" "discord" {
   environment {
     variables = {
       DISCORD_CONFIG_JSON               = local.discord_config_payload
-      PALWORLD_INSTANCE_ID              = aws_instance.palworld.id
+      PALWORLD_INSTANCE_ID              = aws_instance.palworld[0].id
       PALWORLD_CONFIG_PARAMETER_NAME    = aws_ssm_parameter.palworld_config.name
       PALWORLD_OVERRIDES_PARAMETER_NAME = aws_ssm_parameter.palworld_settings_overrides.name
       PALWORLD_STATUS_PARAMETER_NAME    = aws_ssm_parameter.server_status.name
@@ -51,23 +53,29 @@ resource "aws_lambda_function" "discord" {
 }
 
 resource "aws_lambda_function_url" "discord" {
-  function_name      = aws_lambda_function.discord.function_name
+  count = var.enable_legacy_single_server ? 1 : 0
+
+  function_name      = aws_lambda_function.discord[0].function_name
   authorization_type = "NONE"
   invoke_mode        = "BUFFERED"
 }
 
 resource "aws_lambda_permission" "function_url" {
+  count = var.enable_legacy_single_server ? 1 : 0
+
   statement_id           = "AllowPublicFunctionUrl"
   action                 = "lambda:InvokeFunctionUrl"
-  function_name          = aws_lambda_function.discord.function_name
+  function_name          = aws_lambda_function.discord[0].function_name
   principal              = "*"
   function_url_auth_type = "NONE"
 }
 
 resource "aws_lambda_permission" "function_url_invoke" {
+  count = var.enable_legacy_single_server ? 1 : 0
+
   statement_id             = "AllowPublicInvokeOnlyViaFunctionUrl"
   action                   = "lambda:InvokeFunction"
-  function_name            = aws_lambda_function.discord.function_name
+  function_name            = aws_lambda_function.discord[0].function_name
   principal                = "*"
   invoked_via_function_url = true
 }

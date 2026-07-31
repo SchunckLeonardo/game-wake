@@ -1,5 +1,16 @@
+project_name  = "gamewake"
+environment   = "prod"
 aws_region    = "us-east-1"
 instance_type = "m6a.xlarge"
+
+# O prototipo de EC2 unica fica desligado. Worlds do GameWake usam Launch Template descartavel.
+enable_legacy_single_server = false
+
+# Aurora PostgreSQL Serverless v2 (Data API). 0.5 ACU e o piso conservador mais compativel.
+aurora_min_acu              = 0.5
+aurora_max_acu              = 4
+aurora_deletion_protection  = true
+aurora_skip_final_snapshot  = false
 
 # Discord Developer Portal (nao sao segredos)
 discord_application_id = "123456789012345678"

@@ -1,7 +1,7 @@
 variable "project_name" {
   description = "Nome curto usado em recursos, tags e caminhos do Parameter Store."
   type        = string
-  default     = "palworld-cloud-server"
+  default     = "gamewake"
 
   validation {
     condition     = can(regex("^[a-z][a-z0-9-]{2,31}$", var.project_name))
@@ -31,6 +31,26 @@ variable "availability_zone" {
   type        = string
   default     = null
   nullable    = true
+}
+
+variable "private_subnet_cidrs" {
+  description = "Dois CIDRs privados em AZs distintas para o Aurora Serverless v2."
+  type        = list(string)
+  default     = ["10.42.10.0/24", "10.42.11.0/24"]
+
+  validation {
+    condition = (
+      length(var.private_subnet_cidrs) >= 2 &&
+      alltrue([for cidr in var.private_subnet_cidrs : can(cidrnetmask(cidr))])
+    )
+    error_message = "private_subnet_cidrs exige pelo menos dois CIDRs IPv4 validos."
+  }
+}
+
+variable "enable_legacy_single_server" {
+  description = "Mantem temporariamente a EC2 e a Lambda Discord do prototipo antigo."
+  type        = bool
+  default     = false
 }
 
 variable "vpc_cidr" {
@@ -240,6 +260,53 @@ variable "local_backup_retention_days" {
 
 variable "enable_s3_backup" {
   description = "Cria bucket privado e envia backups para S3."
+  type        = bool
+  default     = false
+}
+
+variable "world_data_bucket_name" {
+  description = "Nome global opcional do bucket persistente de mundos do GameWake."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "aurora_database_name" {
+  description = "Banco PostgreSQL usado pelo control plane do GameWake."
+  type        = string
+  default     = "gamewake"
+}
+
+variable "aurora_min_acu" {
+  description = "Capacidade minima do Aurora Serverless v2."
+  type        = number
+  default     = 0.5
+
+  validation {
+    condition     = var.aurora_min_acu >= 0 && var.aurora_min_acu <= 128
+    error_message = "aurora_min_acu deve ficar entre 0 e 128 ACUs."
+  }
+}
+
+variable "aurora_max_acu" {
+  description = "Capacidade maxima do Aurora Serverless v2."
+  type        = number
+  default     = 4
+
+  validation {
+    condition     = var.aurora_max_acu >= 1 && var.aurora_max_acu <= 128
+    error_message = "aurora_max_acu deve ficar entre 1 e 128 ACUs."
+  }
+}
+
+variable "aurora_deletion_protection" {
+  description = "Protege o banco de producao contra exclusao acidental."
+  type        = bool
+  default     = true
+}
+
+variable "aurora_skip_final_snapshot" {
+  description = "Somente para ambientes descartaveis; producao deve manter false."
   type        = bool
   default     = false
 }

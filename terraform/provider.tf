@@ -15,7 +15,7 @@ locals {
       Project     = var.project_name
       Environment = var.environment
       ManagedBy   = "Terraform"
-      Application = "PalworldDedicatedServer"
+      Application = "GameWake"
     },
     var.extra_tags
   )
@@ -25,8 +25,9 @@ locals {
   lambda_package_file        = abspath("${path.module}/${var.lambda_package_path}")
   s3_backup_bucket_name      = var.s3_backup_bucket_name != null ? var.s3_backup_bucket_name : "${var.project_name}-${data.aws_caller_identity.current.account_id}-${var.aws_region}"
   s3_backup_uri              = var.enable_s3_backup ? "s3://${local.s3_backup_bucket_name}/saves" : ""
+  world_data_bucket_name     = var.world_data_bucket_name != null ? var.world_data_bucket_name : "${var.project_name}-${var.environment}-${data.aws_caller_identity.current.account_id}-${var.aws_region}-worlds"
   ssm_document_arn           = "arn:${data.aws_partition.current.partition}:ssm:${var.aws_region}::document/AWS-RunShellScript"
-  instance_arn               = "arn:${data.aws_partition.current.partition}:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:instance/${aws_instance.palworld.id}"
+  instance_arn               = var.enable_legacy_single_server ? aws_instance.palworld[0].arn : "arn:${data.aws_partition.current.partition}:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:instance/legacy-disabled"
   lambda_log_group_name      = "/aws/lambda/${local.name_prefix}-discord"
   palworld_settings_path     = fileexists("${path.module}/../config/palworld-settings.json") ? "${path.module}/../config/palworld-settings.json" : "${path.module}/../config/palworld-settings.json.example"
   palworld_settings_document = jsondecode(file(local.palworld_settings_path))
