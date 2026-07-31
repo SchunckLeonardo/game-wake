@@ -2,7 +2,11 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from gamewake.accounts import Accounts, InMemoryAccountRepository
+from gamewake.accounts import (
+    Accounts,
+    InMemoryAccountRepository,
+    InMemoryRecoverySecretStore,
+)
 from gamewake.billing import (
     Billing,
     ContributionPackage,
@@ -232,8 +236,16 @@ def test_wallet_endpoint_exposes_safe_ledger_values_as_decimal_strings():
 
 
 def test_any_account_member_can_create_only_an_allowlisted_credit_package():
-    accounts = Accounts(InMemoryAccountRepository())
+    accounts = Accounts(
+        InMemoryAccountRepository(),
+        recovery_secret_store=InMemoryRecoverySecretStore(),
+    )
     account = accounts.create_account(name="Grupo", owner_user_id="owner")
+    accounts.enable_owner_recovery(
+        account.id,
+        owner_user_id="owner",
+        verified_email="owner@example.com",
+    )
     billing = Billing(
         InMemoryBillingRepository(),
         payment_provider=CheckoutProvider(),
@@ -266,6 +278,42 @@ def test_any_account_member_can_create_only_an_allowlisted_credit_package():
     assert response.status == 201
     assert response.body["contribution"]["amount"] == "25.00"
     assert response.body["contribution"]["checkoutUrl"].startswith("https://pay.")
+
+
+def test_first_payment_is_blocked_until_a_sole_owner_has_recovery_ready():
+    accounts = Accounts(InMemoryAccountRepository())
+    account = accounts.create_account(name="Grupo", owner_user_id="owner")
+    billing = Billing(
+        InMemoryBillingRepository(),
+        payment_provider=CheckoutProvider(),
+        contribution_packages=(ContributionPackage("credits-25", Decimal("25.00"), "prod_25"),),
+    )
+    catalog = GameCatalog.with_palworld()
+    api = GameWakeApi(
+        GameWakeApplication(
+            accounts=accounts,
+            worlds=Worlds(InMemoryWorldRepository(), access=accounts, game_catalog=catalog),
+            billing=billing,
+            game_catalog=catalog,
+        )
+    )
+
+    response = api.handle(
+        ApiRequest(
+            "POST",
+            f"/api/v1/accounts/{account.id}/wallet/contributions",
+            "owner",
+            {
+                "packageId": "credits-25",
+                "returnUrl": "https://app.gamewake.example/wallet",
+                "completionUrl": "https://app.gamewake.example/wallet?paid=1",
+                "idempotencyKey": "web:contribution:without-recovery",
+            },
+        )
+    )
+
+    assert response.status == 403
+    assert "recovery" in response.body["error"]["message"].casefold()
 
 
 def test_connection_details_endpoint_keeps_the_shared_secret_in_an_authenticated_response():
@@ -461,6 +509,25 @@ def test_world_backup_restore_and_portable_export_are_available_through_the_api(
             {"idempotencyKey": "export-1"},
         )
     )
+    deletion = api.handle(
+        ApiRequest(
+            "DELETE",
+            f"/api/v1/accounts/{account.id}/worlds/{world.id}",
+            "owner",
+            {
+                "confirmedResourceName": "Palpagos",
+                "idempotencyKey": "delete-1",
+            },
+            authenticated_at=now,
+        )
+    )
+    cancelled = api.handle(
+        ApiRequest(
+            "POST",
+            f"/api/v1/accounts/{account.id}/worlds/{world.id}/deletion/cancel",
+            "owner",
+        )
+    )
 
     assert created.status == 201
     assert listed.body["backups"][0]["kind"] == "manual"
@@ -468,3 +535,6 @@ def test_world_backup_restore_and_portable_export_are_available_through_the_api(
     assert restored.body["world"]["storedStateId"] == "state-1"
     assert exported.status == 201
     assert exported.body["export"]["downloadUrl"].startswith("memory://")
+    assert deletion.body["world"]["status"] == "pending_deletion"
+    assert deletion.body["world"]["deletionScheduledFor"] is not None
+    assert cancelled.body["world"]["status"] == "sleeping"

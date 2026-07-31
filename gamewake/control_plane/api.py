@@ -219,6 +219,13 @@ class GameWakeApi:
         if len(parts) < 6 or parts[4] != "worlds":
             raise KeyError(request.path)
         world_id = parts[5]
+        if request.method == "GET" and parts[6:] == ("wake", "estimate"):
+            estimate = self._application.wake_estimate(
+                account_id,
+                world_id,
+                viewer_user_id=request.user_id,
+            )
+            return ApiResponse(200, {"estimate": estimate})
         if request.method == "POST" and parts[6:] == ("wake",):
             operation = self._application.request_wake(
                 account_id,
@@ -304,6 +311,30 @@ class GameWakeApi:
                 idempotency_key=self._required_string(request.body, "idempotencyKey"),
             )
             return ApiResponse(201, {"export": self._export(export)})
+        if request.method == "DELETE" and len(parts) == 6:
+            if request.authenticated_at is None:
+                raise PermissionError("deleting a World requires recent Discord authentication")
+            world = self._application.schedule_world_deletion(
+                account_id,
+                world_id,
+                actor_user_id=request.user_id,
+                confirmation=SensitiveActionConfirmation(
+                    actor_user_id=request.user_id,
+                    reauthenticated_at=request.authenticated_at,
+                    confirmed_resource_name=self._required_string(
+                        request.body, "confirmedResourceName"
+                    ),
+                ),
+                idempotency_key=self._required_string(request.body, "idempotencyKey"),
+            )
+            return ApiResponse(202, {"world": self._world(world)})
+        if request.method == "POST" and parts[6:] == ("deletion", "cancel"):
+            world = self._application.cancel_world_deletion(
+                account_id,
+                world_id,
+                actor_user_id=request.user_id,
+            )
+            return ApiResponse(200, {"world": self._world(world)})
         if request.method == "PATCH" and parts[6:] == ("configuration",):
             world, revision = self._application.update_configuration(
                 account_id,

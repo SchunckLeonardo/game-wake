@@ -88,6 +88,25 @@ def test_wake_reserves_a_locked_session_price_before_dispatching_compute():
     assert dispatcher.calls == [(account.id, first.id), (account.id, first.id)]
 
 
+def test_wake_estimate_explains_the_hourly_rate_and_safe_minimum_reservation():
+    application, _repository, _dispatcher, account, world = setup_application(
+        credit=Decimal("20.00")
+    )
+
+    estimate = application.wake_estimate(
+        account.id,
+        world.id,
+        viewer_user_id="owner",
+    )
+
+    assert estimate == {
+        "currency": "BRL",
+        "hourlyRate": "3.60",
+        "minimumReservation": "1.50",
+        "reservedMinutes": 25,
+    }
+
+
 def test_insufficient_credit_fails_the_pending_wake_without_dispatching_compute():
     application, billing_repository, dispatcher, account, world = setup_application(
         credit=Decimal("0.00")

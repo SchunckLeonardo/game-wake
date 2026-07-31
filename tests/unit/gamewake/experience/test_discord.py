@@ -22,6 +22,42 @@ class StubConnectionDetailsProvider:
         )
 
 
+def test_start_command_bootstraps_the_guild_account_with_the_caller_as_owner():
+    repository = InMemoryAccountRepository()
+    accounts = Accounts(repository)
+    catalog = GameCatalog.with_palworld()
+    controller = DiscordCommandController(
+        GameWakeApplication(
+            accounts=accounts,
+            worlds=Worlds(InMemoryWorldRepository(), access=accounts, game_catalog=catalog),
+            billing=Billing(InMemoryBillingRepository()),
+            game_catalog=catalog,
+        ),
+        console_url="https://app.gamewake.example",
+    )
+
+    response = controller.handle(
+        DiscordInteraction(
+            id="start-1",
+            guild_id="guild-new",
+            discord_user_id="discord-owner",
+            display_name="Leonardo",
+            command="comecar",
+        )
+    )
+
+    account = accounts.find_account_by_discord_guild("guild-new")
+    assert account is not None
+    owner = accounts.sign_in_with_discord(
+        discord_user_id="discord-owner",
+        display_name="Leonardo",
+    )
+    [membership] = accounts.list_memberships(account.id, viewer_user_id=owner.id)
+    assert {role.value for role in membership.roles} == {"owner"}
+    assert response.ephemeral is True
+    assert response.links[0][1].endswith(f"/accounts/{account.id}")
+
+
 def test_invite_command_creates_one_private_invitation_for_each_selected_friend():
     account_repository = InMemoryAccountRepository()
     accounts = Accounts(account_repository)
@@ -77,6 +113,64 @@ def test_invite_command_creates_one_private_invitation_for_each_selected_friend(
     assert "3 convites" in response.content
     assert len(invitations) == 3
     assert {invitation.invited_user_id for invitation in invitations} == invited_users
+
+
+def test_invited_friend_explicitly_accepts_from_discord_and_receives_player_access():
+    repository = InMemoryAccountRepository()
+    accounts = Accounts(repository)
+    owner = accounts.sign_in_with_discord(
+        discord_user_id="discord-owner",
+        display_name="Leonardo",
+    )
+    account = accounts.create_account(
+        name="Sexta com os amigos",
+        owner_user_id=owner.id,
+        discord_guild_id="guild-1",
+    )
+    catalog = GameCatalog.with_palworld()
+    application = GameWakeApplication(
+        accounts=accounts,
+        worlds=Worlds(InMemoryWorldRepository(), access=accounts, game_catalog=catalog),
+        billing=Billing(InMemoryBillingRepository()),
+        game_catalog=catalog,
+    )
+    controller = DiscordCommandController(
+        application,
+        console_url="https://app.gamewake.example",
+    )
+    controller.handle(
+        DiscordInteraction(
+            id="invite-1",
+            guild_id="guild-1",
+            discord_user_id="discord-owner",
+            display_name="Leonardo",
+            command="convidar",
+            selected_users=(DiscordUser("discord-friend", "Ana"),),
+        )
+    )
+
+    accepted = controller.handle(
+        DiscordInteraction(
+            id="accept-1",
+            guild_id="guild-1",
+            discord_user_id="discord-friend",
+            display_name="Ana",
+            command="aceitar",
+        )
+    )
+
+    friend = accounts.sign_in_with_discord(
+        discord_user_id="discord-friend",
+        display_name="Ana",
+    )
+    membership = next(
+        item
+        for item in accounts.list_memberships(account.id, viewer_user_id=friend.id)
+        if item.user_id == friend.id
+    )
+    assert accepted.ephemeral is True
+    assert "Player" in accepted.content
+    assert {role.value for role in membership.roles} == {"player"}
 
 
 def test_status_auto_selects_one_world_and_offers_only_allowed_choices_when_ambiguous():

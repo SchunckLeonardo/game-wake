@@ -25,6 +25,13 @@ type ConnectionDetails = {
   password?: string;
 };
 
+type WakeEstimate = {
+  currency: "BRL";
+  hourlyRate: string;
+  minimumReservation: string;
+  reservedMinutes: number;
+};
+
 type WorldStatus =
   | "sleeping"
   | "waking"
@@ -74,6 +81,14 @@ type ApiActivityEvent = {
   actorUserId: string;
   subjectId: string;
   occurredAt: string;
+};
+
+type ApiOperation = {
+  id: string;
+  type: string;
+  status: string;
+  phase: string;
+  createdAt: string;
 };
 
 type ConfigurationField = {
@@ -176,6 +191,8 @@ export function ConsoleDashboard({
   const [world, setWorld] = useState<ApiWorld | null>(
     isDemo ? { id: "palpagos", name: "Palpagos", region: "sa-east-1", status: "sleeping" } : null,
   );
+  const [showNewWorld, setShowNewWorld] = useState(false);
+  const [newWorldName, setNewWorldName] = useState("");
   const [accountName, setAccountName] = useState(
     isDemo ? "Sexta com os amigos" : "Seu grupo",
   );
@@ -196,7 +213,9 @@ export function ConsoleDashboard({
   const [roleSelections, setRoleSelections] = useState<Record<string, string>>({});
   const [backups, setBackups] = useState<ApiBackup[]>([]);
   const [activityEvents, setActivityEvents] = useState<ApiActivityEvent[]>([]);
+  const [worldOperations, setWorldOperations] = useState<ApiOperation[]>([]);
   const [exportUrl, setExportUrl] = useState("");
+  const [deletionConfirmation, setDeletionConfirmation] = useState("");
   const [contribution, setContribution] = useState(25);
   const [saved, setSaved] = useState(false);
   const [liveConfigurationFields, setLiveConfigurationFields] = useState<
@@ -207,6 +226,8 @@ export function ConsoleDashboard({
   >(() => Object.fromEntries(configurationFields.map((field) => [field.key, field.default])));
   const [connectionDetails, setConnectionDetails] =
     useState<ConnectionDetails | null>(null);
+  const [connectionCopied, setConnectionCopied] = useState(false);
+  const [wakeEstimate, setWakeEstimate] = useState<WakeEstimate | null>(null);
 
   const statusCopy = useMemo(
     () =>
@@ -320,9 +341,22 @@ export function ConsoleDashboard({
           setBackups(payload.backups);
         }
         if (section === "activity") {
-          const response = await gameWakeFetch(`/api/v1/accounts/${accountId}/activity`);
-          const payload = (await response.json()) as { events: ApiActivityEvent[] };
-          setActivityEvents(payload.events);
+          const [activityResponse, operationsResponse] = await Promise.all([
+            gameWakeFetch(`/api/v1/accounts/${accountId}/activity`),
+            world
+              ? gameWakeFetch(
+                  `/api/v1/accounts/${accountId}/worlds/${world.id}/operations`,
+                )
+              : Promise.resolve(null),
+          ]);
+          const activity = (await activityResponse.json()) as { events: ApiActivityEvent[] };
+          setActivityEvents(activity.events);
+          if (operationsResponse) {
+            const operations = (await operationsResponse.json()) as {
+              operations: ApiOperation[];
+            };
+            setWorldOperations(operations.operations);
+          }
         }
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : "Não foi possível carregar esta área.");
@@ -333,6 +367,29 @@ export function ConsoleDashboard({
 
   async function wakeWorld() {
     if (worldStatus !== "sleeping" || !world) return;
+    if (isDemo) {
+      setWakeEstimate({
+        currency: "BRL",
+        hourlyRate: "3.60",
+        minimumReservation: "1.50",
+        reservedMinutes: 25,
+      });
+      return;
+    }
+    try {
+      const response = await gameWakeFetch(
+        `/api/v1/accounts/${accountId}/worlds/${world.id}/wake/estimate`,
+      );
+      const payload = (await response.json()) as { estimate: WakeEstimate };
+      setWakeEstimate(payload.estimate);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível calcular o preço.");
+    }
+  }
+
+  async function confirmWake() {
+    if (!world || !wakeEstimate) return;
+    setWakeEstimate(null);
     setWorldStatus("waking");
     if (isDemo) {
       window.setTimeout(() => setWorldStatus("online"), 900);
@@ -349,8 +406,45 @@ export function ConsoleDashboard({
     }
   }
 
+  async function createWorld() {
+    if (!newWorldName.trim()) return;
+    if (isDemo) {
+      const created = {
+        id: crypto.randomUUID(),
+        name: newWorldName.trim(),
+        region: "sa-east-1",
+        status: "sleeping" as const,
+      };
+      setWorld(created);
+      setWorldStatus(created.status);
+      setShowNewWorld(false);
+      setNewWorldName("");
+      return;
+    }
+    try {
+      const response = await gameWakeFetch(`/api/v1/accounts/${accountId}/worlds`, {
+        method: "POST",
+        body: JSON.stringify({
+          name: newWorldName.trim(),
+          gameTemplateId: "palworld:1",
+          region: "sa-east-1",
+          runtimeProfileId: "palworld-small",
+          idempotencyKey: gameWakeIdempotencyKey("create-world"),
+        }),
+      });
+      const payload = (await response.json()) as { world: ApiWorld };
+      setWorld(payload.world);
+      setWorldStatus(payload.world.status);
+      setShowNewWorld(false);
+      setNewWorldName("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível criar o World.");
+    }
+  }
+
   async function connectWorld() {
     if (!world) return;
+    setConnectionCopied(false);
     if (isDemo) {
       setConnectionDetails({
         host: "palpagos.gamewake.local",
@@ -368,6 +462,13 @@ export function ConsoleDashboard({
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Não foi possível obter a conexão.");
     }
+  }
+
+  async function copyConnection() {
+    if (!connectionDetails) return;
+    const value = `${connectionDetails.host}:${connectionDetails.port}${connectionDetails.password ? `\n${connectionDetails.password}` : ""}`;
+    await navigator.clipboard.writeText(value);
+    setConnectionCopied(true);
   }
 
   async function sleepWorld() {
@@ -557,6 +658,43 @@ export function ConsoleDashboard({
     }
   }
 
+  async function scheduleWorldDeletion() {
+    if (isDemo || !world || deletionConfirmation !== world.name) return;
+    try {
+      const response = await gameWakeFetch(
+        `/api/v1/accounts/${accountId}/worlds/${world.id}`,
+        {
+          method: "DELETE",
+          body: JSON.stringify({
+            confirmedResourceName: deletionConfirmation,
+            idempotencyKey: gameWakeIdempotencyKey("delete-world"),
+          }),
+        },
+      );
+      const payload = (await response.json()) as { world: ApiWorld };
+      setWorld(payload.world);
+      setWorldStatus(payload.world.status);
+      setDeletionConfirmation("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível agendar a exclusão.");
+    }
+  }
+
+  async function cancelWorldDeletion() {
+    if (isDemo || !world) return;
+    try {
+      const response = await gameWakeFetch(
+        `/api/v1/accounts/${accountId}/worlds/${world.id}/deletion/cancel`,
+        { method: "POST" },
+      );
+      const payload = (await response.json()) as { world: ApiWorld };
+      setWorld(payload.world);
+      setWorldStatus(payload.world.status);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível cancelar a exclusão.");
+    }
+  }
+
   return (
     <main
       aria-busy={!hydrated}
@@ -593,7 +731,7 @@ export function ConsoleDashboard({
         </nav>
         <div className="sidebar-foot">
           <span className="avatar avatar-small">L</span>
-          <div><strong>Leonardo</strong><small>Owner</small></div>
+          <div><strong>{isDemo ? "Leonardo" : "Você"}</strong><small>GameWake</small></div>
           <button aria-label="Configurações da conta" type="button">•••</button>
         </div>
       </aside>
@@ -618,11 +756,13 @@ export function ConsoleDashboard({
               <div className="welcome-row">
                 <div>
                   <span className="section-index">VISÃO GERAL</span>
-                  <h1>Bom jogo, Leonardo <span aria-hidden="true">✦</span></h1>
+                  <h1>{isDemo ? "Bom jogo, Leonardo " : "Bom jogo, seu grupo "}<span aria-hidden="true">✦</span></h1>
                   <p>{world ? "Seu grupo tem um World pronto para a próxima sessão." : "Crie o primeiro World do grupo para começar."}</p>
                 </div>
-                <button className="button button-outline" type="button">+ Novo World</button>
+                <button className="button button-outline" disabled={!hydrated} onClick={() => setShowNewWorld((current) => !current)} type="button">+ Novo World</button>
               </div>
+
+              {showNewWorld && <article className="contribution-panel"><h2>Criar World</h2><p>Palworld em São Paulo, com preço confirmado antes de cada sessão.</p><label>Nome do novo World<input aria-label="Nome do novo World" autoFocus onChange={(event) => setNewWorldName(event.target.value)} value={newWorldName} /></label><button className="button button-primary" disabled={!newWorldName.trim()} onClick={() => void createWorld()} type="button">Criar World</button></article>}
 
               <article className={`world-card world-${worldStatus}`}>
                 <div className="world-art" aria-hidden="true">
@@ -643,8 +783,8 @@ export function ConsoleDashboard({
                   </div>
                   <p className="world-detail">{statusCopy.detail}</p>
                   <div className="world-stats">
-                    <div><small>Última sessão</small><strong>Ontem · 2h 38min</strong></div>
-                    <div><small>Último backup</small><strong>Verificado · ontem 23:42</strong></div>
+                    <div><small>Última sessão</small><strong>{isDemo ? "Ontem · 2h 38min" : "Consulte em Atividade"}</strong></div>
+                    <div><small>Proteção do save</small><strong>Backup verificado no sono seguro</strong></div>
                     <div><small>Preço da sessão</small><strong>Confirmado ao acordar</strong></div>
                   </div>
                   {worldStatus === "waking" && (
@@ -707,11 +847,11 @@ export function ConsoleDashboard({
                 </article>
                 <article className="overview-card">
                   <div className="card-heading"><div><span className="card-symbol">♙</span><h3>Grupo</h3></div><button onClick={() => setSection("members")} type="button">Gerenciar →</button></div>
-                  <div className="member-stack" aria-label="5 membros">
-                    <span>L</span><span>A</span><span>B</span><span>C</span><span>+1</span>
+                  <div className="member-stack" aria-label={isDemo ? "5 membros" : "Grupo GameWake"}>
+                    {isDemo ? <><span>L</span><span>A</span><span>B</span><span>C</span><span>+1</span></> : <span>GW</span>}
                   </div>
-                  <strong>5 amigos com acesso</strong>
-                  <p>1 Owner · 1 Manager · 3 Players</p>
+                  <strong>{isDemo ? "5 amigos com acesso" : "Acesso simples para os amigos"}</strong>
+                  <p>{isDemo ? "1 Owner · 1 Manager · 3 Players" : "Player, Manager, Owner e Roles personalizadas"}</p>
                 </article>
                 <article className="overview-card activity-preview">
                   <div className="card-heading"><div><span className="card-symbol">⌁</span><h3>Atividade recente</h3></div><button onClick={() => setSection("activity")} type="button">Ver tudo →</button></div>
@@ -803,6 +943,7 @@ export function ConsoleDashboard({
                 {(isDemo ? [{ id: "demo-backup", kind: "manual" as const, sizeBytes: 1_200_000_000, checksumVerified: true, createdAt: "2026-07-31T23:42:00Z" }] : backups).map((backup) => <div className="backup-row" key={backup.id}><span className="backup-icon">{backup.checksumVerified ? "✓" : "!"}</span><div><strong>{backupLabels[backup.kind]}</strong><small>{backup.createdAt ? new Date(backup.createdAt).toLocaleString("pt-BR") : "Data indisponível"} · {formatBytes(backup.sizeBytes)} · {backup.checksumVerified ? "checksum verificado" : "verificação pendente"}</small></div><span className={`backup-badge${backup.kind === "manual" ? " manual" : ""}`}>{backup.kind.toUpperCase()}</span><button aria-label={`Restaurar ${backupLabels[backup.kind]}`} disabled={isDemo || worldStatus !== "sleeping"} onClick={() => void restoreBackup(backup.id)} type="button">Restaurar</button></div>)}
                 {!isDemo && backups.length === 0 && <p>Nenhum Backup disponível. O primeiro será criado ao concluir o sono seguro.</p>}
               </article>
+              {!isDemo && world && <details className="advanced-roles"><summary>Exclusão e portabilidade</summary>{worldStatus === "pending_deletion" ? <><p>Este World está em Pending Deletion por sete dias. O Backup final permanece protegido e você ainda pode exportar ou cancelar.</p><button className="button button-outline" onClick={() => void cancelWorldDeletion()} type="button">Cancelar exclusão</button></> : <><p>Excluir cria um Backup final e inicia sete dias de proteção. Confirme digitando o nome exato do World.</p><label>Nome do World<input aria-label="Confirme o nome do World" onChange={(event) => setDeletionConfirmation(event.target.value)} value={deletionConfirmation} /></label><button className="button button-outline" disabled={worldStatus !== "sleeping" || deletionConfirmation !== world.name} onClick={() => void scheduleWorldDeletion()} type="button">Agendar exclusão</button></>}</details>}
             </div>
           )}
 
@@ -812,7 +953,9 @@ export function ConsoleDashboard({
               <article className="timeline-card">
                 <div className="timeline-date">EVENTOS IMUTÁVEIS</div>
                 {(isDemo ? [{ id: "demo-event", action: "role_assignment.revoked", actorUserId: "Leonardo", subjectId: "role-demo", occurredAt: "2026-07-31T23:42:00Z" }] : activityEvents).map((event) => <div className="timeline-row" key={event.id}><span className="event-dot blue" /><div><strong>{activityLabels[event.action] ?? event.action}</strong><p>Recurso {event.subjectId}. O payload é redigido na origem.</p><small>{new Date(event.occurredAt).toLocaleString("pt-BR")} · {event.actorUserId}</small></div></div>)}
-                {!isDemo && activityEvents.length === 0 && <p>Nenhum evento de segurança registrado ainda.</p>}
+                {!isDemo && worldOperations.map((operation) => <div className="timeline-row" key={operation.id}><span className="event-dot amber" /><div><strong>Operação de {operation.type}</strong><p>Fase {operation.phase.replaceAll("_", " ")} · {operation.status}</p><small>{new Date(operation.createdAt).toLocaleString("pt-BR")} · GameWake</small></div></div>)}
+                {!isDemo && walletStatement.map((entry) => <div className="timeline-row" key={entry.id}><span className="event-dot green" /><div><strong>{entry.type.replaceAll("_", " ")}</strong><p>{entry.reference} · {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(entry.amount))}</p><small>{new Date(entry.occurredAt).toLocaleString("pt-BR")} · Wallet Ledger</small></div></div>)}
+                {!isDemo && activityEvents.length === 0 && worldOperations.length === 0 && walletStatement.length === 0 && <p>Nenhum evento registrado ainda.</p>}
               </article>
             </div>
           )}
@@ -852,9 +995,27 @@ export function ConsoleDashboard({
                 <span>{connectionDetails.password}</span>
               </label>
             )}
-            <button className="button button-primary full-button" type="button">
-              Copiar conexão
+            <button className="button button-primary full-button" onClick={() => void copyConnection()} type="button">
+              {connectionCopied ? "Conexão copiada ✓" : "Copiar conexão"}
             </button>
+          </section>
+        </div>
+      )}
+      {wakeEstimate && (
+        <div className="modal-backdrop">
+          <section
+            aria-label={`Confirmar despertar de ${world?.name ?? "World"}`}
+            aria-modal="true"
+            className="connection-dialog"
+            role="dialog"
+          >
+            <div className="dialog-heading">
+              <strong>Preço desta sessão</strong>
+              <button aria-label="Cancelar despertar" onClick={() => setWakeEstimate(null)} type="button">×</button>
+            </div>
+            <h2>{new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(wakeEstimate.hourlyRate))}/h</h2>
+            <p>O preço fica travado até o fim da sessão. Para proteger inicialização, pelo menos 15 minutos online e sono seguro, reservaremos {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(wakeEstimate.minimumReservation))} por {wakeEstimate.reservedMinutes} minutos; o valor não usado volta para a Wallet.</p>
+            <button className="button button-primary full-button" onClick={() => void confirmWake()} type="button">Confirmar e acordar</button>
           </section>
         </div>
       )}

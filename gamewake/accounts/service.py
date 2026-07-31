@@ -563,6 +563,30 @@ class Accounts:
         )
         return membership
 
+    def accept_pending_invitation(
+        self,
+        account_id: str,
+        *,
+        invited_user_id: str,
+    ) -> Membership:
+        snapshot = self._repository.get(account_id)
+        invitation = next(
+            (
+                item
+                for item in snapshot.invitations
+                if item.invited_user_id == invited_user_id
+                and item.status is InvitationStatus.PENDING
+            ),
+            None,
+        )
+        if invitation is None:
+            raise ValueError("não existe convite pendente para você neste servidor")
+        return self.accept_invitation(
+            account_id,
+            invitation.id,
+            invited_user_id=invited_user_id,
+        )
+
     def remove_membership(
         self,
         account_id: str,

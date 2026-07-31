@@ -29,9 +29,10 @@ from gamewake.persistence import (
     AuroraDataApi,
     PostgresAccountRepository,
     PostgresBillingRepository,
+    PostgresStoragePolicyRepository,
     PostgresWorldRepository,
 )
-from gamewake.worlds import WorldData, Worlds
+from gamewake.worlds import StoragePolicy, StoragePolicyService, WorldData, Worlds
 
 
 def _required(name: str) -> str:
@@ -90,18 +91,30 @@ def build_handler(*, client_factory: Any = boto3.client) -> GameWakeHttpHandler:
     )
     catalog = GameCatalog.with_palworld()
     world_repository = PostgresWorldRepository(database)
+    archive = S3WorldArchiveStore(
+        _required("WORLD_DATA_BUCKET"),
+        client=client_factory("s3"),
+    )
+    storage = StoragePolicyService(
+        world_repository,
+        archive_store=archive,
+        repository=PostgresStoragePolicyRepository(database),
+        policy=StoragePolicy(
+            allowance_bytes=int(_required("STORAGE_ALLOWANCE_BYTES")),
+            grace_days=int(_required("STORAGE_GRACE_DAYS")),
+        ),
+    )
     worlds = Worlds(
         world_repository,
         access=accounts,
         game_catalog=catalog,
+        storage_gate=storage,
     )
     world_data = WorldData(
         world_repository,
         access=accounts,
-        archive_store=S3WorldArchiveStore(
-            _required("WORLD_DATA_BUCKET"),
-            client=client_factory("s3"),
-        ),
+        archive_store=archive,
+        storage_gate=storage,
     )
     application = GameWakeApplication(
         accounts=accounts,

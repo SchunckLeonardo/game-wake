@@ -312,16 +312,44 @@ variable "world_data_bucket_name" {
   nullable    = true
 }
 
+variable "storage_allowance_bytes" {
+  description = "Armazenamento duravel incluido por GameWake Account antes do excedente."
+  type        = number
+  default     = 10737418240
+
+  validation {
+    condition     = var.storage_allowance_bytes >= 0
+    error_message = "storage_allowance_bytes nao pode ser negativo."
+  }
+}
+
+variable "storage_grace_days" {
+  description = "Dias de tolerancia para excedente de armazenamento sem saldo."
+  type        = number
+  default     = 30
+
+  validation {
+    condition     = var.storage_grace_days >= 1
+    error_message = "storage_grace_days deve ser pelo menos 1."
+  }
+}
+
 variable "aurora_database_name" {
   description = "Banco PostgreSQL usado pelo control plane do GameWake."
   type        = string
   default     = "gamewake"
 }
 
+variable "aurora_engine_version" {
+  description = "Aurora PostgreSQL compativel com Serverless v2 auto-pause em zero ACUs."
+  type        = string
+  default     = "16.3"
+}
+
 variable "aurora_min_acu" {
   description = "Capacidade minima do Aurora Serverless v2."
   type        = number
-  default     = 0.5
+  default     = 0
 
   validation {
     condition     = var.aurora_min_acu >= 0 && var.aurora_min_acu <= 128
@@ -335,8 +363,22 @@ variable "aurora_max_acu" {
   default     = 4
 
   validation {
-    condition     = var.aurora_max_acu >= 1 && var.aurora_max_acu <= 128
-    error_message = "aurora_max_acu deve ficar entre 1 e 128 ACUs."
+    condition     = var.aurora_max_acu >= 1 && var.aurora_max_acu <= 256
+    error_message = "aurora_max_acu deve ficar entre 1 e 256 ACUs."
+  }
+}
+
+variable "aurora_auto_pause_seconds" {
+  description = "Inatividade antes de pausar Aurora Serverless v2 quando min ACU e zero."
+  type        = number
+  default     = 900
+
+  validation {
+    condition = (
+      var.aurora_auto_pause_seconds >= 300 &&
+      var.aurora_auto_pause_seconds <= 86400
+    )
+    error_message = "aurora_auto_pause_seconds deve ficar entre 300 e 86400."
   }
 }
 

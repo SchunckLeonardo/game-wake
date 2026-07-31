@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import ROUND_UP, Decimal
 
 from gamewake.accounts import (
     Account,
@@ -65,6 +65,26 @@ class GameWakeApplication:
         account = self.accounts.find_account_by_discord_guild(discord_guild_id)
         if account is None:
             raise KeyError(discord_guild_id)
+        return account, user
+
+    def start_discord_account(
+        self,
+        *,
+        discord_guild_id: str,
+        discord_user_id: str,
+        display_name: str,
+    ) -> tuple[Account, User]:
+        user = self.accounts.sign_in_with_discord(
+            discord_user_id=discord_user_id,
+            display_name=display_name,
+        )
+        account = self.accounts.find_account_by_discord_guild(discord_guild_id)
+        if account is None:
+            account = self.accounts.create_account(
+                name=f"Grupo de {display_name}",
+                owner_user_id=user.id,
+                discord_guild_id=discord_guild_id,
+            )
         return account, user
 
     def invite_discord_friends(
@@ -196,6 +216,17 @@ class GameWakeApplication:
             invited_user_id=invited_user_id,
         )
 
+    def accept_pending_invitation(
+        self,
+        account_id: str,
+        *,
+        invited_user_id: str,
+    ) -> Membership:
+        return self.accounts.accept_pending_invitation(
+            account_id,
+            invited_user_id=invited_user_id,
+        )
+
     def create_world(
         self,
         account_id: str,
@@ -241,6 +272,10 @@ class GameWakeApplication:
         idempotency_key: str,
     ) -> WalletContribution:
         self.accounts.list_memberships(account_id, viewer_user_id=payer_user_id)
+        if not self.accounts.owner_recovery_ready(account_id):
+            raise PermissionError(
+                "Owner Recovery must be ready before the account can accept payments"
+            )
         return self.billing.create_contribution(
             account_id,
             payer_user_id=payer_user_id,
@@ -315,6 +350,33 @@ class GameWakeApplication:
         if self._operation_dispatcher is not None:
             self._operation_dispatcher.start(account_id, operation.id)
         return operation
+
+    def wake_estimate(
+        self,
+        account_id: str,
+        world_id: str,
+        *,
+        viewer_user_id: str,
+    ) -> dict[str, str | int]:
+        world = self.worlds.get_world(
+            account_id,
+            world_id,
+            viewer_user_id=viewer_user_id,
+        )
+        rate = self._runtime_profile_hourly_rates.get(world.runtime_profile_id)
+        if rate is None:
+            raise ValueError("Runtime Profile pricing is not configured")
+        reserved_minutes = 25
+        minimum = (rate * Decimal(reserved_minutes) / Decimal(60)).quantize(
+            Decimal("0.01"),
+            rounding=ROUND_UP,
+        )
+        return {
+            "currency": "BRL",
+            "hourlyRate": str(rate.quantize(Decimal("0.01"))),
+            "minimumReservation": str(minimum),
+            "reservedMinutes": reserved_minutes,
+        }
 
     def request_sleep(
         self,
@@ -467,6 +529,36 @@ class GameWakeApplication:
             world_id,
             actor_user_id=actor_user_id,
             idempotency_key=idempotency_key,
+        )
+
+    def schedule_world_deletion(
+        self,
+        account_id: str,
+        world_id: str,
+        *,
+        actor_user_id: str,
+        confirmation: SensitiveActionConfirmation,
+        idempotency_key: str,
+    ) -> World:
+        return self._world_data().schedule_deletion(
+            account_id,
+            world_id,
+            actor_user_id=actor_user_id,
+            confirmation=confirmation,
+            idempotency_key=idempotency_key,
+        )
+
+    def cancel_world_deletion(
+        self,
+        account_id: str,
+        world_id: str,
+        *,
+        actor_user_id: str,
+    ) -> World:
+        return self._world_data().cancel_deletion(
+            account_id,
+            world_id,
+            actor_user_id=actor_user_id,
         )
 
     def _world_data(self) -> WorldData:

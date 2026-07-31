@@ -175,6 +175,8 @@ resource "aws_lambda_function" "gamewake_api" {
       PALWORLD_PORT                            = tostring(var.palworld_port)
       RUNTIME_PROFILE_HOURLY_RATES_JSON        = jsonencode(var.runtime_profile_hourly_rates)
       SESSION_KMS_KEY_ID                       = aws_kms_key.sessions.key_id
+      STORAGE_ALLOWANCE_BYTES                  = tostring(var.storage_allowance_bytes)
+      STORAGE_GRACE_DAYS                       = tostring(var.storage_grace_days)
       WORLD_OPERATION_STATE_MACHINE_ARN        = aws_sfn_state_machine.world_operation.arn
       WORLD_DATA_BUCKET                        = aws_s3_bucket.world_data.id
     }

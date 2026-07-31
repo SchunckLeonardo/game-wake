@@ -1,4 +1,6 @@
 from contextlib import contextmanager
+from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -14,6 +16,13 @@ class Migrations:
 
 class Transaction:
     def fetch_all(self, sql):
+        if "pending_deletion" in sql:
+            return (
+                {"account_id": "account-1", "id": "world-delete-1"},
+                {"account_id": "account-2", "id": "world-delete-2"},
+            )
+        if "FROM accounts" in sql:
+            return ({"id": "account-1"}, {"id": "account-2"})
         if "FROM worlds" in sql:
             return (
                 {"account_id": "account-1", "id": "operation-1"},
@@ -52,6 +61,30 @@ class Worker:
         return SimpleNamespace(id=f"sleep-{world_id}")
 
 
+class WorldData:
+    def __init__(self):
+        self.calls = []
+
+    def purge_due_deletion(self, account_id, world_id, *, observed_at):
+        self.calls.append((account_id, world_id, observed_at))
+        return True
+
+
+class Storage:
+    def __init__(self):
+        self.calls = []
+
+    def evaluate(self, account_id, *, wallet_can_fund, observed_at):
+        self.calls.append((account_id, wallet_can_fund, observed_at))
+
+
+class Billing:
+    def get_wallet(self, account_id):
+        return SimpleNamespace(
+            available_balance=Decimal("1.00") if account_id == "account-1" else Decimal("0.00")
+        )
+
+
 def test_worker_composition_source_includes_persistent_runtime_usage_billing():
     source = Path(gamewake_worker.__file__).read_text()
 
@@ -65,6 +98,9 @@ def services(orchestrator=None):
         migrations=Migrations(),
         database=Database(),
         worker=Worker(),
+        world_data=WorldData(),
+        storage=Storage(),
+        billing=Billing(),
         orchestrator_factory=lambda arn: orchestrator,
     )
 
@@ -122,4 +158,24 @@ def test_monitor_sessions_dispatches_safe_sleep_operations():
     assert orchestrator.calls == [
         ("account-1", "sleep-operation-1"),
         ("account-2", "sleep-operation-2"),
+    ]
+
+
+def test_daily_data_maintenance_purges_due_deletions_and_evaluates_storage_grace():
+    composed = services()
+    observed_at = datetime(2026, 8, 8, 3, 0, tzinfo=UTC)
+
+    result = gamewake_worker.handle_event(
+        {"action": "maintain_data", "observed_at": observed_at.isoformat()},
+        services=composed,
+    )
+
+    assert result == {"purged": 2, "storage_accounts": 2}
+    assert composed.world_data.calls == [
+        ("account-1", "world-delete-1", observed_at),
+        ("account-2", "world-delete-2", observed_at),
+    ]
+    assert composed.storage.calls == [
+        ("account-1", True, observed_at),
+        ("account-2", False, observed_at),
     ]

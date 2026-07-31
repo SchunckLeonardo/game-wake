@@ -20,6 +20,7 @@ resource "aws_db_subnet_group" "gamewake" {
 resource "aws_rds_cluster" "gamewake" {
   cluster_identifier          = "${local.name_prefix}-gamewake"
   engine                      = "aurora-postgresql"
+  engine_version              = var.aurora_engine_version
   engine_mode                 = "provisioned"
   database_name               = var.aurora_database_name
   master_username             = "gamewake_admin"
@@ -39,8 +40,9 @@ resource "aws_rds_cluster" "gamewake" {
   ]
 
   serverlessv2_scaling_configuration {
-    min_capacity = var.aurora_min_acu
-    max_capacity = var.aurora_max_acu
+    min_capacity             = var.aurora_min_acu
+    max_capacity             = var.aurora_max_acu
+    seconds_until_auto_pause = var.aurora_auto_pause_seconds
   }
 
   lifecycle {

@@ -6,9 +6,11 @@ instance_type = "m6a.xlarge"
 # O prototipo de EC2 unica fica desligado. Worlds do GameWake usam Launch Template descartavel.
 enable_legacy_single_server = false
 
-# Aurora PostgreSQL Serverless v2 (Data API). 0.5 ACU e o piso conservador mais compativel.
-aurora_min_acu              = 0.5
+# Aurora PostgreSQL Serverless v2 (Data API). PostgreSQL 16.3+ permite auto-pause em 0 ACU.
+aurora_engine_version       = "16.3"
+aurora_min_acu              = 0
 aurora_max_acu              = 4
+aurora_auto_pause_seconds   = 900
 aurora_deletion_protection  = true
 aurora_skip_final_snapshot  = false
 
@@ -29,6 +31,10 @@ abacatepay_packages = [
 runtime_profile_hourly_rates = {
   palworld-small = 3.60
 }
+
+# 10 GiB incluidos por conta; excedente sem saldo entra em 30 dias de tolerancia.
+storage_allowance_bytes = 10737418240
+storage_grace_days      = 30
 
 # Pelo menos uma das listas deve autorizar alguem.
 discord_allowed_user_ids = [

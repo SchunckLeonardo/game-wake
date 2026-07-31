@@ -13,6 +13,8 @@ def test_aurora_serverless_v2_uses_data_api_encryption_and_private_subnets():
     assert 'resource "aws_rds_cluster" "gamewake"' in database
     assert 'engine_mode                 = "provisioned"' in database
     assert "serverlessv2_scaling_configuration" in database
+    assert "engine_version              = var.aurora_engine_version" in database
+    assert "seconds_until_auto_pause = var.aurora_auto_pause_seconds" in database
     assert "enable_http_endpoint        = true" in database
     assert "storage_encrypted           = true" in database
     assert "manage_master_user_password = true" in database
@@ -30,6 +32,8 @@ def test_standard_workflow_invokes_the_worker_with_structured_logs():
     assert 'resource "aws_lambda_function" "operation_worker"' in orchestration
     assert "AURORA_CLUSTER_ARN" in orchestration
     assert "WORLD_DATA_BUCKET" in orchestration
+    assert 'fileset("${path.module}/../gamewake/persistence/sql", "*.sql")' in orchestration
+    assert "0001_initial.sql" not in orchestration
 
 
 def test_world_data_is_kms_encrypted_versioned_and_never_public():
@@ -112,3 +116,25 @@ def test_online_session_monitor_runs_every_minute_for_auto_sleep_and_balance_gua
     assert 'resource "aws_scheduler_schedule" "session_monitor"' in schedules
     assert 'schedule_expression = "rate(1 minute)"' in schedules
     assert 'action            = "monitor_sessions"' in schedules
+
+
+def test_daily_data_maintenance_enforces_pending_deletion_and_storage_grace():
+    schedules = source("gamewake-schedules.tf")
+    orchestration = source("gamewake-orchestration.tf")
+    api = source("gamewake-api.tf")
+
+    assert 'resource "aws_scheduler_schedule" "data_maintenance"' in schedules
+    assert 'action = "maintain_data"' in schedules
+    assert "STORAGE_ALLOWANCE_BYTES" in orchestration
+    assert "STORAGE_GRACE_DAYS" in orchestration
+    assert "STORAGE_ALLOWANCE_BYTES" in api
+
+
+def test_closed_beta_observability_covers_api_worker_database_and_dead_letters():
+    cloudwatch = source("cloudwatch.tf")
+
+    assert 'resource "aws_cloudwatch_dashboard" "gamewake"' in cloudwatch
+    assert 'resource "aws_cloudwatch_metric_alarm" "gamewake_api_errors"' in cloudwatch
+    assert 'resource "aws_cloudwatch_metric_alarm" "operation_worker_errors"' in cloudwatch
+    assert 'resource "aws_cloudwatch_metric_alarm" "operations_dead_letters"' in cloudwatch
+    assert 'resource "aws_cloudwatch_metric_alarm" "aurora_capacity"' in cloudwatch

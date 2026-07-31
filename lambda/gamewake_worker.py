@@ -3,10 +3,13 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
 import boto3
 
+from gamewake.accounts import Accounts
 from gamewake.aws import (
     Ec2RuntimeProvider,
     S3WorldArchiveStore,
@@ -22,10 +25,17 @@ from gamewake.orchestration import (
 from gamewake.persistence import (
     AuroraDataApi,
     MigrationRunner,
+    PostgresAccountRepository,
     PostgresBillingRepository,
+    PostgresStoragePolicyRepository,
     PostgresWorldRepository,
 )
-from gamewake.worlds import WorldOperationWorker
+from gamewake.worlds import (
+    StoragePolicy,
+    StoragePolicyService,
+    WorldData,
+    WorldOperationWorker,
+)
 
 
 class _PalworldTemplates:
@@ -44,6 +54,9 @@ class _Services:
     migrations: MigrationRunner
     database: AuroraDataApi
     orchestrator_factory: Any
+    world_data: WorldData
+    storage: StoragePolicyService
+    billing: Billing
 
 
 def _required(environ: dict[str, str], name: str) -> str:
@@ -71,6 +84,23 @@ def build_services(
         _required(environ, "WORLD_DATA_BUCKET"),
         client=client_factory("s3"),
     )
+    accounts = Accounts(PostgresAccountRepository(database))
+    billing = Billing(PostgresBillingRepository(database))
+    storage = StoragePolicyService(
+        repository,
+        archive_store=archive,
+        repository=PostgresStoragePolicyRepository(database),
+        policy=StoragePolicy(
+            allowance_bytes=int(_required(environ, "STORAGE_ALLOWANCE_BYTES")),
+            grace_days=int(_required(environ, "STORAGE_GRACE_DAYS")),
+        ),
+    )
+    world_data = WorldData(
+        repository,
+        access=accounts,
+        archive_store=archive,
+        storage_gate=storage,
+    )
     worker = WorldOperationWorker(
         repository,
         runtime_provider=Ec2RuntimeProvider(
@@ -91,7 +121,7 @@ def build_services(
             )
         ),
         backup_store=archive,
-        usage_recorder=BillingRuntimeUsageRecorder(Billing(PostgresBillingRepository(database))),
+        usage_recorder=BillingRuntimeUsageRecorder(billing),
     )
     step_functions_client = client_factory("stepfunctions")
     return _Services(
@@ -101,6 +131,9 @@ def build_services(
         orchestrator_factory=lambda arn: StepFunctionsOperationOrchestrator(
             arn, client=step_functions_client
         ),
+        world_data=world_data,
+        storage=storage,
+        billing=billing,
     )
 
 
@@ -151,6 +184,41 @@ def handle_event(event: dict[str, Any], *, services: Any) -> dict[str, Any]:
                 orchestrator.ensure_running(str(world["account_id"]), operation.id)
                 sleep_operations += 1
         return {"monitored": len(worlds), "sleep_operations": sleep_operations}
+    if action == "maintain_data":
+        raw_observed_at = event.get("observed_at")
+        observed_at = (
+            datetime.fromisoformat(raw_observed_at.replace("Z", "+00:00"))
+            if isinstance(raw_observed_at, str)
+            else datetime.now(UTC)
+        )
+        with services.database.transaction() as transaction:
+            pending_deletions = transaction.fetch_all(
+                """
+                SELECT account_id, id
+                FROM worlds
+                WHERE status = 'pending_deletion'
+                ORDER BY account_id, id
+                """
+            )
+            accounts = transaction.fetch_all("SELECT id FROM accounts ORDER BY id")
+        purged = sum(
+            services.world_data.purge_due_deletion(
+                str(world["account_id"]),
+                str(world["id"]),
+                observed_at=observed_at,
+            )
+            for world in pending_deletions
+        )
+        for account in accounts:
+            account_id = str(account["id"])
+            services.storage.evaluate(
+                account_id,
+                wallet_can_fund=(
+                    services.billing.get_wallet(account_id).available_balance > Decimal("0.00")
+                ),
+                observed_at=observed_at,
+            )
+        return {"purged": purged, "storage_accounts": len(accounts)}
     if action not in {"advance", "record_failure"}:
         raise ValueError(f"unsupported operation worker action: {action}")
     return advance_operation(event, worker=services.worker)

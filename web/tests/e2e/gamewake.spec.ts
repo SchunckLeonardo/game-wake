@@ -47,6 +47,8 @@ test("group contributes, invites friends, wakes, connects, configures and sleeps
 
   await navigation(page, "worlds").click();
   await page.getByTestId("wake-world").click();
+  await expect(page.getByRole("dialog", { name: "Confirmar despertar de Palpagos" })).toContainText("R$ 3,60/h");
+  await page.getByRole("button", { name: "Confirmar e acordar" }).click();
   await expect(page.getByRole("status")).toContainText("Restaurando World");
   await expect(page.getByTestId("connect-world")).toBeVisible();
   await page.getByTestId("connect-world").click();
@@ -192,14 +194,64 @@ test("authenticated Console loads and mutates the real World through bearer API"
       body: JSON.stringify({ operation: { id: "operation-live", status: "pending" } }),
     });
   });
+  await page.route("**/api/v1/accounts/account-live/worlds/world-live/wake/estimate", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ estimate: { currency: "BRL", hourlyRate: "3.60", minimumReservation: "1.50", reservedMinutes: 25 } }),
+    });
+  });
 
   await page.goto("/accounts/account-live");
   await expect(page.getByText("Mundo real")).toBeVisible();
   await expect(page.getByText("R$ 18,50").first()).toBeVisible();
   await page.getByTestId("wake-world").click();
+  await expect(page.getByRole("dialog", { name: "Confirmar despertar de Mundo real" })).toContainText("R$ 3,60/h");
+  await page.getByRole("button", { name: "Confirmar e acordar" }).click();
 
   expect(wakeBody).toMatchObject({ idempotencyKey: expect.any(String) });
   await expect(page.getByRole("status")).toContainText("Restaurando World");
+});
+
+test("Discord-bootstrapped account creates its first World from the Console", async ({
+  page,
+}) => {
+  let createdWorldBody: unknown;
+  await page.addInitScript(() => sessionStorage.setItem("gamewake_session", "signed-session"));
+  await page.route("**/api/v1/me/accounts", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ accounts: [{ id: "account-empty", name: "Grupo do Discord" }] }),
+  }));
+  await page.route("**/api/v1/accounts/account-empty/wallet", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ wallet: { availableBalance: "0.00", statement: [] } }),
+  }));
+  await page.route("**/api/v1/accounts/account-empty/worlds", (route) => {
+    if (route.request().method() === "POST") {
+      createdWorldBody = route.request().postDataJSON();
+      return route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ world: { id: "world-first", name: "Primeiro World", region: "sa-east-1", status: "sleeping" } }),
+      });
+    }
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ worlds: [] }),
+    });
+  });
+
+  await page.goto("/accounts/account-empty");
+  await page.getByRole("button", { name: "+ Novo World" }).click();
+  await page.getByLabel("Nome do novo World").fill("Primeiro World");
+  await page.getByRole("button", { name: "Criar World" }).click();
+
+  await expect(page.getByRole("heading", { name: "Primeiro World" })).toBeVisible();
+  expect(createdWorldBody).toMatchObject({
+    name: "Primeiro World",
+    gameTemplateId: "palworld:1",
+    region: "sa-east-1",
+    runtimeProfileId: "palworld-small",
+  });
 });
 
 test("live Console reads members, custom roles, backups and redacted activity", async ({
@@ -209,6 +261,7 @@ test("live Console reads members, custom roles, backups and redacted activity", 
   let roleBody: unknown;
   let assignmentBody: unknown;
   let backupBody: unknown;
+  let deletionBody: unknown;
   await page.addInitScript(() => sessionStorage.setItem("gamewake_session", "signed-session"));
   await page.route("**/api/v1/me/accounts", (route) =>
     route.fulfill({
@@ -299,11 +352,27 @@ test("live Console reads members, custom roles, backups and redacted activity", 
       }),
     });
   });
+  await page.route("**/api/v1/accounts/account-live/worlds/world-live", (route) => {
+    deletionBody = route.request().postDataJSON();
+    return route.fulfill({
+      status: 202,
+      contentType: "application/json",
+      body: JSON.stringify({ world: { id: "world-live", name: "Mundo real", region: "sa-east-1", status: "pending_deletion" } }),
+    });
+  });
   await page.route("**/api/v1/accounts/account-live/activity", (route) =>
     route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
         events: [{ id: "event-1", action: "role_assignment.revoked", actorUserId: "user-owner", subjectId: "assignment-1", occurredAt: "2026-07-31T18:00:00+00:00" }],
+      }),
+    }),
+  );
+  await page.route("**/api/v1/accounts/account-live/worlds/world-live/operations", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        operations: [{ id: "operation-1", type: "sleep", status: "succeeded", phase: "complete", createdAt: "2026-07-31T17:00:00+00:00" }],
       }),
     }),
   );
@@ -337,6 +406,15 @@ test("live Console reads members, custom roles, backups and redacted activity", 
   await page.getByRole("button", { name: "+ Backup manual" }).click();
   await expect(page.getByText("2 cópias protegidas")).toBeVisible();
   expect(backupBody).toMatchObject({ idempotencyKey: expect.any(String) });
+  await page.getByText("Exclusão e portabilidade").click();
+  await page.getByLabel("Confirme o nome do World").fill("Mundo real");
+  await page.getByRole("button", { name: "Agendar exclusão" }).click();
+  await expect(page.getByText(/Pending Deletion por sete dias/)).toBeVisible();
+  expect(deletionBody).toMatchObject({
+    confirmedResourceName: "Mundo real",
+    idempotencyKey: expect.any(String),
+  });
   await navigation(page, "activity").click();
   await expect(page.getByText("Role removida")).toBeVisible();
+  await expect(page.getByText("Operação de sleep")).toBeVisible();
 });

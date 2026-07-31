@@ -52,6 +52,7 @@ payload=$(jq -cn '[
     default_member_permissions:null,
     dm_permission:false,
     options:[
+      {type:1,name:"comecar",description:"Cria a conta GameWake deste servidor"},
       {
         type:1,
         name:"convidar",
@@ -62,6 +63,7 @@ payload=$(jq -cn '[
           {type:6,name:"amigo3",description:"Terceiro amigo",required:false}
         ]
       },
+      {type:1,name:"aceitar",description:"Aceita seu convite pendente para a conta GameWake"},
       {type:1,name:"status",description:"Mostra o estado do seu World"},
       {type:1,name:"acordar",description:"Acorda o World para jogar"},
       {type:1,name:"conectar",description:"Mostra conexão e senha somente para você"},

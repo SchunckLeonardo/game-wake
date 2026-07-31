@@ -209,6 +209,8 @@ resource "aws_lambda_function" "operation_worker" {
       GAMEWAKE_WORLD_PARAMETER_PREFIX = "${local.parameter_path}/gamewake/worlds"
       PALWORLD_BASE_CONFIG_JSON       = local.palworld_config_payload
       RUNTIME_LAUNCH_TEMPLATE_ID      = aws_launch_template.gamewake_runtime.id
+      STORAGE_ALLOWANCE_BYTES         = tostring(var.storage_allowance_bytes)
+      STORAGE_GRACE_DAYS              = tostring(var.storage_grace_days)
       WORLD_DATA_BUCKET               = aws_s3_bucket.world_data.id
     }
   }
@@ -301,7 +303,10 @@ resource "aws_lambda_invocation" "database_migrations" {
 
   triggers = {
     lambda_source = aws_lambda_function.operation_worker.source_code_hash
-    migration     = filesha256("${path.module}/../gamewake/persistence/sql/0001_initial.sql")
+    migration = sha256(join("", [
+      for migration in sort(fileset("${path.module}/../gamewake/persistence/sql", "*.sql")) :
+      filesha256("${path.module}/../gamewake/persistence/sql/${migration}")
+    ]))
   }
 
   depends_on = [aws_rds_cluster_instance.gamewake]

@@ -45,11 +45,35 @@ class DiscordCommandController:
 
     def handle(self, interaction: DiscordInteraction) -> DiscordCommandResponse:
         try:
+            if interaction.command == "comecar":
+                account, _ = self._application.start_discord_account(
+                    discord_guild_id=interaction.guild_id,
+                    discord_user_id=interaction.discord_user_id,
+                    display_name=interaction.display_name,
+                )
+                return DiscordCommandResponse(
+                    content=(
+                        "✅ Conta do servidor pronta. Abra a Console para criar o primeiro World."
+                    ),
+                    ephemeral=True,
+                    links=(
+                        ("Abrir GameWake Console", f"{self._console_url}/accounts/{account.id}"),
+                    ),
+                )
             account, actor = self._application.resolve_discord_principal(
                 discord_guild_id=interaction.guild_id,
                 discord_user_id=interaction.discord_user_id,
                 display_name=interaction.display_name,
             )
+            if interaction.command == "aceitar":
+                self._application.accept_pending_invitation(
+                    account.id,
+                    invited_user_id=actor.id,
+                )
+                return DiscordCommandResponse(
+                    content="✅ Convite aceito. Você agora tem a Role Player.",
+                    ephemeral=True,
+                )
             if interaction.command == "convidar":
                 invitations = self._application.invite_discord_friends(
                     account.id,
@@ -161,7 +185,9 @@ class DiscordCommandController:
                 return DiscordCommandResponse(
                     content=(
                         "**Comandos GameWake**\n"
+                        "`/gamewake comecar` — cria a conta deste servidor.\n"
                         "`/gamewake convidar` — convida até três amigos de uma vez.\n"
+                        "`/gamewake aceitar` — aceita seu convite pendente.\n"
                         "`/gamewake status` — mostra o estado do World.\n"
                         "`/gamewake acordar` — prepara o World para jogar.\n"
                         "`/gamewake conectar` — entrega conexão e senha em privado.\n"
