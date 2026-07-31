@@ -10,6 +10,7 @@ from .model import (
     World,
     WorldExport,
     WorldExportManifest,
+    WorldStatus,
 )
 
 
@@ -138,6 +139,56 @@ class InMemoryWorldArchiveStore:
 
     def was_world_deleted(self, account_id: str, world_id: str) -> bool:
         return (account_id, world_id) in self._deleted_worlds
+
+    def storage_usage(self, account_id: str, worlds: tuple[World, ...]) -> int:
+        active_worlds = {
+            world.id
+            for world in worlds
+            if world.status is not WorldStatus.PENDING_DELETION
+        }
+        current_states = sum(
+            self._state_sizes.get(world.stored_state_id, 0)
+            for world in worlds
+            if world.id in active_worlds and world.stored_state_id is not None
+        )
+        backups = sum(
+            backup.size_bytes
+            for backup in self._backups.values()
+            if backup.account_id == account_id and backup.world_id in active_worlds
+        )
+        return current_states + backups
+
+    def prune_oldest_automatic(
+        self,
+        account_id: str,
+        worlds: tuple[World, ...],
+        *,
+        bytes_to_free: int,
+    ) -> tuple[Backup, ...]:
+        active_world_ids = {
+            world.id
+            for world in worlds
+            if world.status is not WorldStatus.PENDING_DELETION
+        }
+        candidates = sorted(
+            (
+                backup
+                for backup in self._backups.values()
+                if backup.account_id == account_id
+                and backup.world_id in active_world_ids
+                and backup.kind is BackupKind.AUTOMATIC
+            ),
+            key=lambda backup: backup.created_at or datetime.min.replace(tzinfo=UTC),
+        )
+        pruned = []
+        freed = 0
+        for backup in candidates:
+            if freed >= bytes_to_free:
+                break
+            del self._backups[backup.id]
+            pruned.append(backup)
+            freed += backup.size_bytes
+        return tuple(pruned)
 
     def _create_backup(
         self,

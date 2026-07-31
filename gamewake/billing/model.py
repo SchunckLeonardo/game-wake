@@ -19,6 +19,7 @@ class WorldBudgetExceeded(ValueError):
 class LedgerEntryType(StrEnum):
     CONTRIBUTION = "contribution"
     RUNTIME_CHARGE = "runtime_charge"
+    STORAGE_CHARGE = "storage_charge"
     WAKE_GUARANTEE = "wake_guarantee"
     AVAILABILITY_CREDIT = "availability_credit"
     REFUND = "refund"

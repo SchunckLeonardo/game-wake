@@ -6,7 +6,7 @@ from uuid import uuid4
 from gamewake.accounts import Permission, PermissionDeniedError
 from gamewake.game_catalog import GameCatalog
 
-from .contracts import AccessControl, GameConfigurationCatalog, WorldRepository
+from .contracts import AccessControl, GameConfigurationCatalog, StorageGate, WorldRepository
 from .model import (
     ConfigurationChange,
     ConfigurationChangePreview,
@@ -18,6 +18,7 @@ from .model import (
     WorldOperation,
     WorldStatus,
 )
+from .storage import StorageBlockedError
 
 
 class Worlds:
@@ -28,11 +29,13 @@ class Worlds:
         access: AccessControl,
         clock: Callable[[], datetime] | None = None,
         game_catalog: GameConfigurationCatalog | None = None,
+        storage_gate: StorageGate | None = None,
     ) -> None:
         self._repository = repository
         self._access = access
         self._clock = clock or (lambda: datetime.now(UTC))
         self._game_catalog = game_catalog or GameCatalog.with_palworld()
+        self._storage_gate = storage_gate
 
     def create_world(
         self,
@@ -50,6 +53,10 @@ class Worlds:
             permission=Permission.CREATE_WORLD,
         ):
             raise PermissionDeniedError("creating a World requires Owner permission")
+        if self._storage_gate is not None and not self._storage_gate.can_create_world(
+            account_id
+        ):
+            raise StorageBlockedError("Storage Grace Period blocks new Worlds")
         world_id = str(uuid4())
         template = self._game_catalog.resolve(game_template_id)
         defaults = {
@@ -237,6 +244,8 @@ class Worlds:
             world_id=world_id,
         ):
             raise PermissionDeniedError("the User cannot wake this World")
+        if self._storage_gate is not None and not self._storage_gate.can_wake(account_id):
+            raise StorageBlockedError("unfunded storage excess blocks waking Worlds")
         world = self._repository.get(account_id, world_id)
         operation = WorldOperation(
             id=str(uuid4()),

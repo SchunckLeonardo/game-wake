@@ -21,6 +21,14 @@ from .model import (
     WorldStatus,
 )
 from .service import Worlds
+from .storage import (
+    InMemoryStoragePolicyRepository,
+    StorageBlockedError,
+    StorageGraceState,
+    StoragePolicy,
+    StoragePolicyService,
+    StorageStatus,
+)
 from .worker import WorldOperationWorker
 
 __all__ = [
@@ -29,12 +37,18 @@ __all__ = [
     "ConfigurationChange",
     "ConfigurationChangePreview",
     "ConfigurationRevision",
+    "InMemoryStoragePolicyRepository",
     "InMemoryWorldArchiveStore",
     "InMemoryWorldRepository",
     "OperationPhase",
     "OperationStatus",
     "OperationType",
     "Runtime",
+    "StorageBlockedError",
+    "StorageGraceState",
+    "StoragePolicy",
+    "StoragePolicyService",
+    "StorageStatus",
     "StoredWorldState",
     "World",
     "WorldData",

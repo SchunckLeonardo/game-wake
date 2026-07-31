@@ -642,6 +642,57 @@ class Billing:
                 return entry
         raise ConcurrentBillingUpdate("could not credit Wallet after concurrent retries")
 
+    def charge_monthly_storage(
+        self,
+        account_id: str,
+        *,
+        excess_bytes: int,
+        rate_per_gib_month: Decimal,
+        billing_month: str,
+        idempotency_key: str,
+    ) -> LedgerEntry:
+        if excess_bytes <= 0:
+            raise ValueError("storage excess must be positive")
+        try:
+            datetime.strptime(billing_month, "%Y-%m")
+        except ValueError as error:
+            raise ValueError("billing month must use YYYY-MM") from error
+        rate = self._positive_money(rate_per_gib_month)
+        amount = (
+            rate * Decimal(excess_bytes) / Decimal(1024**3)
+        ).quantize(_CENT, rounding=ROUND_HALF_UP)
+        if amount <= 0:
+            raise ValueError("storage charge rounds below one cent")
+        for _ in range(100):
+            snapshot = self._repository.get(account_id)
+            existing = next(
+                (
+                    entry
+                    for entry in snapshot.entries
+                    if entry.idempotency_key == idempotency_key
+                ),
+                None,
+            )
+            if existing is not None:
+                return existing
+            if self._available_balance(snapshot) < amount:
+                raise InsufficientFundsError("Wallet cannot fund storage excess")
+            entry = LedgerEntry(
+                id=str(uuid4()),
+                account_id=account_id,
+                entry_type=LedgerEntryType.STORAGE_CHARGE,
+                amount=-amount,
+                reference=f"storage:{billing_month}",
+                idempotency_key=idempotency_key,
+                occurred_at=self._clock(),
+            )
+            if self._try_save(
+                replace(snapshot, entries=(*snapshot.entries, entry)),
+                expected_version=snapshot.version,
+            ):
+                return entry
+        raise ConcurrentBillingUpdate("could not charge storage after retries")
+
     def reserve(
         self,
         account_id: str,

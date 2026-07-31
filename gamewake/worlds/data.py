@@ -9,8 +9,9 @@ from gamewake.accounts import (
     SensitiveActionConfirmationError,
 )
 
-from .contracts import AccessControl, WorldArchiveStore, WorldRepository
+from .contracts import AccessControl, StorageGate, WorldArchiveStore, WorldRepository
 from .model import Backup, StoredWorldState, World, WorldExport, WorldStatus
+from .storage import StorageBlockedError
 
 
 class WorldData:
@@ -21,11 +22,13 @@ class WorldData:
         access: AccessControl,
         archive_store: WorldArchiveStore,
         clock: Callable[[], datetime] | None = None,
+        storage_gate: StorageGate | None = None,
     ) -> None:
         self._repository = repository
         self._access = access
         self._archive_store = archive_store
         self._clock = clock or (lambda: datetime.now(UTC))
+        self._storage_gate = storage_gate
 
     def list_backups(
         self,
@@ -56,6 +59,11 @@ class WorldData:
             actor_user_id,
             Permission.CREATE_BACKUP,
         )
+        if (
+            self._storage_gate is not None
+            and not self._storage_gate.can_create_manual_backup(account_id)
+        ):
+            raise StorageBlockedError("Storage Grace Period blocks manual Backups")
         world = self._repository.get(account_id, world_id)
         self._require_sleeping(world)
         return self._archive_store.create_manual(
