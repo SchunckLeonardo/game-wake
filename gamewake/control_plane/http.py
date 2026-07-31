@@ -42,6 +42,7 @@ class GameWakeHttpHandler:
         headers = {
             str(key).casefold(): str(value) for key, value in (event.get("headers") or {}).items()
         }
+        query = event.get("queryStringParameters") or {}
         origin = headers.get("origin")
         cors = self._cors(origin)
         if method == "OPTIONS":
@@ -55,7 +56,6 @@ class GameWakeHttpHandler:
                     self._oauth.authorization_url(state=state, redirect_uri=oauth_redirect_uri)
                 )
             if method == "GET" and path == "/auth/discord/callback":
-                query = event.get("queryStringParameters") or {}
                 code = query.get("code")
                 state = query.get("state")
                 if not isinstance(code, str) or not isinstance(state, str):
@@ -94,7 +94,7 @@ class GameWakeHttpHandler:
                     return self._error(503, "not_configured", "AbacatePay is not configured")
                 result = self._abacatepay_webhook.handle(
                     raw_body,
-                    webhook_secret=headers.get("webhooksecret", ""),
+                    webhook_secret=str(query.get("webhookSecret") or ""),
                     signature=headers.get("x-webhook-signature", ""),
                 )
                 return self._response(200, {"processed": bool(result)})

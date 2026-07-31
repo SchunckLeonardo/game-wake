@@ -180,7 +180,8 @@ def test_discord_and_abacatepay_receive_the_unmodified_raw_body():
         event(
             "POST",
             "/webhooks/abacatepay",
-            headers={"webhooksecret": "url-secret", "x-webhook-signature": "signature"},
+            headers={"x-webhook-signature": "signature"},
+            query={"webhookSecret": "url-secret"},
             body=raw.decode(),
         )
     )
