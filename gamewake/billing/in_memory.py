@@ -11,7 +11,14 @@ class InMemoryBillingRepository:
     def get(self, account_id: str) -> WalletSnapshot:
         return self._wallets.get(
             account_id,
-            WalletSnapshot(account_id, entries=(), reservations=(), version=0),
+            WalletSnapshot(
+                account_id,
+                entries=(),
+                reservations=(),
+                quotes=(),
+                usages=(),
+                version=0,
+            ),
         )
 
     def save(self, snapshot: WalletSnapshot, *, expected_version: int) -> None:
@@ -23,5 +30,7 @@ class InMemoryBillingRepository:
                 account_id=snapshot.account_id,
                 entries=snapshot.entries,
                 reservations=snapshot.reservations,
+                quotes=snapshot.quotes,
+                usages=snapshot.usages,
                 version=expected_version + 1,
             )

@@ -6,6 +6,8 @@ from .model import (
     LedgerEntry,
     LedgerEntryType,
     ReservationStatus,
+    RuntimeUsage,
+    SessionQuote,
     UsageReservation,
     Wallet,
 )
@@ -18,6 +20,8 @@ __all__ = [
     "LedgerEntry",
     "LedgerEntryType",
     "ReservationStatus",
+    "RuntimeUsage",
+    "SessionQuote",
     "UsageReservation",
     "Wallet",
 ]
