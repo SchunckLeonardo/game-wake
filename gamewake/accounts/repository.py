@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from .model import Account, Invitation, Membership
+from .policy import CustomRole
 
 
 @dataclass(frozen=True)
@@ -9,6 +10,7 @@ class AccountSnapshot:
     account: Account
     memberships: tuple[Membership, ...]
     invitations: tuple[Invitation, ...]
+    custom_roles: tuple[CustomRole, ...]
     version: int
 
 

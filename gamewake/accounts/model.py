@@ -28,11 +28,42 @@ class Account:
 
 
 @dataclass(frozen=True)
+class ResourceScope:
+    account_id: str
+    world_id: str | None = None
+
+    def applies_to(self, world_id: str | None) -> bool:
+        if self.world_id is None:
+            return True
+        return world_id is not None and self.world_id == world_id
+
+
+@dataclass(frozen=True)
+class RoleAssignment:
+    id: str
+    scope: ResourceScope
+    predefined_role: PredefinedRole | None = None
+    custom_role_id: str | None = None
+
+    def __post_init__(self) -> None:
+        if (self.predefined_role is None) == (self.custom_role_id is None):
+            raise ValueError("a Role Assignment must reference exactly one Role")
+
+
+@dataclass(frozen=True)
 class Membership:
     id: str
     account_id: str
     user_id: str
-    roles: frozenset[PredefinedRole]
+    assignments: tuple[RoleAssignment, ...]
+
+    @property
+    def roles(self) -> frozenset[PredefinedRole]:
+        return frozenset(
+            assignment.predefined_role
+            for assignment in self.assignments
+            if assignment.predefined_role is not None
+        )
 
 
 @dataclass(frozen=True)

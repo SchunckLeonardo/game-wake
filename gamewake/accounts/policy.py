@@ -1,6 +1,7 @@
+from dataclasses import dataclass
 from enum import StrEnum
 
-from .model import PredefinedRole
+from .model import PredefinedRole, RoleAssignment
 
 
 class Permission(StrEnum):
@@ -24,6 +25,14 @@ class Permission(StrEnum):
     DELETE_WORLD = "world:delete"
     TRANSFER_OWNERSHIP = "account:ownership:transfer"
     DELETE_ACCOUNT = "account:delete"
+
+
+@dataclass(frozen=True)
+class CustomRole:
+    id: str
+    account_id: str
+    name: str
+    permissions: frozenset[Permission]
 
 
 _PLAYER_PERMISSIONS = frozenset(
@@ -51,9 +60,20 @@ PREDEFINED_ROLE_PERMISSIONS = {
 }
 
 
-def permissions_for(roles: frozenset[PredefinedRole]) -> frozenset[Permission]:
+def permissions_for(
+    assignments: tuple[RoleAssignment, ...],
+    *,
+    custom_roles: tuple[CustomRole, ...],
+    world_id: str | None,
+) -> frozenset[Permission]:
+    custom_permissions = {role.id: role.permissions for role in custom_roles}
     return frozenset(
         permission
-        for role in roles
-        for permission in PREDEFINED_ROLE_PERMISSIONS[role]
+        for assignment in assignments
+        if assignment.scope.applies_to(world_id)
+        for permission in (
+            PREDEFINED_ROLE_PERMISSIONS[assignment.predefined_role]
+            if assignment.predefined_role is not None
+            else custom_permissions[assignment.custom_role_id]
+        )
     )

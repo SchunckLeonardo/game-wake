@@ -9,8 +9,10 @@ from .model import (
     Membership,
     PermissionDeniedError,
     PredefinedRole,
+    ResourceScope,
+    RoleAssignment,
 )
-from .policy import Permission, permissions_for
+from .policy import CustomRole, Permission, permissions_for
 from .repository import AccountRepository, AccountSnapshot
 
 
@@ -20,11 +22,18 @@ class Accounts:
 
     def create_account(self, *, name: str, owner_user_id: str) -> Account:
         account = Account(id=str(uuid4()), name=name)
+        owner_membership_id = str(uuid4())
         owner = Membership(
-            id=str(uuid4()),
+            id=owner_membership_id,
             account_id=account.id,
             user_id=owner_user_id,
-            roles=frozenset({PredefinedRole.OWNER}),
+            assignments=(
+                RoleAssignment(
+                    id=str(uuid4()),
+                    scope=ResourceScope(account_id=account.id),
+                    predefined_role=PredefinedRole.OWNER,
+                ),
+            ),
         )
         self._repository.create(account, owner)
         return account
@@ -41,6 +50,7 @@ class Accounts:
         *,
         user_id: str,
         permission: Permission,
+        world_id: str | None = None,
     ) -> bool:
         snapshot = self._repository.get(account_id)
         membership = next(
@@ -51,7 +61,83 @@ class Accounts:
             ),
             None,
         )
-        return membership is not None and permission in permissions_for(membership.roles)
+        return membership is not None and permission in permissions_for(
+            membership.assignments,
+            custom_roles=snapshot.custom_roles,
+            world_id=world_id,
+        )
+
+    def create_custom_role(
+        self,
+        account_id: str,
+        *,
+        actor_user_id: str,
+        name: str,
+        permissions: set[Permission],
+    ) -> CustomRole:
+        if not self.authorize(
+            account_id,
+            user_id=actor_user_id,
+            permission=Permission.MANAGE_ROLES,
+        ):
+            raise PermissionDeniedError("creating roles requires role management permission")
+
+        snapshot = self._repository.get(account_id)
+        role = CustomRole(
+            id=str(uuid4()),
+            account_id=account_id,
+            name=name,
+            permissions=frozenset(permissions),
+        )
+        self._repository.save(
+            replace(snapshot, custom_roles=(*snapshot.custom_roles, role)),
+            expected_version=snapshot.version,
+        )
+        return role
+
+    def assign_custom_role(
+        self,
+        account_id: str,
+        *,
+        actor_user_id: str,
+        membership_id: str,
+        custom_role_id: str,
+        world_id: str | None = None,
+    ) -> Membership:
+        if not self.authorize(
+            account_id,
+            user_id=actor_user_id,
+            permission=Permission.MANAGE_ROLES,
+        ):
+            raise PermissionDeniedError("assigning roles requires role management permission")
+
+        snapshot = self._repository.get(account_id)
+        custom_role = next(role for role in snapshot.custom_roles if role.id == custom_role_id)
+        membership = next(
+            membership
+            for membership in snapshot.memberships
+            if membership.id == membership_id
+        )
+        updated = replace(
+            membership,
+            assignments=(
+                *membership.assignments,
+                RoleAssignment(
+                    id=str(uuid4()),
+                    scope=ResourceScope(account_id=custom_role.account_id, world_id=world_id),
+                    custom_role_id=custom_role.id,
+                ),
+            ),
+        )
+        memberships = tuple(
+            updated if item.id == membership_id else item
+            for item in snapshot.memberships
+        )
+        self._repository.save(
+            replace(snapshot, memberships=memberships),
+            expected_version=snapshot.version,
+        )
+        return updated
 
     def assign_predefined_role(
         self,
@@ -60,6 +146,7 @@ class Accounts:
         actor_user_id: str,
         membership_id: str,
         role: PredefinedRole,
+        world_id: str | None = None,
     ) -> Membership:
         if not self.authorize(
             account_id,
@@ -74,7 +161,17 @@ class Accounts:
             for membership in snapshot.memberships
             if membership.id == membership_id
         )
-        updated = replace(membership, roles=membership.roles | {role})
+        updated = replace(
+            membership,
+            assignments=(
+                *membership.assignments,
+                RoleAssignment(
+                    id=str(uuid4()),
+                    scope=ResourceScope(account_id=account_id, world_id=world_id),
+                    predefined_role=role,
+                ),
+            ),
+        )
         memberships = tuple(
             updated if item.id == membership_id else item
             for item in snapshot.memberships
@@ -93,12 +190,14 @@ class Accounts:
         invited_user_ids: list[str],
     ) -> list[Invitation]:
         snapshot = self._repository.get(account_id)
-        if not any(
-            membership.user_id == inviter_user_id
-            and PredefinedRole.OWNER in membership.roles
-            for membership in snapshot.memberships
+        if not self.authorize(
+            account_id,
+            user_id=inviter_user_id,
+            permission=Permission.MANAGE_MEMBERSHIPS,
         ):
-            raise PermissionDeniedError("inviting members requires the Owner role")
+            raise PermissionDeniedError(
+                "inviting members requires membership management permission"
+            )
         invitations = [
             Invitation(
                 id=str(uuid4()),
@@ -110,11 +209,9 @@ class Accounts:
             for invited_user_id in invited_user_ids
         ]
         self._repository.save(
-            AccountSnapshot(
-                account=snapshot.account,
-                memberships=snapshot.memberships,
+            replace(
+                snapshot,
                 invitations=(*snapshot.invitations, *invitations),
-                version=snapshot.version,
             ),
             expected_version=snapshot.version,
         )
@@ -148,18 +245,23 @@ class Accounts:
             id=str(uuid4()),
             account_id=account_id,
             user_id=invited_user_id,
-            roles=frozenset({PredefinedRole.PLAYER}),
+            assignments=(
+                RoleAssignment(
+                    id=str(uuid4()),
+                    scope=ResourceScope(account_id=account_id),
+                    predefined_role=PredefinedRole.PLAYER,
+                ),
+            ),
         )
         invitations = tuple(
             accepted if item.id == invitation.id else item
             for item in snapshot.invitations
         )
         self._repository.save(
-            AccountSnapshot(
-                account=snapshot.account,
+            replace(
+                snapshot,
                 memberships=(*snapshot.memberships, membership),
                 invitations=invitations,
-                version=snapshot.version,
             ),
             expected_version=snapshot.version,
         )
@@ -181,11 +283,9 @@ class Accounts:
             if membership.id != membership_id
         )
         self._repository.save(
-            AccountSnapshot(
-                account=snapshot.account,
+            replace(
+                snapshot,
                 memberships=remaining,
-                invitations=snapshot.invitations,
-                version=snapshot.version,
             ),
             expected_version=snapshot.version,
         )
@@ -193,6 +293,10 @@ class Accounts:
     @staticmethod
     def _owner_count(snapshot: AccountSnapshot) -> int:
         return sum(
-            PredefinedRole.OWNER in membership.roles
+            any(
+                assignment.predefined_role is PredefinedRole.OWNER
+                and assignment.scope.world_id is None
+                for assignment in membership.assignments
+            )
             for membership in snapshot.memberships
         )

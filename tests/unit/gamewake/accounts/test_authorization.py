@@ -67,3 +67,125 @@ def test_predefined_roles_have_the_documented_permission_matrix(
     }
 
     assert actual_permissions == expected_permissions
+
+
+def test_a_world_scoped_manager_cannot_manage_another_world():
+    accounts = Accounts(InMemoryAccountRepository())
+    account = accounts.create_account(name="Sexta com os amigos", owner_user_id="user-owner")
+    [invitation] = accounts.invite_members(
+        account.id,
+        inviter_user_id="user-owner",
+        invited_user_ids=["friend"],
+    )
+    membership = accounts.accept_invitation(
+        account.id,
+        invitation.id,
+        invited_user_id="friend",
+    )
+    accounts.assign_predefined_role(
+        account.id,
+        actor_user_id="user-owner",
+        membership_id=membership.id,
+        role=PredefinedRole.MANAGER,
+        world_id="world-palworld",
+    )
+
+    assert accounts.authorize(
+        account.id,
+        user_id="friend",
+        permission=Permission.EDIT_WORLD,
+        world_id="world-palworld",
+    )
+    assert not accounts.authorize(
+        account.id,
+        user_id="friend",
+        permission=Permission.EDIT_WORLD,
+        world_id="world-minecraft",
+    )
+    assert not accounts.authorize(
+        account.id,
+        user_id="friend",
+        permission=Permission.MANAGE_ROLES,
+    )
+
+
+def test_custom_roles_add_only_the_selected_permissions_inside_their_scope():
+    accounts = Accounts(InMemoryAccountRepository())
+    account = accounts.create_account(name="Sexta com os amigos", owner_user_id="user-owner")
+    [invitation] = accounts.invite_members(
+        account.id,
+        inviter_user_id="user-owner",
+        invited_user_ids=["friend"],
+    )
+    membership = accounts.accept_invitation(
+        account.id,
+        invitation.id,
+        invited_user_id="friend",
+    )
+    backup_operator = accounts.create_custom_role(
+        account.id,
+        actor_user_id="user-owner",
+        name="Operador de backup",
+        permissions={Permission.VIEW_LOGS, Permission.CREATE_BACKUP},
+    )
+    accounts.assign_custom_role(
+        account.id,
+        actor_user_id="user-owner",
+        membership_id=membership.id,
+        custom_role_id=backup_operator.id,
+        world_id="world-palworld",
+    )
+
+    assert accounts.authorize(
+        account.id,
+        user_id="friend",
+        permission=Permission.CREATE_BACKUP,
+        world_id="world-palworld",
+    )
+    assert not accounts.authorize(
+        account.id,
+        user_id="friend",
+        permission=Permission.CREATE_BACKUP,
+        world_id="world-minecraft",
+    )
+    assert not accounts.authorize(
+        account.id,
+        user_id="friend",
+        permission=Permission.RESTORE_BACKUP,
+        world_id="world-palworld",
+    )
+
+
+def test_an_account_scoped_custom_role_can_grant_invitation_management():
+    accounts = Accounts(InMemoryAccountRepository())
+    account = accounts.create_account(name="Sexta com os amigos", owner_user_id="user-owner")
+    [invitation] = accounts.invite_members(
+        account.id,
+        inviter_user_id="user-owner",
+        invited_user_ids=["organizer"],
+    )
+    organizer = accounts.accept_invitation(
+        account.id,
+        invitation.id,
+        invited_user_id="organizer",
+    )
+    role = accounts.create_custom_role(
+        account.id,
+        actor_user_id="user-owner",
+        name="Organizador",
+        permissions={Permission.MANAGE_MEMBERSHIPS},
+    )
+    accounts.assign_custom_role(
+        account.id,
+        actor_user_id="user-owner",
+        membership_id=organizer.id,
+        custom_role_id=role.id,
+    )
+
+    [created] = accounts.invite_members(
+        account.id,
+        inviter_user_id="organizer",
+        invited_user_ids=["new-friend"],
+    )
+
+    assert created.invited_user_id == "new-friend"

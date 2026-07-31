@@ -9,13 +9,16 @@ from .model import (
     Membership,
     PermissionDeniedError,
     PredefinedRole,
+    ResourceScope,
+    RoleAssignment,
 )
-from .policy import Permission
+from .policy import CustomRole, Permission
 from .service import Accounts
 
 __all__ = [
     "Account",
     "Accounts",
+    "CustomRole",
     "InMemoryAccountRepository",
     "Invitation",
     "InvitationStatus",
@@ -24,4 +27,6 @@ __all__ = [
     "Permission",
     "PermissionDeniedError",
     "PredefinedRole",
+    "ResourceScope",
+    "RoleAssignment",
 ]

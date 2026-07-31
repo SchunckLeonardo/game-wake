@@ -13,6 +13,7 @@ class InMemoryAccountRepository:
             account=account,
             memberships=(owner,),
             invitations=(),
+            custom_roles=(),
             version=1,
         )
 
@@ -27,5 +28,6 @@ class InMemoryAccountRepository:
             account=snapshot.account,
             memberships=snapshot.memberships,
             invitations=snapshot.invitations,
+            custom_roles=snapshot.custom_roles,
             version=expected_version + 1,
         )
