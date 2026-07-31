@@ -44,6 +44,32 @@ payload=$(jq -cn '[
       },
       {type:1,name:"ajuda",description:"Explica os comandos disponíveis"}
     ]
+  },
+  {
+    name:"gamewake",
+    description:"Jogue com seus amigos sem manter um servidor ligado",
+    type:1,
+    default_member_permissions:null,
+    dm_permission:false,
+    options:[
+      {
+        type:1,
+        name:"convidar",
+        description:"Convida até três amigos para a conta GameWake",
+        options:[
+          {type:6,name:"amigo1",description:"Primeiro amigo",required:true},
+          {type:6,name:"amigo2",description:"Segundo amigo",required:false},
+          {type:6,name:"amigo3",description:"Terceiro amigo",required:false}
+        ]
+      },
+      {type:1,name:"status",description:"Mostra o estado do seu World"},
+      {type:1,name:"acordar",description:"Acorda o World para jogar"},
+      {type:1,name:"conectar",description:"Mostra conexão e senha somente para você"},
+      {type:1,name:"dormir",description:"Salva o World e inicia o sono seguro"},
+      {type:1,name:"configurar",description:"Abre a configuração guiada do World"},
+      {type:1,name:"console",description:"Abre a GameWake Console"},
+      {type:1,name:"ajuda",description:"Explica os comandos GameWake"}
+    ]
   }
 ]')
 

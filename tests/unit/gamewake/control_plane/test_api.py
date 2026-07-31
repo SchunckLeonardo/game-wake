@@ -87,6 +87,7 @@ def test_web_onboarding_invites_friends_and_configures_first_world_through_one_a
     assert configured.body["revision"]["number"] == 2
     assert configured.body["revision"]["origin"] == "web"
     assert configured.body["revision"]["actorUserId"] == "owner"
-    assert configured.body["world"]["pendingConfigurationRevisionId"] == configured.body[
-        "revision"
-    ]["id"]
+    assert (
+        configured.body["world"]["pendingConfigurationRevisionId"]
+        == configured.body["revision"]["id"]
+    )

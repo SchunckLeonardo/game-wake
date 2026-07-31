@@ -83,10 +83,7 @@ class GameWakeApi:
         if len(parts) < 6 or parts[4] != "worlds":
             raise KeyError(request.path)
         world_id = parts[5]
-        if (
-            request.method == "GET"
-            and parts[6:] == ("configuration", "schema")
-        ):
+        if request.method == "GET" and parts[6:] == ("configuration", "schema"):
             template = self._application.configuration_schema(
                 account_id,
                 world_id,

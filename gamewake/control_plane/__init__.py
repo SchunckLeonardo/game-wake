@@ -2,5 +2,13 @@
 
 from .api import ApiRequest, ApiResponse, GameWakeApi
 from .application import GameWakeApplication
+from .contracts import ConnectionDetails, ConnectionDetailsProvider
 
-__all__ = ["ApiRequest", "ApiResponse", "GameWakeApi", "GameWakeApplication"]
+__all__ = [
+    "ApiRequest",
+    "ApiResponse",
+    "ConnectionDetails",
+    "ConnectionDetailsProvider",
+    "GameWakeApi",
+    "GameWakeApplication",
+]

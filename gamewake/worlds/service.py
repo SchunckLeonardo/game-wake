@@ -53,16 +53,11 @@ class Worlds:
             permission=Permission.CREATE_WORLD,
         ):
             raise PermissionDeniedError("creating a World requires Owner permission")
-        if self._storage_gate is not None and not self._storage_gate.can_create_world(
-            account_id
-        ):
+        if self._storage_gate is not None and not self._storage_gate.can_create_world(account_id):
             raise StorageBlockedError("Storage Grace Period blocks new Worlds")
         world_id = str(uuid4())
         template = self._game_catalog.resolve(game_template_id)
-        defaults = {
-            field.key: field.default
-            for field in template.configuration_fields
-        }
+        defaults = {field.key: field.default for field in template.configuration_fields}
         validated_defaults = self._game_catalog.validate_configuration(
             game_template_id,
             defaults,
@@ -114,6 +109,23 @@ class Worlds:
             raise PermissionDeniedError("the User cannot view this World")
         return self._repository.get(account_id, world_id)
 
+    def list_worlds(
+        self,
+        account_id: str,
+        *,
+        viewer_user_id: str,
+    ) -> list[World]:
+        return [
+            world
+            for world in self._repository.list_worlds(account_id)
+            if self._access.authorize(
+                account_id,
+                user_id=viewer_user_id,
+                permission=Permission.VIEW_WORLD,
+                world_id=world.id,
+            )
+        ]
+
     def get_configuration(
         self,
         account_id: str,
@@ -149,8 +161,7 @@ class Worlds:
             raise PermissionDeniedError("the User cannot edit this World")
         world = self._repository.get(account_id, world_id)
         base_revision_id = (
-            world.pending_configuration_revision_id
-            or world.configuration_revision_id
+            world.pending_configuration_revision_id or world.configuration_revision_id
         )
         base = self._repository.get_configuration(
             account_id,
@@ -169,9 +180,7 @@ class Worlds:
         )
         fields = {
             field.key: field
-            for field in self._game_catalog.resolve(
-                world.game_template_id
-            ).configuration_fields
+            for field in self._game_catalog.resolve(world.game_template_id).configuration_fields
         }
         diff = tuple(
             ConfigurationChange(

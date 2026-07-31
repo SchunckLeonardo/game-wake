@@ -1,7 +1,9 @@
-from gamewake.accounts import Account, Accounts, Invitation
+from gamewake.accounts import Account, Accounts, Invitation, User
 from gamewake.billing import Billing
 from gamewake.game_catalog import GameCatalog, GameTemplateDefinition
-from gamewake.worlds import ConfigurationRevision, World, Worlds
+from gamewake.worlds import ConfigurationRevision, World, WorldOperation, Worlds
+
+from .contracts import ConnectionDetails, ConnectionDetailsProvider
 
 
 class GameWakeApplication:
@@ -14,11 +16,49 @@ class GameWakeApplication:
         worlds: Worlds,
         billing: Billing,
         game_catalog: GameCatalog,
+        connection_details_provider: ConnectionDetailsProvider | None = None,
     ) -> None:
         self.accounts = accounts
         self.worlds = worlds
         self.billing = billing
         self.game_catalog = game_catalog
+        self._connection_details_provider = connection_details_provider
+
+    def resolve_discord_principal(
+        self,
+        *,
+        discord_guild_id: str,
+        discord_user_id: str,
+        display_name: str,
+    ) -> tuple[Account, User]:
+        user = self.accounts.sign_in_with_discord(
+            discord_user_id=discord_user_id,
+            display_name=display_name,
+        )
+        account = self.accounts.find_account_by_discord_guild(discord_guild_id)
+        if account is None:
+            raise KeyError(discord_guild_id)
+        return account, user
+
+    def invite_discord_friends(
+        self,
+        account_id: str,
+        *,
+        actor_user_id: str,
+        friends: list[tuple[str, str]],
+    ) -> list[Invitation]:
+        invited_user_ids = [
+            self.accounts.sign_in_with_discord(
+                discord_user_id=discord_user_id,
+                display_name=display_name,
+            ).id
+            for discord_user_id, display_name in friends
+        ]
+        return self.invite_friends(
+            account_id,
+            actor_user_id=actor_user_id,
+            invited_user_ids=invited_user_ids,
+        )
 
     def create_account(
         self,
@@ -63,6 +103,70 @@ class GameWakeApplication:
             game_template_id=game_template_id,
             region=region,
             runtime_profile_id=runtime_profile_id,
+        )
+
+    def list_worlds(
+        self,
+        account_id: str,
+        *,
+        viewer_user_id: str,
+    ) -> list[World]:
+        return self.worlds.list_worlds(
+            account_id,
+            viewer_user_id=viewer_user_id,
+        )
+
+    def request_wake(
+        self,
+        account_id: str,
+        world_id: str,
+        *,
+        actor_user_id: str,
+        idempotency_key: str,
+    ) -> WorldOperation:
+        return self.worlds.request_wake(
+            account_id,
+            world_id,
+            actor_user_id=actor_user_id,
+            idempotency_key=idempotency_key,
+        )
+
+    def request_sleep(
+        self,
+        account_id: str,
+        world_id: str,
+        *,
+        actor_user_id: str,
+        idempotency_key: str,
+        force: bool = False,
+    ) -> WorldOperation:
+        return self.worlds.request_sleep(
+            account_id,
+            world_id,
+            actor_user_id=actor_user_id,
+            idempotency_key=idempotency_key,
+            force=force,
+        )
+
+    def connection_details(
+        self,
+        account_id: str,
+        world_id: str,
+        *,
+        viewer_user_id: str,
+    ) -> ConnectionDetails:
+        world = self.worlds.get_world(
+            account_id,
+            world_id,
+            viewer_user_id=viewer_user_id,
+        )
+        if world.status.value != "online":
+            raise ValueError("Connection Details are available only while the World is Online")
+        if self._connection_details_provider is None:
+            raise ValueError("Connection Details are not configured")
+        return self._connection_details_provider.issue(
+            world,
+            viewer_user_id=viewer_user_id,
         )
 
     def configuration_schema(
