@@ -5,6 +5,7 @@ from .model import PredefinedRole, RoleAssignment
 
 
 class Permission(StrEnum):
+    CREATE_WORLD = "world:create"
     VIEW_WORLD = "world:view"
     WAKE_WORLD = "world:wake"
     SLEEP_EMPTY_WORLD = "world:sleep_when_empty"
