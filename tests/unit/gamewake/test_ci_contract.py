@@ -40,6 +40,29 @@ def test_terraform_workflows_initialize_the_remote_s3_backend_from_environment_v
         assert "use_lockfile=true" in workflow
 
 
+def test_terraform_workflows_receive_the_production_gamewake_configuration():
+    plan = read(".github/workflows/terraform-plan.yml")
+    apply = read(".github/workflows/terraform-apply.yml")
+
+    required_variables = (
+        "TF_VAR_gamewake_console_url",
+        "TF_VAR_abacatepay_packages",
+        "TF_VAR_runtime_profile_hourly_rates",
+        "TF_VAR_storage_allowance_bytes",
+        "TF_VAR_storage_grace_days",
+        "TF_VAR_storage_rate_per_gib_month_brl",
+        "TF_VAR_aurora_engine_version",
+        "TF_VAR_aurora_min_acu",
+        "TF_VAR_aurora_max_acu",
+        "TF_VAR_aurora_auto_pause_seconds",
+        "TF_VAR_operations_alarm_email",
+        "TF_VAR_palworld_allowed_cidr",
+    )
+    for workflow in (plan, apply):
+        for variable in required_variables:
+            assert variable in workflow
+
+
 def test_local_quality_commands_cover_the_gamewake_backend_and_web_console():
     makefile = read("Makefile")
     validation = read("scripts/validate.sh")
