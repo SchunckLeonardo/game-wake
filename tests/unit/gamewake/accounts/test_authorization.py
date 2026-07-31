@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 import pytest
 
 from gamewake.accounts import (
@@ -5,6 +7,8 @@ from gamewake.accounts import (
     InMemoryAccountRepository,
     Permission,
     PredefinedRole,
+    SensitiveActionConfirmation,
+    SensitiveActionConfirmationError,
 )
 
 PLAYER_PERMISSIONS = {
@@ -22,6 +26,14 @@ MANAGER_PERMISSIONS = PLAYER_PERMISSIONS | {
     Permission.RESTORE_BACKUP,
 }
 OWNER_PERMISSIONS = set(Permission)
+
+
+def confirmed(account, actor_user_id: str) -> SensitiveActionConfirmation:
+    return SensitiveActionConfirmation(
+        actor_user_id=actor_user_id,
+        reauthenticated_at=datetime.now(UTC),
+        confirmed_resource_name=account.name,
+    )
 
 
 @pytest.mark.parametrize(
@@ -58,6 +70,7 @@ def test_predefined_roles_have_the_documented_permission_matrix(
                 actor_user_id="user-owner",
                 membership_id=membership.id,
                 role=role,
+                confirmation=confirmed(account, "user-owner"),
             )
 
     actual_permissions = {
@@ -88,6 +101,7 @@ def test_a_world_scoped_manager_cannot_manage_another_world():
         membership_id=membership.id,
         role=PredefinedRole.MANAGER,
         world_id="world-palworld",
+        confirmation=confirmed(account, "user-owner"),
     )
 
     assert accounts.authorize(
@@ -127,6 +141,7 @@ def test_custom_roles_add_only_the_selected_permissions_inside_their_scope():
         actor_user_id="user-owner",
         name="Operador de backup",
         permissions={Permission.VIEW_LOGS, Permission.CREATE_BACKUP},
+        confirmation=confirmed(account, "user-owner"),
     )
     accounts.assign_custom_role(
         account.id,
@@ -134,6 +149,7 @@ def test_custom_roles_add_only_the_selected_permissions_inside_their_scope():
         membership_id=membership.id,
         custom_role_id=backup_operator.id,
         world_id="world-palworld",
+        confirmation=confirmed(account, "user-owner"),
     )
 
     assert accounts.authorize(
@@ -174,12 +190,14 @@ def test_an_account_scoped_custom_role_can_grant_invitation_management():
         actor_user_id="user-owner",
         name="Organizador",
         permissions={Permission.MANAGE_MEMBERSHIPS},
+        confirmation=confirmed(account, "user-owner"),
     )
     accounts.assign_custom_role(
         account.id,
         actor_user_id="user-owner",
         membership_id=organizer.id,
         custom_role_id=role.id,
+        confirmation=confirmed(account, "user-owner"),
     )
 
     [created] = accounts.invite_members(
@@ -189,3 +207,26 @@ def test_an_account_scoped_custom_role_can_grant_invitation_management():
     )
 
     assert created.invited_user_id == "new-friend"
+
+
+def test_role_assignment_rejects_missing_step_up_confirmation():
+    accounts = Accounts(InMemoryAccountRepository())
+    account = accounts.create_account(name="Sexta com os amigos", owner_user_id="owner")
+    [invitation] = accounts.invite_members(
+        account.id,
+        inviter_user_id="owner",
+        invited_user_ids=["friend"],
+    )
+    membership = accounts.accept_invitation(
+        account.id,
+        invitation.id,
+        invited_user_id="friend",
+    )
+
+    with pytest.raises(SensitiveActionConfirmationError):
+        accounts.assign_predefined_role(
+            account.id,
+            actor_user_id="owner",
+            membership_id=membership.id,
+            role=PredefinedRole.MANAGER,
+        )

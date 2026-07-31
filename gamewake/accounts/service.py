@@ -268,6 +268,7 @@ class Accounts:
         actor_user_id: str,
         name: str,
         permissions: set[Permission],
+        confirmation: SensitiveActionConfirmation | None = None,
     ) -> CustomRole:
         if not self.authorize(
             account_id,
@@ -277,6 +278,11 @@ class Accounts:
             raise PermissionDeniedError("creating roles requires role management permission")
 
         snapshot = self._repository.get(account_id)
+        self._verify_sensitive_confirmation(
+            actor_user_id=actor_user_id,
+            expected_resource_name=snapshot.account.name,
+            confirmation=confirmation,
+        )
         role = CustomRole(
             id=str(uuid4()),
             account_id=account_id,
@@ -297,6 +303,7 @@ class Accounts:
         membership_id: str,
         custom_role_id: str,
         world_id: str | None = None,
+        confirmation: SensitiveActionConfirmation | None = None,
     ) -> Membership:
         if not self.authorize(
             account_id,
@@ -306,6 +313,11 @@ class Accounts:
             raise PermissionDeniedError("assigning roles requires role management permission")
 
         snapshot = self._repository.get(account_id)
+        self._verify_sensitive_confirmation(
+            actor_user_id=actor_user_id,
+            expected_resource_name=snapshot.account.name,
+            confirmation=confirmation,
+        )
         custom_role = next(role for role in snapshot.custom_roles if role.id == custom_role_id)
         membership = next(
             membership
@@ -341,6 +353,7 @@ class Accounts:
         membership_id: str,
         role: PredefinedRole,
         world_id: str | None = None,
+        confirmation: SensitiveActionConfirmation | None = None,
     ) -> Membership:
         if not self.authorize(
             account_id,
@@ -350,6 +363,11 @@ class Accounts:
             raise PermissionDeniedError("assigning roles requires role management permission")
 
         snapshot = self._repository.get(account_id)
+        self._verify_sensitive_confirmation(
+            actor_user_id=actor_user_id,
+            expected_resource_name=snapshot.account.name,
+            confirmation=confirmation,
+        )
         membership = next(
             membership
             for membership in snapshot.memberships
@@ -528,8 +546,12 @@ class Accounts:
         *,
         actor_user_id: str,
         expected_resource_name: str,
-        confirmation: SensitiveActionConfirmation,
+        confirmation: SensitiveActionConfirmation | None,
     ) -> None:
+        if confirmation is None:
+            raise SensitiveActionConfirmationError(
+                "the action requires recent reauthentication and exact resource confirmation"
+            )
         age = self._clock() - confirmation.reauthenticated_at
         if (
             confirmation.actor_user_id != actor_user_id

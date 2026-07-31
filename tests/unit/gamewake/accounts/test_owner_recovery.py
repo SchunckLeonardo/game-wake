@@ -107,6 +107,11 @@ def test_another_owner_can_replace_a_lost_discord_identity_without_support():
         actor_user_id=lost_owner.id,
         membership_id=co_owner_membership.id,
         role=PredefinedRole.OWNER,
+        confirmation=SensitiveActionConfirmation(
+            actor_user_id=lost_owner.id,
+            reauthenticated_at=now,
+            confirmed_resource_name=account.name,
+        ),
     )
 
     accounts.recover_owner_discord_identity_by_co_owner(
