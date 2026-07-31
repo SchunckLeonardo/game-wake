@@ -1,6 +1,8 @@
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
+from secrets import token_urlsafe
 from uuid import uuid4
 
 from .model import (
@@ -18,6 +20,11 @@ from .model import (
     User,
 )
 from .policy import CustomRole, Permission, permissions_for
+from .recovery import (
+    InvalidRecoveryCodeError,
+    NoOpRecoverySecretStore,
+    RecoverySecretStore,
+)
 from .repository import AccountRepository, AccountSnapshot, IdentityRepository
 from .security import (
     ActivityAction,
@@ -36,11 +43,13 @@ class Accounts:
         identity_repository: IdentityRepository | None = None,
         clock: Callable[[], datetime] | None = None,
         security_notifier: SecurityNotifier | None = None,
+        recovery_secret_store: RecoverySecretStore | None = None,
     ) -> None:
         self._repository = repository
         self._identities = identity_repository or repository
         self._clock = clock or (lambda: datetime.now(UTC))
         self._security_notifier = security_notifier or NoOpSecurityNotifier()
+        self._recovery_secrets = recovery_secret_store or NoOpRecoverySecretStore()
 
     def sign_in_with_discord(self, *, discord_user_id: str, display_name: str) -> User:
         existing = self._identities.find_user_by_identity(
@@ -62,6 +71,120 @@ class Accounts:
 
     def list_linked_identities(self, user_id: str) -> list[LinkedIdentity]:
         return list(self._identities.list_linked_identities(user_id))
+
+    def enable_owner_recovery(
+        self,
+        account_id: str,
+        *,
+        owner_user_id: str,
+        verified_email: str,
+    ) -> tuple[str, ...]:
+        snapshot = self._repository.get(account_id)
+        if not self._is_account_owner(snapshot, owner_user_id):
+            raise PermissionDeniedError("Owner Recovery can be enabled only by an Owner")
+        recovery_codes = tuple(token_urlsafe(12) for _ in range(8))
+        self._recovery_secrets.put(
+            owner_user_id,
+            verified_email,
+            frozenset(self._hash_recovery_code(code) for code in recovery_codes),
+        )
+        return recovery_codes
+
+    def owner_recovery_ready(self, account_id: str) -> bool:
+        snapshot = self._repository.get(account_id)
+        owner_user_ids = self._owner_user_ids(snapshot)
+        return len(owner_user_ids) > 1 or (
+            len(owner_user_ids) == 1
+            and self._recovery_secrets.is_enabled(next(iter(owner_user_ids)))
+        )
+
+    def recover_owner_discord_identity(
+        self,
+        account_id: str,
+        *,
+        owner_user_id: str,
+        recovery_code: str,
+        new_discord_user_id: str,
+    ) -> None:
+        snapshot = self._repository.get(account_id)
+        if not self._is_account_owner(snapshot, owner_user_id):
+            raise PermissionDeniedError("Owner Recovery applies only to an Owner")
+        if not self._recovery_secrets.consume(
+            owner_user_id,
+            self._hash_recovery_code(recovery_code),
+        ):
+            raise InvalidRecoveryCodeError("the recovery code is invalid or was already used")
+
+        self._replace_owner_discord_identity(
+            snapshot,
+            actor_user_id=owner_user_id,
+            owner_user_id=owner_user_id,
+            new_discord_user_id=new_discord_user_id,
+        )
+
+    def recover_owner_discord_identity_by_co_owner(
+        self,
+        account_id: str,
+        *,
+        actor_owner_user_id: str,
+        lost_owner_user_id: str,
+        new_discord_user_id: str,
+        confirmation: SensitiveActionConfirmation,
+    ) -> None:
+        snapshot = self._repository.get(account_id)
+        if (
+            actor_owner_user_id == lost_owner_user_id
+            or not self._is_account_owner(snapshot, actor_owner_user_id)
+            or not self._is_account_owner(snapshot, lost_owner_user_id)
+        ):
+            raise PermissionDeniedError(
+                "a different current Owner must authorize this recovery"
+            )
+        self._verify_sensitive_confirmation(
+            actor_user_id=actor_owner_user_id,
+            expected_resource_name=snapshot.account.name,
+            confirmation=confirmation,
+        )
+        self._replace_owner_discord_identity(
+            snapshot,
+            actor_user_id=actor_owner_user_id,
+            owner_user_id=lost_owner_user_id,
+            new_discord_user_id=new_discord_user_id,
+        )
+
+    def _replace_owner_discord_identity(
+        self,
+        snapshot: AccountSnapshot,
+        *,
+        actor_user_id: str,
+        owner_user_id: str,
+        new_discord_user_id: str,
+    ) -> None:
+
+        identity = LinkedIdentity(
+            id=str(uuid4()),
+            user_id=owner_user_id,
+            provider=IdentityProvider.DISCORD,
+            provider_user_id=new_discord_user_id,
+        )
+        self._identities.replace_identity(identity)
+        event = ActivityEvent(
+            id=str(uuid4()),
+            account_id=snapshot.account.id,
+            actor_user_id=actor_user_id,
+            action=ActivityAction.OWNER_RECOVERED,
+            subject_id=owner_user_id,
+            occurred_at=self._clock(),
+        )
+        self._repository.save(
+            replace(snapshot, activity_events=(*snapshot.activity_events, event)),
+            expected_version=snapshot.version,
+        )
+        self._security_notifier.notify_owners(
+            self._owner_user_ids(snapshot),
+            ActivityAction.OWNER_RECOVERED,
+            owner_user_id,
+        )
 
     def create_account(
         self,
@@ -428,3 +551,23 @@ class Accounts:
             )
             for membership in snapshot.memberships
         )
+
+    @staticmethod
+    def _owner_user_ids(snapshot: AccountSnapshot) -> frozenset[str]:
+        return frozenset(
+            membership.user_id
+            for membership in snapshot.memberships
+            if any(
+                assignment.predefined_role is PredefinedRole.OWNER
+                and assignment.scope.world_id is None
+                for assignment in membership.assignments
+            )
+        )
+
+    @classmethod
+    def _is_account_owner(cls, snapshot: AccountSnapshot, user_id: str) -> bool:
+        return user_id in cls._owner_user_ids(snapshot)
+
+    @staticmethod
+    def _hash_recovery_code(recovery_code: str) -> str:
+        return sha256(recovery_code.encode("utf-8")).hexdigest()

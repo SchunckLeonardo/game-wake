@@ -17,6 +17,7 @@ from .model import (
     User,
 )
 from .policy import CustomRole, Permission
+from .recovery import InMemoryRecoverySecretStore, InvalidRecoveryCodeError
 from .security import (
     ActivityAction,
     ActivityEvent,
@@ -35,7 +36,9 @@ __all__ = [
     "DiscordGuildAlreadyLinkedError",
     "IdentityProvider",
     "InMemoryAccountRepository",
+    "InMemoryRecoverySecretStore",
     "InMemorySecurityNotifier",
+    "InvalidRecoveryCodeError",
     "Invitation",
     "InvitationStatus",
     "LastOwnerRemovalError",

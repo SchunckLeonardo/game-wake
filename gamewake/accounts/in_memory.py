@@ -72,6 +72,17 @@ class InMemoryAccountRepository:
         self._users[user.id] = user
         self._identities[(identity.provider, identity.provider_user_id)] = identity
 
+    def replace_identity(self, identity: LinkedIdentity) -> None:
+        self._identities = {
+            key: current
+            for key, current in self._identities.items()
+            if not (
+                current.user_id == identity.user_id
+                and current.provider is identity.provider
+            )
+        }
+        self._identities[(identity.provider, identity.provider_user_id)] = identity
+
     def list_linked_identities(self, user_id: str) -> tuple[LinkedIdentity, ...]:
         return tuple(
             identity

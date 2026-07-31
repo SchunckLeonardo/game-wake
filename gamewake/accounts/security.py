@@ -6,6 +6,7 @@ from typing import Protocol
 
 class ActivityAction(StrEnum):
     MEMBERSHIP_REVOKED = "membership.revoked"
+    OWNER_RECOVERED = "owner.recovered"
 
 
 @dataclass(frozen=True)
