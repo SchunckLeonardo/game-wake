@@ -33,3 +33,18 @@ def test_oauth_url_and_code_exchange_use_the_minimal_identify_scope():
     assert identity.display_name == "Leonardo"
     assert http.calls[0][3]["grant_type"] == "authorization_code"
     assert http.calls[1][2] == {"Authorization": "Bearer discord-access"}
+
+
+def test_activity_code_exchange_returns_the_discord_token_without_a_redirect_uri():
+    http = FakeHttpClient()
+    client = DiscordOAuthClient(
+        client_id="app-123",
+        client_secret="secret",
+        http_client=http,
+    )
+
+    grant = client.authenticate_activity("activity-code")
+
+    assert grant.identity.discord_user_id == "discord-user-123"
+    assert grant.access_token == "discord-access"
+    assert "redirect_uri" not in http.calls[0][3]

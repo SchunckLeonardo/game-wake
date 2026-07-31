@@ -2,8 +2,13 @@
 
 import { DiscordSDK } from "@discord/embedded-app-sdk";
 import { useEffect, useState } from "react";
+import { GAMEWAKE_SESSION_KEY, gameWakeApiUrl } from "../gamewakeApi";
 
 type ActivityStatus = "waiting" | "authorizing" | "ready" | "standalone" | "error";
+
+type DiscordActivityBridgeProps = {
+  onAuthenticated?: () => Promise<void> | void;
+};
 
 const statusMessages: Record<ActivityStatus, string> = {
   waiting: "Conectando ao Discord",
@@ -13,7 +18,7 @@ const statusMessages: Record<ActivityStatus, string> = {
   error: "Não foi possível conectar ao Discord",
 };
 
-export function DiscordActivityBridge() {
+export function DiscordActivityBridge({ onAuthenticated }: DiscordActivityBridgeProps) {
   const [status, setStatus] = useState<ActivityStatus>("waiting");
 
   useEffect(() => {
@@ -43,7 +48,7 @@ export function DiscordActivityBridge() {
           scope: ["identify", "guilds"],
         });
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_GAMEWAKE_API_URL ?? ""}/api/v1/auth/discord/activity/token`,
+          gameWakeApiUrl("/api/v1/auth/discord/activity/token"),
           {
             method: "POST",
             credentials: "include",
@@ -52,9 +57,15 @@ export function DiscordActivityBridge() {
           },
         );
         if (!response.ok) throw new Error("activity token exchange failed");
-        const result = (await response.json()) as { accessToken?: string };
+        const result = (await response.json()) as {
+          accessToken?: string;
+          session?: string;
+        };
         if (!result.accessToken) throw new Error("activity token is missing");
+        if (!result.session) throw new Error("GameWake session is missing");
+        window.sessionStorage.setItem(GAMEWAKE_SESSION_KEY, result.session);
         await discordSdk.commands.authenticate({ access_token: result.accessToken });
+        await onAuthenticated?.();
         if (active) setStatus("ready");
       } catch {
         if (active) setStatus("error");
@@ -65,7 +76,7 @@ export function DiscordActivityBridge() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [onAuthenticated]);
 
   return (
     <span

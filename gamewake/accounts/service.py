@@ -223,6 +223,9 @@ class Accounts:
         snapshot = self._repository.find_by_discord_guild(discord_guild_id)
         return snapshot.account if snapshot is not None else None
 
+    def list_accounts(self, user_id: str) -> list[Account]:
+        return [snapshot.account for snapshot in self._repository.list_for_user(user_id)]
+
     def list_memberships(
         self,
         account_id: str,

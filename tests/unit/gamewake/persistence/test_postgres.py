@@ -55,7 +55,7 @@ def test_account_save_rejects_changed_replay_of_immutable_activity() -> None:
     changed = replace(original, subject_id="different-member")
     snapshot = AccountSnapshot(Account("account-1", "Sexta"), (), (), (), (changed,), 2)
     transaction = ScriptedTransaction(
-        execute=(1, 0),
+        execute=(1, 0, 0),
         fetch_one=({"payload": encode_domain(original)},),
     )
 

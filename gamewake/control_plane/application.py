@@ -79,6 +79,9 @@ class GameWakeApplication:
             discord_guild_id=discord_guild_id,
         )
 
+    def list_accounts(self, *, viewer_user_id: str) -> list[Account]:
+        return self.accounts.list_accounts(viewer_user_id)
+
     def invite_friends(
         self,
         account_id: str,
@@ -266,6 +269,19 @@ class GameWakeApplication:
             viewer_user_id=viewer_user_id,
         )
         return self.game_catalog.resolve(world.game_template_id)
+
+    def effective_configuration(
+        self,
+        account_id: str,
+        world_id: str,
+        *,
+        viewer_user_id: str,
+    ) -> ConfigurationRevision:
+        return self.worlds.get_effective_configuration(
+            account_id,
+            world_id,
+            viewer_user_id=viewer_user_id,
+        )
 
     def update_configuration(
         self,

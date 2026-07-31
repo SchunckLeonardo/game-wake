@@ -106,6 +106,13 @@ def test_web_onboarding_invites_friends_and_configures_first_world_through_one_a
             },
         )
     )
+    effective = api.handle(
+        ApiRequest(
+            method="GET",
+            path=f"/api/v1/accounts/{account_id}/worlds/{world_id}/configuration",
+            user_id="owner",
+        )
+    )
 
     assert created_account.status == 201
     assert invited.status == 201
@@ -127,6 +134,7 @@ def test_web_onboarding_invites_friends_and_configures_first_world_through_one_a
         configured.body["world"]["pendingConfigurationRevisionId"]
         == configured.body["revision"]["id"]
     )
+    assert effective.body["revision"]["number"] == 2
 
 
 def test_world_queries_and_wake_dispatch_use_the_same_persisted_operation():
@@ -298,4 +306,27 @@ def test_connection_details_endpoint_keeps_the_shared_secret_in_an_authenticated
             "port": 8211,
             "password": "grupo-secreto",
         }
+    }
+
+
+def test_authenticated_user_can_discover_only_their_accounts_for_console_routing():
+    repository = InMemoryAccountRepository()
+    accounts = Accounts(repository)
+    mine = accounts.create_account(name="Meu grupo", owner_user_id="owner")
+    accounts.create_account(name="Outro grupo", owner_user_id="someone-else")
+    catalog = GameCatalog.with_palworld()
+    api = GameWakeApi(
+        GameWakeApplication(
+            accounts=accounts,
+            worlds=Worlds(InMemoryWorldRepository(), access=accounts, game_catalog=catalog),
+            billing=Billing(InMemoryBillingRepository()),
+            game_catalog=catalog,
+        )
+    )
+
+    response = api.handle(ApiRequest("GET", "/api/v1/me/accounts", "owner"))
+
+    assert response.status == 200
+    assert response.body == {
+        "accounts": [{"id": mine.id, "name": "Meu grupo", "discordGuildId": None}]
     }

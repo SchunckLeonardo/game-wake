@@ -83,6 +83,21 @@ class GameWakeHttpHandler:
                     signature=headers.get("x-webhook-signature", ""),
                 )
                 return self._response(200, {"processed": bool(result)})
+            if method == "POST" and path == "/api/v1/auth/discord/activity/token":
+                code = self._json(raw_body).get("code")
+                if not isinstance(code, str) or not code:
+                    return self._error(400, "invalid_oauth", "OAuth code is required", cors)
+                grant = self._oauth.authenticate_activity(code)
+                user = self._application.accounts.sign_in_with_discord(
+                    discord_user_id=grant.identity.discord_user_id,
+                    display_name=grant.identity.display_name,
+                )
+                session = self._sessions.issue(user.id)
+                return self._response(
+                    200,
+                    {"accessToken": grant.access_token, "session": session},
+                    headers=cors,
+                )
             if path.startswith("/api/v1/"):
                 authorization = headers.get("authorization", "")
                 if not authorization.startswith("Bearer "):

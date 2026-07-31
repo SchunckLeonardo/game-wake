@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { gameWakeFetch, gameWakeIdempotencyKey } from "../gamewakeApi";
 import { useHydrated } from "../useHydrated";
 
 export function OnboardingFlow() {
@@ -9,6 +10,42 @@ export function OnboardingFlow() {
   const [step, setStep] = useState(1);
   const [groupName, setGroupName] = useState("");
   const [worldName, setWorldName] = useState("");
+  const [accountId, setAccountId] = useState("demo");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function createWorld() {
+    if (!worldName.trim() || submitting) return;
+    if (new URLSearchParams(window.location.search).get("demo") === "1") {
+      setStep(3);
+      return;
+    }
+    setSubmitting(true);
+    setError("");
+    try {
+      const accountResponse = await gameWakeFetch("/api/v1/accounts", {
+        method: "POST",
+        body: JSON.stringify({ name: groupName.trim() }),
+      });
+      const account = (await accountResponse.json()) as { account: { id: string } };
+      await gameWakeFetch(`/api/v1/accounts/${account.account.id}/worlds`, {
+        method: "POST",
+        body: JSON.stringify({
+          name: worldName.trim(),
+          gameTemplateId: "palworld:1",
+          region: "sa-east-1",
+          runtimeProfileId: "palworld-small",
+          idempotencyKey: gameWakeIdempotencyKey("create-world"),
+        }),
+      });
+      setAccountId(account.account.id);
+      setStep(3);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível criar o World.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <main
@@ -72,14 +109,15 @@ export function OnboardingFlow() {
               <label>Jogo<select defaultValue="palworld"><option value="palworld">Palworld</option></select></label>
               <label>Região<select defaultValue="sa-east-1"><option value="sa-east-1">São Paulo · recomendado</option></select></label>
             </div>
-            <div className="profile-choice"><span>Para até 8 amigos</span><strong>R$ 1,84/h</strong><small>Preço confirmado antes de cada sessão</small></div>
+            <div className="profile-choice"><span>Para até 8 amigos</span><strong>Pay-as-you-go</strong><small>Preço confirmado antes de cada sessão</small></div>
+            {error && <p role="alert">{error}</p>}
             <button
               className="button button-primary full-button"
               disabled={!worldName.trim()}
-              onClick={() => setStep(3)}
+              onClick={() => void createWorld()}
               type="button"
             >
-              Criar meu World
+              {submitting ? "Criando World…" : "Criar meu World"}
             </button>
           </>
         )}
@@ -89,7 +127,7 @@ export function OnboardingFlow() {
             <span className="section-index">GAMEWAKE CONFIGURADO</span>
             <h1>Tudo pronto para jogar</h1>
             <p><strong>{worldName}</strong> pertence ao grupo <strong>{groupName}</strong>. Agora convide os amigos ou acorde o World.</p>
-            <div className="success-actions"><Link className="button button-primary" href="/accounts/demo?demo=1">Abrir Console</Link><button className="button button-outline" type="button">Convidar amigos</button></div>
+            <div className="success-actions"><Link className="button button-primary" href={accountId === "demo" ? "/accounts/demo?demo=1" : `/accounts/${accountId}`}>Abrir Console</Link><button className="button button-outline" type="button">Convidar amigos</button></div>
           </div>
         )}
       </section>

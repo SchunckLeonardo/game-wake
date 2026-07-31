@@ -43,6 +43,12 @@ class GameWakeApi:
 
     def _dispatch(self, request: ApiRequest) -> ApiResponse:
         parts = tuple(part for part in request.path.strip("/").split("/") if part)
+        if request.method == "GET" and parts == ("api", "v1", "me", "accounts"):
+            accounts = self._application.list_accounts(viewer_user_id=request.user_id)
+            return ApiResponse(
+                200,
+                {"accounts": [self._account(account) for account in accounts]},
+            )
         if parts[:3] != ("api", "v1", "accounts"):
             raise KeyError(request.path)
         if request.method == "POST" and len(parts) == 3:
@@ -145,6 +151,13 @@ class GameWakeApi:
                 viewer_user_id=request.user_id,
             )
             return ApiResponse(200, {"template": self._template(template)})
+        if request.method == "GET" and parts[6:] == ("configuration",):
+            revision = self._application.effective_configuration(
+                account_id,
+                world_id,
+                viewer_user_id=request.user_id,
+            )
+            return ApiResponse(200, {"revision": self._revision(revision)})
         if request.method == "PATCH" and parts[6:] == ("configuration",):
             world, revision = self._application.update_configuration(
                 account_id,

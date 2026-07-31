@@ -23,6 +23,16 @@ class OAuth:
         assert code == "discord-code"
         return SimpleNamespace(discord_user_id="discord-123", display_name="Leonardo")
 
+    def authenticate_activity(self, code):
+        assert code == "activity-code"
+        return SimpleNamespace(
+            access_token="discord-access",
+            identity=SimpleNamespace(
+                discord_user_id="discord-123",
+                display_name="Leonardo",
+            ),
+        )
+
 
 class Accounts:
     def sign_in_with_discord(self, *, discord_user_id, display_name):
@@ -135,6 +145,23 @@ def test_discord_and_abacatepay_receive_the_unmodified_raw_body():
         raw,
         {"webhook_secret": "url-secret", "signature": "signature"},
     )
+
+
+def test_discord_activity_exchange_returns_discord_and_gamewake_sessions():
+    response = handler().handle(
+        event(
+            "POST",
+            "/api/v1/auth/discord/activity/token",
+            headers={"origin": "https://app.gamewake.example"},
+            body='{"code":"activity-code"}',
+        )
+    )
+
+    assert response["statusCode"] == 200
+    assert json.loads(response["body"]) == {
+        "accessToken": "discord-access",
+        "session": "token:user-123",
+    }
 
 
 def test_invalid_json_is_a_safe_client_error_without_internal_details():

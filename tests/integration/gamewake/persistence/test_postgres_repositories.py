@@ -65,7 +65,7 @@ def database():
     with database.transaction() as transaction:
         transaction.execute("DROP SCHEMA public CASCADE")
         transaction.execute("CREATE SCHEMA public")
-    assert MigrationRunner(database).apply() == ("0001_initial",)
+    assert MigrationRunner(database).apply() == ("0001_initial", "0002_account_memberships")
     assert MigrationRunner(database).apply() == ()
     return database
 
@@ -106,6 +106,7 @@ def test_accounts_identities_activity_and_concurrency_are_transactional(database
         1,
     )
     assert repository.find_by_discord_guild("guild-1") == repository.get(account.id)
+    assert repository.list_for_user(membership.user_id) == (repository.get(account.id),)
 
     user = User("user-1", "Leonardo")
     discord = LinkedIdentity("identity-1", user.id, IdentityProvider.DISCORD, "discord-1")
@@ -142,6 +143,7 @@ def test_accounts_identities_activity_and_concurrency_are_transactional(database
     assert saved.version == 2
     assert saved.invitations == (invitation,)
     assert saved.activity_events == (activity,)
+    assert repository.list_for_user("friend-1") == ()
 
     with pytest.raises(RuntimeError, match="concurrently"):
         repository.save(saved, expected_version=1)

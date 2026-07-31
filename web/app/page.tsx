@@ -6,7 +6,8 @@ export const metadata: Metadata = {
     "Mundos persistentes para jogar com seus amigos. A infraestrutura acorda quando vocês jogam e dorme quando terminam.",
 };
 
-const discordSignIn = "/auth/discord/start?return_to=%2Fconsole";
+const apiOrigin = (process.env.NEXT_PUBLIC_GAMEWAKE_API_URL ?? "").replace(/\/$/, "");
+const discordSignIn = `${apiOrigin}/auth/discord/start`;
 
 export default function Home() {
   return (

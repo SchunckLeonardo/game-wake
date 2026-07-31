@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import { ConsoleDashboard } from "../console/ConsoleDashboard";
-import { DiscordActivityBridge } from "./DiscordActivityBridge";
+import { DiscordActivityExperience } from "./DiscordActivityExperience";
 
 export const metadata: Metadata = {
   title: "Discord Activity",
@@ -8,10 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function DiscordActivityPage() {
-  return (
-    <>
-      <DiscordActivityBridge />
-      <ConsoleDashboard accountId="demo" activityMode />
-    </>
-  );
+  return <DiscordActivityExperience />;
 }

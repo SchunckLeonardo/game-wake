@@ -53,6 +53,12 @@ class DiscordIdentity:
     display_name: str
 
 
+@dataclass(frozen=True)
+class DiscordOAuthGrant:
+    identity: DiscordIdentity
+    access_token: str
+
+
 class DiscordOAuthClient:
     def __init__(
         self,
@@ -80,17 +86,27 @@ class DiscordOAuthClient:
         return f"{_DISCORD_API}/oauth2/authorize?{query}"
 
     def authenticate(self, code: str, *, redirect_uri: str) -> DiscordIdentity:
+        return self._exchange(code, redirect_uri=redirect_uri).identity
+
+    def authenticate_activity(self, code: str) -> DiscordOAuthGrant:
+        return self._exchange(code)
+
+    def _exchange(
+        self, code: str, *, redirect_uri: str | None = None
+    ) -> DiscordOAuthGrant:
+        form = {
+            "client_id": self._client_id,
+            "client_secret": self._client_secret,
+            "grant_type": "authorization_code",
+            "code": code,
+        }
+        if redirect_uri is not None:
+            form["redirect_uri"] = redirect_uri
         token = self._http.request(
             "POST",
             f"{_DISCORD_API}/oauth2/token",
             headers={"Content-Type": "application/x-www-form-urlencoded"},
-            form={
-                "client_id": self._client_id,
-                "client_secret": self._client_secret,
-                "grant_type": "authorization_code",
-                "code": code,
-                "redirect_uri": redirect_uri,
-            },
+            form=form,
         )
         access_token = token.get("access_token")
         if not isinstance(access_token, str) or not access_token:
@@ -104,4 +120,7 @@ class DiscordOAuthClient:
         display_name = user.get("global_name") or user.get("username")
         if not isinstance(user_id, str) or not isinstance(display_name, str):
             raise RuntimeError("Discord OAuth returned an invalid User")
-        return DiscordIdentity(user_id, display_name)
+        return DiscordOAuthGrant(
+            identity=DiscordIdentity(user_id, display_name),
+            access_token=access_token,
+        )

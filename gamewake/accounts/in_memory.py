@@ -47,6 +47,13 @@ class InMemoryAccountRepository:
             None,
         )
 
+    def list_for_user(self, user_id: str) -> tuple[AccountSnapshot, ...]:
+        return tuple(
+            snapshot
+            for snapshot in self._snapshots.values()
+            if any(membership.user_id == user_id for membership in snapshot.memberships)
+        )
+
     def save(self, snapshot: AccountSnapshot, expected_version: int) -> None:
         current = self._snapshots[snapshot.account.id]
         if current.version != expected_version:

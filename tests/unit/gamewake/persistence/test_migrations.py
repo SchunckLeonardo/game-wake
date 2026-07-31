@@ -6,7 +6,10 @@ from gamewake.persistence import load_migrations
 def test_initial_postgres_migration_covers_durable_mvp_state() -> None:
     migrations = load_migrations()
 
-    assert [migration.id for migration in migrations] == ["0001_initial"]
+    assert [migration.id for migration in migrations] == [
+        "0001_initial",
+        "0002_account_memberships",
+    ]
     sql = "\n".join(migrations[0].statements).lower()
     for table in (
         "accounts",

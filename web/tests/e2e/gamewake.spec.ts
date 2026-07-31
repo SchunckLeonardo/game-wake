@@ -13,7 +13,7 @@ test("landing communicates the product and starts Discord onboarding", async ({
   const signIn = page.getByRole("link", { name: "Entrar com Discord" }).first();
   await expect(signIn).toHaveAttribute(
     "href",
-    "/auth/discord/start?return_to=%2Fconsole",
+    "/auth/discord/start",
   );
   await expect(page.getByText("Pague pelo tempo de jogo")).toBeVisible();
 });
@@ -70,4 +70,134 @@ test("Discord Activity uses the same safe Console", async ({ page }) => {
   await expect(page.locator("[data-discord-activity='true']")).toBeVisible();
   await expect(page.getByText("Palpagos")).toBeVisible();
   await expect(page.getByText("segredo-do-grupo")).toHaveCount(0);
+});
+
+test("OAuth callback stores the short-lived session and routes an existing member", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/me/accounts", async (route) => {
+    expect(route.request().headers().authorization).toBe("Bearer signed-session");
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        accounts: [{ id: "account-live", name: "Grupo real", discordGuildId: null }],
+      }),
+    });
+  });
+
+  await page.goto("/auth/callback#session=signed-session");
+
+  await expect(page).toHaveURL(/\/accounts\/account-live$/);
+  expect(await page.evaluate(() => sessionStorage.getItem("gamewake_session"))).toBe(
+    "signed-session",
+  );
+});
+
+test("authenticated onboarding creates a real account and Palworld through the API", async ({
+  page,
+}) => {
+  let accountBody: unknown;
+  let worldBody: unknown;
+  await page.addInitScript(() => sessionStorage.setItem("gamewake_session", "signed-session"));
+  await page.route("**/api/v1/accounts", async (route) => {
+    accountBody = route.request().postDataJSON();
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({ account: { id: "account-new", name: "Grupo novo" } }),
+    });
+  });
+  await page.route("**/api/v1/accounts/account-new/worlds", async (route) => {
+    worldBody = route.request().postDataJSON();
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({ world: { id: "world-new", name: "Novo mundo" } }),
+    });
+  });
+
+  await page.goto("/onboarding");
+  await page.getByLabel("Nome do grupo").fill("Grupo novo");
+  await page.getByRole("button", { name: "Continuar" }).click();
+  await page.getByLabel("Nome do World").fill("Novo mundo");
+  await page.getByRole("button", { name: "Criar meu World" }).click();
+
+  await expect(page.getByText("Tudo pronto para jogar")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Abrir Console" })).toHaveAttribute(
+    "href",
+    "/accounts/account-new",
+  );
+  expect(accountBody).toEqual({ name: "Grupo novo" });
+  expect(worldBody).toMatchObject({
+    name: "Novo mundo",
+    gameTemplateId: "palworld:1",
+    region: "sa-east-1",
+    runtimeProfileId: "palworld-small",
+  });
+});
+
+test("authenticated Console loads and mutates the real World through bearer API", async ({
+  page,
+}) => {
+  let worldStatus = "sleeping";
+  let wakeBody: unknown;
+  await page.addInitScript(() => sessionStorage.setItem("gamewake_session", "signed-session"));
+  await page.route("**/api/v1/me/accounts", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        accounts: [{ id: "account-live", name: "Grupo real", discordGuildId: null }],
+      }),
+    });
+  });
+  await page.route("**/api/v1/accounts/account-live/worlds", async (route) => {
+    expect(route.request().headers().authorization).toBe("Bearer signed-session");
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        worlds: [
+          {
+            id: "world-live",
+            accountId: "account-live",
+            name: "Mundo real",
+            gameTemplateId: "palworld:1",
+            region: "sa-east-1",
+            runtimeProfileId: "palworld-small",
+            status: worldStatus,
+          },
+        ],
+      }),
+    });
+  });
+  await page.route("**/api/v1/accounts/account-live/wallet", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        wallet: {
+          accountId: "account-live",
+          currency: "BRL",
+          balance: "20.00",
+          availableBalance: "18.50",
+          statement: [],
+        },
+      }),
+    });
+  });
+  await page.route("**/api/v1/accounts/account-live/worlds/world-live/wake", async (route) => {
+    wakeBody = route.request().postDataJSON();
+    worldStatus = "waking";
+    await route.fulfill({
+      status: 202,
+      contentType: "application/json",
+      body: JSON.stringify({ operation: { id: "operation-live", status: "pending" } }),
+    });
+  });
+
+  await page.goto("/accounts/account-live");
+  await expect(page.getByText("Mundo real")).toBeVisible();
+  await expect(page.getByText("R$ 18,50").first()).toBeVisible();
+  await page.getByTestId("wake-world").click();
+
+  expect(wakeBody).toMatchObject({ idempotencyKey: expect.any(String) });
+  await expect(page.getByRole("status")).toContainText("Restaurando World");
 });

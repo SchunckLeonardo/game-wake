@@ -144,6 +144,24 @@ class Worlds:
             world.configuration_revision_id,
         )
 
+    def get_effective_configuration(
+        self,
+        account_id: str,
+        world_id: str,
+        *,
+        viewer_user_id: str,
+    ) -> ConfigurationRevision:
+        world = self.get_world(
+            account_id,
+            world_id,
+            viewer_user_id=viewer_user_id,
+        )
+        return self._repository.get_configuration(
+            account_id,
+            world_id,
+            world.pending_configuration_revision_id or world.configuration_revision_id,
+        )
+
     def preview_configuration_change(
         self,
         account_id: str,

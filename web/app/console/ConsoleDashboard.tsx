@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { gameWakeFetch, gameWakeIdempotencyKey } from "../gamewakeApi";
 import { useHydrated } from "../useHydrated";
 
 type Section =
@@ -24,6 +25,31 @@ type ConnectionDetails = {
   password?: string;
 };
 
+type WorldStatus =
+  | "sleeping"
+  | "waking"
+  | "online"
+  | "going_to_sleep"
+  | "needs_attention"
+  | "pending_deletion";
+
+type ApiWorld = {
+  id: string;
+  name: string;
+  region: string;
+  status: WorldStatus;
+};
+
+type ConfigurationField = {
+  key: string;
+  label: string;
+  valueType: "string" | "integer" | "number" | "boolean";
+  default: string | number | boolean;
+  acceptedValues: string;
+  impact: string;
+  officialDocumentationUrl: string;
+};
+
 const sections: Array<{ id: Section; label: string; symbol: string }> = [
   { id: "worlds", label: "Worlds", symbol: "◉" },
   { id: "wallet", label: "Wallet", symbol: "◒" },
@@ -35,34 +61,42 @@ const sections: Array<{ id: Section; label: string; symbol: string }> = [
 
 const configurationFields = [
   {
-    key: "DropItemRate",
+    key: "enemy_drop_item_rate",
     label: "Drop de itens dos inimigos",
-    value: "3.0",
-    accepted: "0.1 a 5.0",
+    valueType: "number" as const,
+    default: 3.0,
+    acceptedValues: "0.1 a 5.0",
     impact: "Multiplica a quantidade de itens derrubados por Pals e inimigos.",
+    officialDocumentationUrl: "https://tech.palworldgame.com/settings-and-operation/configuration/",
   },
   {
-    key: "PalEggDefaultHatchingTime",
+    key: "pal_egg_default_hatching_time",
     label: "Tempo de incubação dos ovos",
-    value: "1.0",
-    accepted: "0 a 240 horas",
+    valueType: "number" as const,
+    default: 1.0,
+    acceptedValues: "0 a 240 horas",
     impact: "Define o tempo-base necessário para chocar um ovo enorme.",
+    officialDocumentationUrl: "https://tech.palworldgame.com/settings-and-operation/configuration/",
   },
   {
-    key: "BaseCampWorkerMaxNum",
+    key: "base_camp_worker_max_num",
     label: "Pals trabalhando na base",
-    value: "20",
-    accepted: "1 a 50",
+    valueType: "integer" as const,
+    default: 20,
+    acceptedValues: "1 a 50",
     impact: "Limita quantos Pals podem trabalhar em cada base.",
+    officialDocumentationUrl: "https://tech.palworldgame.com/settings-and-operation/configuration/",
   },
   {
-    key: "MonsterFarmActionSpeedRate",
+    key: "monster_farm_action_speed_rate",
     label: "Velocidade de trabalho dos Pals",
-    value: "1.5",
-    accepted: "0.1 a 5.0",
+    valueType: "number" as const,
+    default: 1.5,
+    acceptedValues: "0.1 a 5.0",
     impact: "Ajusta a velocidade das ações de trabalho e produção.",
+    officialDocumentationUrl: "https://tech.palworldgame.com/settings-and-operation/configuration/",
   },
-];
+] satisfies ConfigurationField[];
 
 export function ConsoleDashboard({
   accountId,
@@ -71,12 +105,26 @@ export function ConsoleDashboard({
 }: ConsoleDashboardProps) {
   const hydrated = useHydrated();
   const [section, setSection] = useState<Section>(initialSection);
-  const [worldStatus, setWorldStatus] = useState<"sleeping" | "waking" | "online">(
-    "sleeping",
+  const isDemo = accountId === "demo";
+  const [worldStatus, setWorldStatus] = useState<WorldStatus>("sleeping");
+  const [world, setWorld] = useState<ApiWorld | null>(
+    isDemo ? { id: "palpagos", name: "Palpagos", region: "sa-east-1", status: "sleeping" } : null,
   );
+  const [accountName, setAccountName] = useState(
+    isDemo ? "Sexta com os amigos" : "Seu grupo",
+  );
+  const [walletBalance, setWalletBalance] = useState("42.80");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(!isDemo);
   const [invites, setInvites] = useState(["Ana", "Bia"]);
   const [contribution, setContribution] = useState(25);
   const [saved, setSaved] = useState(false);
+  const [liveConfigurationFields, setLiveConfigurationFields] = useState<
+    ConfigurationField[]
+  >(configurationFields);
+  const [configurationValues, setConfigurationValues] = useState<
+    Record<string, string | number | boolean>
+  >(() => Object.fromEntries(configurationFields.map((field) => [field.key, field.default])));
   const [connectionDetails, setConnectionDetails] =
     useState<ConnectionDetails | null>(null);
 
@@ -86,26 +134,106 @@ export function ConsoleDashboard({
         sleeping: { label: "Dormindo", detail: "R$ 0,00/h agora", icon: "☾" },
         waking: { label: "Acordando", detail: "Restaurando o World", icon: "↗" },
         online: { label: "Online", detail: "Pronto para conectar", icon: "●" },
+        going_to_sleep: { label: "Indo dormir", detail: "Salvando e validando o World", icon: "↘" },
+        needs_attention: { label: "Precisa de atenção", detail: "A operação precisa ser revisada", icon: "!" },
+        pending_deletion: { label: "Exclusão pendente", detail: "Dados protegidos durante 7 dias", icon: "○" },
       })[worldStatus],
     [worldStatus],
   );
+  const formattedWallet = useMemo(
+    () =>
+      new Intl.NumberFormat("pt-BR", {
+        style: "currency",
+        currency: "BRL",
+      }).format(Number(walletBalance)),
+    [walletBalance],
+  );
+
+  const loadLiveState = useCallback(async () => {
+    if (isDemo) return;
+    try {
+      const [worldsResponse, walletResponse, accountsResponse] = await Promise.all([
+        gameWakeFetch(`/api/v1/accounts/${accountId}/worlds`),
+        gameWakeFetch(`/api/v1/accounts/${accountId}/wallet`),
+        gameWakeFetch("/api/v1/me/accounts"),
+      ]);
+      const worldsPayload = (await worldsResponse.json()) as { worlds: ApiWorld[] };
+      const walletPayload = (await walletResponse.json()) as {
+        wallet: { availableBalance: string };
+      };
+      const accountsPayload = (await accountsResponse.json()) as {
+        accounts: Array<{ id: string; name: string }>;
+      };
+      const selected = worldsPayload.worlds[0] ?? null;
+      setWorld(selected);
+      if (selected) setWorldStatus(selected.status);
+      setWalletBalance(walletPayload.wallet.availableBalance);
+      setAccountName(
+        accountsPayload.accounts.find((account) => account.id === accountId)?.name ?? "Seu grupo",
+      );
+      setError("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível carregar a Console.");
+    } finally {
+      setLoading(false);
+    }
+  }, [accountId, isDemo]);
+
+  useEffect(() => {
+    void Promise.resolve().then(loadLiveState);
+  }, [loadLiveState]);
+
+  useEffect(() => {
+    if (isDemo || !["waking", "going_to_sleep"].includes(worldStatus)) return;
+    const interval = window.setInterval(() => void loadLiveState(), 3000);
+    return () => window.clearInterval(interval);
+  }, [isDemo, loadLiveState, worldStatus]);
+
+  useEffect(() => {
+    if (isDemo || section !== "configuration" || !world) return;
+    async function loadConfiguration() {
+      try {
+        const base = `/api/v1/accounts/${accountId}/worlds/${world.id}/configuration`;
+        const [schemaResponse, revisionResponse] = await Promise.all([
+          gameWakeFetch(`${base}/schema`),
+          gameWakeFetch(base),
+        ]);
+        const schema = (await schemaResponse.json()) as {
+          template: { configurationFields: ConfigurationField[] };
+        };
+        const revision = (await revisionResponse.json()) as {
+          revision: { values: Record<string, string | number | boolean> };
+        };
+        setLiveConfigurationFields(schema.template.configurationFields);
+        setConfigurationValues(revision.revision.values);
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "Falha ao carregar configuração.");
+      }
+    }
+    void loadConfiguration();
+  }, [accountId, isDemo, section, world]);
 
   async function wakeWorld() {
-    if (worldStatus !== "sleeping") return;
+    if (worldStatus !== "sleeping" || !world) return;
     setWorldStatus("waking");
-    if (accountId === "demo") {
+    if (isDemo) {
       window.setTimeout(() => setWorldStatus("online"), 900);
       return;
     }
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_GAMEWAKE_API_URL ?? ""}/api/v1/accounts/${accountId}/worlds/palpagos/wake`,
-      { method: "POST", credentials: "include" },
-    );
-    if (!response.ok) setWorldStatus("sleeping");
+    try {
+      await gameWakeFetch(`/api/v1/accounts/${accountId}/worlds/${world.id}/wake`, {
+        method: "POST",
+        body: JSON.stringify({ idempotencyKey: gameWakeIdempotencyKey("wake") }),
+      });
+    } catch (caught) {
+      setWorldStatus("sleeping");
+      setError(caught instanceof Error ? caught.message : "Não foi possível acordar o World.");
+    }
   }
 
   async function connectWorld() {
-    if (accountId === "demo") {
+    if (!world) return;
+    if (isDemo) {
       setConnectionDetails({
         host: "palpagos.gamewake.local",
         port: 8211,
@@ -113,24 +241,81 @@ export function ConsoleDashboard({
       });
       return;
     }
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_GAMEWAKE_API_URL ?? ""}/api/v1/accounts/${accountId}/worlds/palpagos/connection`,
-      { credentials: "include" },
-    );
-    if (!response.ok) return;
-    setConnectionDetails((await response.json()) as ConnectionDetails);
+    try {
+      const response = await gameWakeFetch(
+        `/api/v1/accounts/${accountId}/worlds/${world.id}/connection`,
+      );
+      const payload = (await response.json()) as { connection: ConnectionDetails };
+      setConnectionDetails(payload.connection);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível obter a conexão.");
+    }
   }
 
   async function sleepWorld() {
-    if (accountId === "demo") {
+    if (!world) return;
+    if (isDemo) {
       setWorldStatus("sleeping");
       return;
     }
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_GAMEWAKE_API_URL ?? ""}/api/v1/accounts/${accountId}/worlds/palpagos/sleep`,
-      { method: "POST", credentials: "include" },
-    );
-    if (response.ok) setWorldStatus("sleeping");
+    try {
+      await gameWakeFetch(`/api/v1/accounts/${accountId}/worlds/${world.id}/sleep`, {
+        method: "POST",
+        body: JSON.stringify({ idempotencyKey: gameWakeIdempotencyKey("sleep") }),
+      });
+      setWorldStatus("going_to_sleep");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível dormir o World.");
+    }
+  }
+
+  async function createCheckout() {
+    if (isDemo) return;
+    try {
+      const response = await gameWakeFetch(
+        `/api/v1/accounts/${accountId}/wallet/contributions`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            packageId: `credits-${contribution}`,
+            returnUrl: window.location.href,
+            completionUrl: `${window.location.href.split("?")[0]}?payment=complete`,
+            idempotencyKey: gameWakeIdempotencyKey("contribution"),
+          }),
+        },
+      );
+      const payload = (await response.json()) as {
+        contribution: { checkoutUrl?: string };
+      };
+      if (payload.contribution.checkoutUrl) {
+        window.location.assign(payload.contribution.checkoutUrl);
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível abrir o checkout.");
+    }
+  }
+
+  async function saveConfiguration() {
+    if (isDemo) {
+      setSaved(true);
+      return;
+    }
+    if (!world) return;
+    try {
+      await gameWakeFetch(
+        `/api/v1/accounts/${accountId}/worlds/${world.id}/configuration`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            changes: configurationValues,
+            idempotencyKey: gameWakeIdempotencyKey("configuration"),
+          }),
+        },
+      );
+      setSaved(true);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível salvar a configuração.");
+    }
   }
 
   function addInvite() {
@@ -154,7 +339,7 @@ export function ConsoleDashboard({
         </Link>
         <div className="account-switcher">
           <span className="account-avatar">S</span>
-          <div><strong>Sexta com os amigos</strong><small>Conta compartilhada</small></div>
+          <div><strong>{accountName}</strong><small>Conta compartilhada</small></div>
           <span aria-hidden="true">⌄</span>
         </div>
         <nav aria-label="Áreas da Console">
@@ -188,18 +373,20 @@ export function ConsoleDashboard({
           </div>
           <div className="topbar-actions">
             <button aria-label="Notificações" className="icon-button" type="button">♢</button>
-            <span className="wallet-pill"><small>Saldo</small><strong>R$ 42,80</strong></span>
+            <span className="wallet-pill"><small>Saldo</small><strong>{formattedWallet}</strong></span>
           </div>
         </header>
 
         <div className="console-content">
+          {error && <div className="config-notice" role="alert"><span>!</span><p>{error}</p></div>}
+          {loading && <p role="status">Carregando sua GameWake Console…</p>}
           {section === "worlds" && (
             <>
               <div className="welcome-row">
                 <div>
                   <span className="section-index">VISÃO GERAL</span>
                   <h1>Bom jogo, Leonardo <span aria-hidden="true">✦</span></h1>
-                  <p>Seu grupo tem um World pronto para a próxima sessão.</p>
+                  <p>{world ? "Seu grupo tem um World pronto para a próxima sessão." : "Crie o primeiro World do grupo para começar."}</p>
                 </div>
                 <button className="button button-outline" type="button">+ Novo World</button>
               </div>
@@ -214,8 +401,8 @@ export function ConsoleDashboard({
                 <div className="world-card-body">
                   <div className="world-title-row">
                     <div>
-                      <span className="game-label">PALWORLD · SA-EAST-1</span>
-                      <h2>Palpagos</h2>
+                      <span className="game-label">PALWORLD · {(world?.region ?? "sa-east-1").toUpperCase()}</span>
+                      <h2>{world?.name ?? "Nenhum World"}</h2>
                     </div>
                     <span className={`world-status status-${worldStatus}`}>
                       <span>{statusCopy.icon}</span>{statusCopy.label}
@@ -225,7 +412,7 @@ export function ConsoleDashboard({
                   <div className="world-stats">
                     <div><small>Última sessão</small><strong>Ontem · 2h 38min</strong></div>
                     <div><small>Último backup</small><strong>Verificado · ontem 23:42</strong></div>
-                    <div><small>Custo estimado</small><strong>R$ 1,84 / hora</strong></div>
+                    <div><small>Preço da sessão</small><strong>Confirmado ao acordar</strong></div>
                   </div>
                   {worldStatus === "waking" && (
                     <div className="operation-progress" role="status">
@@ -280,8 +467,8 @@ export function ConsoleDashboard({
               <div className="overview-grid">
                 <article className="overview-card">
                   <div className="card-heading"><div><span className="card-symbol">◒</span><h3>Wallet</h3></div><button onClick={() => setSection("wallet")} type="button">Ver extrato →</button></div>
-                  <strong className="overview-balance">R$ 42,80</strong>
-                  <p>≈ 23 horas no perfil atual</p>
+                  <strong className="overview-balance">{formattedWallet}</strong>
+                  <p>Saldo disponível para as próximas sessões</p>
                   <div className="meter wallet-meter"><span /></div>
                   <small>Balance Guard ativo · sono seguro reservado</small>
                 </article>
@@ -309,14 +496,14 @@ export function ConsoleDashboard({
             <div className="panel-page" data-testid="wallet-panel">
               <div className="panel-heading"><div><span className="section-index">WALLET COMPARTILHADA</span><h1>Créditos do grupo</h1><p>Todo valor é explicado em um ledger imutável. A Wallet nunca fica negativa.</p></div></div>
               <div className="wallet-layout">
-                <article className="balance-panel"><small>Saldo disponível</small><strong>R$ 42,80</strong><span>BRL</span><div className="guard-status"><i /> Balance Guard ativo</div></article>
+                <article className="balance-panel"><small>Saldo disponível</small><strong>{formattedWallet}</strong><span>BRL</span><div className="guard-status"><i /> Balance Guard ativo</div></article>
                 <article className="contribution-panel">
                   <h2>Adicionar créditos</h2>
                   <p>Escolha um pacote. O checkout Pix ou cartão abre de forma privada.</p>
                   <div className="amount-options" role="group" aria-label="Valor da contribuição">
                     {[25, 50, 100].map((amount) => <button className={contribution === amount ? "selected" : ""} key={amount} onClick={() => setContribution(amount)} type="button">R$ {amount}</button>)}
                   </div>
-                  <button className="button button-primary full-button" data-testid="create-checkout" type="button">Contribuir R$ {contribution},00</button>
+                  <button className="button button-primary full-button" data-testid="create-checkout" onClick={() => void createCheckout()} type="button">Contribuir R$ {contribution},00</button>
                 </article>
               </div>
               <article className="table-card"><div className="card-heading"><h2>Extrato</h2><span>Julho de 2026</span></div><table><thead><tr><th>Data</th><th>Movimentação</th><th>Responsável</th><th>Valor</th></tr></thead><tbody><tr><td>30 jul, 23:41</td><td>Sessão · Palpagos</td><td>Grupo</td><td className="negative">− R$ 4,87</td></tr><tr><td>28 jul, 19:03</td><td>Contribuição</td><td>Ana</td><td className="positive">+ R$ 25,00</td></tr><tr><td>24 jul, 22:16</td><td>Crédito de disponibilidade</td><td>GameWake</td><td className="positive">+ R$ 0,42</td></tr></tbody></table></article>
@@ -335,8 +522,8 @@ export function ConsoleDashboard({
             <div className="panel-page" data-testid="configuration-panel">
               <div className="panel-heading split"><div><span className="section-index">PALWORLD · CONFIGURAÇÃO GUIADA</span><h1>Configuração</h1><p>Veja o impacto, os valores aceitos e a documentação oficial antes de alterar.</p></div><a className="button button-outline" href="https://tech.palworldgame.com/settings-and-operation/configuration/" rel="noreferrer" target="_blank">Documentação do Palworld ↗</a></div>
               <div className="config-notice"><span>i</span><p>As alterações criam uma revisão imutável e entram no próximo despertar. Se o World estiver Online, você poderá escolher uma reinicialização segura.</p></div>
-              <div className="config-grid">{configurationFields.map((field) => <article className="config-card" key={field.key}><div><span className="config-key">{field.key}</span><h2>{field.label}</h2><p>{field.impact}</p></div><label>Valor<input aria-label={field.label} defaultValue={field.value} /></label><small>Valores aceitos: <strong>{field.accepted}</strong></small></article>)}</div>
-              <div className="sticky-save"><div><strong>4 alterações prontas</strong><small>Será criada a revisão #12 · reinicialização necessária</small></div><button className="button button-primary" data-testid="save-configuration" onClick={() => setSaved(true)} type="button">{saved ? "Configuração salva ✓" : "Revisar e salvar"}</button></div>
+              <div className="config-grid">{liveConfigurationFields.map((field) => <article className="config-card" key={field.key}><div><span className="config-key">{field.key}</span><h2>{field.label}</h2><p>{field.impact}</p></div><label>Valor{field.valueType === "boolean" ? <select aria-label={field.label} onChange={(event) => setConfigurationValues((current) => ({ ...current, [field.key]: event.target.value === "true" }))} value={String(configurationValues[field.key] ?? field.default)}><option value="true">Ativado</option><option value="false">Desativado</option></select> : <input aria-label={field.label} onChange={(event) => setConfigurationValues((current) => ({ ...current, [field.key]: field.valueType === "string" ? event.target.value : Number(event.target.value) }))} type={field.valueType === "string" ? "text" : "number"} value={String(configurationValues[field.key] ?? field.default)} />}</label><small>Valores aceitos: <strong>{field.acceptedValues}</strong></small></article>)}</div>
+              <div className="sticky-save"><div><strong>{liveConfigurationFields.length} opções validadas</strong><small>Uma revisão imutável será criada · reinicialização pode ser necessária</small></div><button className="button button-primary" data-testid="save-configuration" onClick={() => void saveConfiguration()} type="button">{saved ? "Configuração salva ✓" : "Revisar e salvar"}</button></div>
             </div>
           )}
 
@@ -363,13 +550,13 @@ export function ConsoleDashboard({
       {connectionDetails && (
         <div className="modal-backdrop">
           <section
-            aria-label="Conectar ao Palpagos"
+            aria-label={`Conectar ao ${world?.name ?? "World"}`}
             aria-modal="true"
             className="connection-dialog"
             role="dialog"
           >
             <div className="dialog-heading">
-              <div><span className="online-dot" /><strong>Palpagos está Online</strong></div>
+              <div><span className="online-dot" /><strong>{world?.name ?? "World"} está Online</strong></div>
               <button
                 aria-label="Fechar conexão"
                 onClick={() => setConnectionDetails(null)}

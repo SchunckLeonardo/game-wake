@@ -69,6 +69,7 @@ class PostgresAccountRepository:
                     "aggregate": encode_domain(snapshot),
                 },
             )
+            self._sync_memberships(transaction, snapshot)
 
     def _snapshot(self, transaction: Transaction, row: Row) -> AccountSnapshot:
         snapshot = decode_domain(_payload(row, "aggregate"), AccountSnapshot)
@@ -103,6 +104,41 @@ class PostgresAccountRepository:
             )
             return self._snapshot(transaction, row) if row is not None else None
 
+    def list_for_user(self, user_id: str) -> tuple[AccountSnapshot, ...]:
+        with self._database.transaction() as transaction:
+            return tuple(
+                self._snapshot(transaction, row)
+                for row in transaction.fetch_all(
+                    """
+                    SELECT accounts.aggregate, accounts.version
+                    FROM account_memberships
+                    JOIN accounts ON accounts.id = account_memberships.account_id
+                    WHERE account_memberships.user_id = :user_id
+                    ORDER BY accounts.name, accounts.id
+                    """,
+                    {"user_id": user_id},
+                )
+            )
+
+    @staticmethod
+    def _sync_memberships(transaction: Transaction, snapshot: AccountSnapshot) -> None:
+        transaction.execute(
+            "DELETE FROM account_memberships WHERE account_id = :account_id",
+            {"account_id": snapshot.account.id},
+        )
+        for membership in snapshot.memberships:
+            transaction.execute(
+                """
+                INSERT INTO account_memberships (account_id, user_id, membership_id)
+                VALUES (:account_id, :user_id, :membership_id)
+                """,
+                {
+                    "account_id": snapshot.account.id,
+                    "user_id": membership.user_id,
+                    "membership_id": membership.id,
+                },
+            )
+
     def save(self, snapshot: AccountSnapshot, expected_version: int) -> None:
         persisted = replace(snapshot, activity_events=(), version=expected_version + 1)
         with self._database.transaction() as transaction:
@@ -127,6 +163,7 @@ class PostgresAccountRepository:
             )
             if updated != 1:
                 raise RuntimeError("account was changed concurrently")
+            self._sync_memberships(transaction, snapshot)
             for event in snapshot.activity_events:
                 inserted = transaction.execute(
                     """
