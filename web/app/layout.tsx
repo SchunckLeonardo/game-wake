@@ -13,6 +13,15 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const designContract = `
+THESIS: The World is the shared table; friends, cost, Discord and protection orbit one persistent place instead of a generic SaaS hero or KPI dashboard.
+OWN-WORLD: Mist Paper and Night Ink hold the surface; Wake Green acts once, Journey Indigo guides, and a hand-painted circular World carries the visual memory.
+STORY: A group sees that the World persists, understands the wake and sleep cycle, trusts the price and backup, then enters with Discord or operates the selected World.
+FIRST VIEWPORT: A slim navigation leads to one central World surrounded by four functional stations; the primary Discord action sits on the World itself.
+FORM: Mesa Central do World, selected from the surface study; seed keys b35ef383 and 7a7d4a99.
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+`.trim();
+
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
   const forwardedHost = requestHeaders.get("x-forwarded-host")?.split(",")[0].trim();
@@ -68,6 +77,12 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
+        <script
+          data-design-contract="gamewake-world-table"
+          dangerouslySetInnerHTML={{
+            __html: `document.currentScript?.before(document.createComment(${JSON.stringify(designContract)}));`,
+          }}
+        />
         {children}
       </body>
     </html>

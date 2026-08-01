@@ -1,0 +1,474 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-01T20:51:43Z",
+  "title": "Design System: GameWake",
+  "extensions": {
+    "colorMeta": {
+      "night-ink": {
+        "role": "neutral",
+        "displayName": "Tinta Noturna",
+        "tonalRamp": [
+          "oklch(15% 0.0341 269.6)",
+          "oklch(26% 0.0341 269.6)",
+          "oklch(38% 0.0341 269.6)",
+          "oklch(50% 0.0341 269.6)",
+          "oklch(62% 0.0341 269.6)",
+          "oklch(74% 0.0341 269.6)",
+          "oklch(86% 0.0341 269.6)",
+          "oklch(95% 0.0341 269.6)"
+        ]
+      },
+      "night-ink-soft": {
+        "role": "neutral",
+        "displayName": "Tinta Noturna Suave",
+        "tonalRamp": [
+          "oklch(15% 0.0392 267.7)",
+          "oklch(26% 0.0392 267.7)",
+          "oklch(38% 0.0392 267.7)",
+          "oklch(50% 0.0392 267.7)",
+          "oklch(62% 0.0392 267.7)",
+          "oklch(74% 0.0392 267.7)",
+          "oklch(86% 0.0392 267.7)",
+          "oklch(95% 0.0392 267.7)"
+        ]
+      },
+      "mist-paper": {
+        "role": "neutral",
+        "displayName": "Papel Neblina",
+        "tonalRamp": [
+          "oklch(15% 0.0080 114.2)",
+          "oklch(26% 0.0080 114.2)",
+          "oklch(38% 0.0080 114.2)",
+          "oklch(50% 0.0080 114.2)",
+          "oklch(62% 0.0080 114.2)",
+          "oklch(74% 0.0080 114.2)",
+          "oklch(86% 0.0080 114.2)",
+          "oklch(95% 0.0080 114.2)"
+        ]
+      },
+      "bright-paper": {
+        "role": "neutral",
+        "displayName": "Papel Claro",
+        "tonalRamp": [
+          "oklch(15% 0.0067 115.7)",
+          "oklch(26% 0.0067 115.7)",
+          "oklch(38% 0.0067 115.7)",
+          "oklch(50% 0.0067 115.7)",
+          "oklch(62% 0.0067 115.7)",
+          "oklch(74% 0.0067 115.7)",
+          "oklch(86% 0.0067 115.7)",
+          "oklch(95% 0.0067 115.7)"
+        ]
+      },
+      "quiet-line": {
+        "role": "neutral",
+        "displayName": "Linha Silenciosa",
+        "tonalRamp": [
+          "oklch(15% 0.0151 119.1)",
+          "oklch(26% 0.0151 119.1)",
+          "oklch(38% 0.0151 119.1)",
+          "oklch(50% 0.0151 119.1)",
+          "oklch(62% 0.0151 119.1)",
+          "oklch(74% 0.0151 119.1)",
+          "oklch(86% 0.0151 119.1)",
+          "oklch(95% 0.0151 119.1)"
+        ]
+      },
+      "muted-sage": {
+        "role": "neutral",
+        "displayName": "Sálvia Suave",
+        "tonalRamp": [
+          "oklch(15% 0.0202 132.0)",
+          "oklch(26% 0.0202 132.0)",
+          "oklch(38% 0.0202 132.0)",
+          "oklch(50% 0.0202 132.0)",
+          "oklch(62% 0.0202 132.0)",
+          "oklch(74% 0.0202 132.0)",
+          "oklch(86% 0.0202 132.0)",
+          "oklch(95% 0.0202 132.0)"
+        ]
+      },
+      "wake-green": {
+        "role": "primary",
+        "displayName": "Verde Despertar",
+        "tonalRamp": [
+          "oklch(15% 0.2096 126.6)",
+          "oklch(26% 0.2096 126.6)",
+          "oklch(38% 0.2096 126.6)",
+          "oklch(50% 0.2096 126.6)",
+          "oklch(62% 0.2096 126.6)",
+          "oklch(74% 0.2096 126.6)",
+          "oklch(86% 0.2096 126.6)",
+          "oklch(95% 0.2096 126.6)"
+        ]
+      },
+      "wake-green-deep": {
+        "role": "primary",
+        "displayName": "Verde Despertar Profundo",
+        "tonalRamp": [
+          "oklch(15% 0.1693 128.6)",
+          "oklch(26% 0.1693 128.6)",
+          "oklch(38% 0.1693 128.6)",
+          "oklch(50% 0.1693 128.6)",
+          "oklch(62% 0.1693 128.6)",
+          "oklch(74% 0.1693 128.6)",
+          "oklch(86% 0.1693 128.6)",
+          "oklch(95% 0.1693 128.6)"
+        ]
+      },
+      "journey-indigo": {
+        "role": "secondary",
+        "displayName": "Índigo de Jornada",
+        "tonalRamp": [
+          "oklch(15% 0.2012 275.0)",
+          "oklch(26% 0.2012 275.0)",
+          "oklch(38% 0.2012 275.0)",
+          "oklch(50% 0.2012 275.0)",
+          "oklch(62% 0.2012 275.0)",
+          "oklch(74% 0.2012 275.0)",
+          "oklch(86% 0.2012 275.0)",
+          "oklch(95% 0.2012 275.0)"
+        ]
+      },
+      "preparation-amber": {
+        "role": "tertiary",
+        "displayName": "Âmbar de Preparação",
+        "tonalRamp": [
+          "oklch(15% 0.1469 72.2)",
+          "oklch(26% 0.1469 72.2)",
+          "oklch(38% 0.1469 72.2)",
+          "oklch(50% 0.1469 72.2)",
+          "oklch(62% 0.1469 72.2)",
+          "oklch(74% 0.1469 72.2)",
+          "oklch(86% 0.1469 72.2)",
+          "oklch(95% 0.1469 72.2)"
+        ]
+      },
+      "attention-coral": {
+        "role": "tertiary",
+        "displayName": "Coral de Atenção",
+        "tonalRamp": [
+          "oklch(15% 0.1758 27.6)",
+          "oklch(26% 0.1758 27.6)",
+          "oklch(38% 0.1758 27.6)",
+          "oklch(50% 0.1758 27.6)",
+          "oklch(62% 0.1758 27.6)",
+          "oklch(74% 0.1758 27.6)",
+          "oklch(86% 0.1758 27.6)",
+          "oklch(95% 0.1758 27.6)"
+        ]
+      },
+      "pure-white": {
+        "role": "neutral",
+        "displayName": "Branco Puro",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(26% 0 0)",
+          "oklch(38% 0 0)",
+          "oklch(50% 0 0)",
+          "oklch(62% 0 0)",
+          "oklch(74% 0 0)",
+          "oklch(86% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "night-line": {
+        "role": "neutral",
+        "displayName": "Linha Noturna",
+        "tonalRamp": [
+          "oklch(15% 0.0439 264.4)",
+          "oklch(26% 0.0439 264.4)",
+          "oklch(38% 0.0439 264.4)",
+          "oklch(50% 0.0439 264.4)",
+          "oklch(62% 0.0439 264.4)",
+          "oklch(74% 0.0439 264.4)",
+          "oklch(86% 0.0439 264.4)",
+          "oklch(95% 0.0439 264.4)"
+        ]
+      },
+      "night-muted": {
+        "role": "neutral",
+        "displayName": "Névoa Noturna",
+        "tonalRamp": [
+          "oklch(15% 0.0255 259.8)",
+          "oklch(26% 0.0255 259.8)",
+          "oklch(38% 0.0255 259.8)",
+          "oklch(50% 0.0255 259.8)",
+          "oklch(62% 0.0255 259.8)",
+          "oklch(74% 0.0255 259.8)",
+          "oklch(86% 0.0255 259.8)",
+          "oklch(95% 0.0255 259.8)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Uma tese principal em superfícies persuasivas."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Títulos de histórias amplas da landing."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Saudações, painéis e decisões de alto nível na Console."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Instruções, custos, consequências e conteúdo corrente."
+      },
+      "action": {
+        "displayName": "Action",
+        "purpose": "Botões e links que representam decisões explícitas."
+      },
+      "label": {
+        "displayName": "Label Mono",
+        "purpose": "Chaves, regiões, valores e estados operacionais curtos."
+      }
+    },
+    "shadows": [
+      {
+        "name": "tactile-compact",
+        "value": "3px 3px 0 var(--ink)",
+        "purpose": "Marca e símbolos guiados."
+      },
+      {
+        "name": "tactile-action",
+        "value": "4px 4px 0 var(--ink)",
+        "purpose": "Ação prioritária em repouso."
+      },
+      {
+        "name": "tactile-action-hover",
+        "value": "6px 6px 0 var(--ink)",
+        "purpose": "Resposta de hover da ação prioritária."
+      },
+      {
+        "name": "accent-offset",
+        "value": "12px 12px 0 var(--wake)",
+        "purpose": "Um card escuro protagonista por composição."
+      },
+      {
+        "name": "world-ambient",
+        "value": "drop-shadow(0 24px 24px rgba(11, 16, 32, 0.14))",
+        "purpose": "Separa o terreno circular do papel."
+      },
+      {
+        "name": "ambient-onboarding",
+        "value": "0 24px 65px rgba(11, 16, 32, 0.09)",
+        "purpose": "Concentra a tarefa guiada."
+      },
+      {
+        "name": "ambient-modal",
+        "value": "0 35px 80px rgba(0, 0, 0, 0.45)",
+        "purpose": "Fixa o diálogo sobre o backdrop escuro."
+      }
+    ],
+    "motion": [
+      {
+        "name": "tactile-fast",
+        "value": "150ms ease",
+        "purpose": "Transform, sombra e fundo em botões."
+      },
+      {
+        "name": "panel-enter",
+        "value": "220ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Entrada curta de painéis operacionais."
+      },
+      {
+        "name": "progress-change",
+        "value": "250ms ease",
+        "purpose": "Mudanças de progresso no onboarding."
+      },
+      {
+        "name": "world-breathe",
+        "value": "4.8s cubic-bezier(0.16, 1, 0.3, 1) infinite alternate",
+        "purpose": "Respiração discreta do anel interno do World."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "0.01ms",
+        "purpose": "Fallback obrigatório para prefers-reduced-motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "wide-collapse",
+        "value": "1120px"
+      },
+      {
+        "name": "compact-desktop",
+        "value": "980px"
+      },
+      {
+        "name": "mobile",
+        "value": "760px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "A decisão prioritária, tátil e inequívoca da superfície.",
+      "html": "<button class=\"ds-button-primary\" type=\"button\">Acordar World</button>",
+      "css": ".ds-button-primary { min-height: 47px; padding: 0 21px; border: 0; border-radius: 12px; background: var(--wake); color: var(--ink); box-shadow: 4px 4px 0 var(--ink); font-family: Geist, Arial, sans-serif; font-size: 14px; font-weight: 720; cursor: pointer; transition: transform 150ms ease, box-shadow 150ms ease, background-color 150ms ease; } .ds-button-primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 6px 6px 0 var(--ink); } .ds-button-primary:focus-visible { outline: 3px solid color-mix(in srgb, var(--blue) 55%, transparent); outline-offset: 3px; } .ds-button-primary:active:not(:disabled) { transform: translateY(0); } .ds-button-primary:disabled { cursor: not-allowed; opacity: 0.52; }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Ação secundária de contraste contido.",
+      "html": "<button class=\"ds-button-outline\" type=\"button\">Configurar</button>",
+      "css": ".ds-button-outline { min-height: 47px; padding: 0 21px; border: 1px solid #c8ccc1; border-radius: 12px; background: transparent; color: var(--ink); font-family: Geist, Arial, sans-serif; font-size: 14px; font-weight: 720; cursor: pointer; transition: transform 150ms ease, background-color 150ms ease, color 150ms ease; } .ds-button-outline:hover:not(:disabled) { transform: translateY(-2px); background: var(--ink); color: var(--white); } .ds-button-outline:focus-visible { outline: 3px solid color-mix(in srgb, var(--blue) 55%, transparent); outline-offset: 3px; } .ds-button-outline:active:not(:disabled) { transform: translateY(0); }"
+    },
+    {
+      "name": "Light Text Field",
+      "kind": "input",
+      "refersTo": "field-light",
+      "description": "Campo claro de tarefas guiadas em onboarding e autenticação.",
+      "html": "<label class=\"ds-field-light\">Nome do World<input value=\"Palpagos\" /></label>",
+      "css": ".ds-field-light { display: flex; flex-direction: column; gap: 8px; color: #5d645a; font-family: Geist, Arial, sans-serif; font-size: 12px; font-weight: 650; } .ds-field-light input { min-height: 48px; padding: 0 13px; border: 1px solid #c9cec2; border-radius: 10px; background: var(--white); color: var(--ink); font: inherit; font-weight: 400; } .ds-field-light input:hover { border-color: #aeb4a8; } .ds-field-light input:focus-visible { outline: 3px solid color-mix(in srgb, var(--blue) 55%, transparent); outline-offset: 3px; }"
+    },
+    {
+      "name": "Dark Console Field",
+      "kind": "input",
+      "refersTo": "field-dark",
+      "description": "Campo compacto para configuração e operação na Console.",
+      "html": "<label class=\"ds-field-dark\">Auto Sleep<select><option>20 minutos</option></select></label>",
+      "css": ".ds-field-dark { display: flex; flex-direction: column; gap: 8px; color: #b4becc; font-family: Geist, Arial, sans-serif; font-size: 12px; font-weight: 640; } .ds-field-dark select { min-height: 45px; padding: 0 12px; border: 1px solid #3a4860; border-radius: 10px; background: #091321; color: var(--white); font: inherit; } .ds-field-dark select:hover { border-color: #53647f; } .ds-field-dark select:focus-visible { outline: 3px solid color-mix(in srgb, var(--blue) 55%, transparent); outline-offset: 3px; }"
+    },
+    {
+      "name": "Online Status Chip",
+      "kind": "chip",
+      "refersTo": "status-chip-online",
+      "description": "Estado positivo compacto que combina superfície, texto e ponto de presença.",
+      "html": "<span class=\"ds-status-online\"><span></span>Online</span>",
+      "css": ".ds-status-online { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 999px; background: #263b24; color: #c9f37d; font-family: Geist, Arial, sans-serif; font-size: 11px; font-weight: 760; } .ds-status-online > span { width: 7px; height: 7px; border-radius: 50%; background: var(--wake-deep); }"
+    },
+    {
+      "name": "Active Console Navigation",
+      "kind": "nav",
+      "refersTo": "nav-active",
+      "description": "Navegação escura com um único destino ativo em Verde Despertar.",
+      "html": "<nav class=\"ds-console-nav\" aria-label=\"Áreas da Console\"><button class=\"ds-active\" type=\"button\">Worlds</button><button type=\"button\">Wallet</button><button type=\"button\">Backups</button></nav>",
+      "css": ".ds-console-nav { display: grid; gap: 5px; width: 224px; padding: 17px; background: var(--ink); } .ds-console-nav button { min-height: 42px; padding: 0 11px; border: 0; border-radius: 9px; background: transparent; color: #9ca6b7; font-family: Geist, Arial, sans-serif; font-size: 12px; font-weight: 600; text-align: left; cursor: pointer; } .ds-console-nav button:hover { background: #151f31; color: var(--white); } .ds-console-nav button:focus-visible { outline: 3px solid color-mix(in srgb, var(--blue) 55%, transparent); outline-offset: 2px; } .ds-console-nav button.ds-active { background: var(--wake); color: var(--ink); font-weight: 760; }"
+    },
+    {
+      "name": "Console Surface Card",
+      "kind": "card",
+      "refersTo": "card-console",
+      "description": "Superfície plana de apoio para Wallet, grupo e atividade.",
+      "html": "<article class=\"ds-console-card\"><h3>Wallet</h3><strong>R$ 42,80</strong><p>Saldo disponível para as próximas sessões.</p></article>",
+      "css": ".ds-console-card { max-width: 320px; padding: 20px; border: 1px solid var(--night-line); border-radius: 14px; background: #101a2b; color: var(--white); font-family: Geist, Arial, sans-serif; } .ds-console-card h3 { margin: 0; font-size: 14px; } .ds-console-card strong { display: block; margin-top: 24px; font-size: 34px; letter-spacing: -0.04em; } .ds-console-card p { margin: 4px 0 0; color: #8f9aac; font-size: 12px; line-height: 1.55; }"
+    },
+    {
+      "name": "Wallet Card",
+      "kind": "card",
+      "refersTo": "wallet-card",
+      "description": "Resumo financeiro protegido, contrastado e explicável.",
+      "html": "<article class=\"ds-wallet-card\"><div><span>Wallet do grupo</span><span>BRL</span></div><strong>R$ 42,80</strong><small>saldo disponível</small><div class=\"ds-wallet-meter\"><span></span></div></article>",
+      "css": ".ds-wallet-card { width: 320px; padding: 34px; border-radius: 16px; background: var(--ink); color: var(--white); box-shadow: 12px 12px 0 var(--wake); font-family: Geist, Arial, sans-serif; } .ds-wallet-card > div:first-child { display: flex; justify-content: space-between; color: #c1c8d4; font-family: \"Geist Mono\", monospace; font-size: 12px; } .ds-wallet-card > strong { display: block; margin-top: 32px; font-size: 54px; letter-spacing: -0.04em; } .ds-wallet-card > small { color: #9da6b4; font-size: 13px; } .ds-wallet-meter { height: 7px; margin-top: 32px; overflow: hidden; border-radius: 999px; background: #2d3546; } .ds-wallet-meter span { display: block; width: 38%; height: 100%; background: var(--wake); }"
+    },
+    {
+      "name": "World Station",
+      "kind": "custom",
+      "description": "Uma estação semântica ligada ao World por hairlines.",
+      "html": "<article class=\"ds-world-station\"><span class=\"ds-station-icon\"><svg aria-hidden=\"true\" viewBox=\"0 0 24 24\"><path d=\"M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2\"/><circle cx=\"9\" cy=\"7\" r=\"4\"/><path d=\"M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8\"/></svg></span><div><h3>Seus amigos</h3><p>O grupo entra pelo Discord com o acesso necessário.</p></div></article>",
+      "css": ".ds-world-station { display: grid; grid-template-columns: auto 1fr; gap: 14px; padding-top: 18px; border-top: 1px solid #bcc1b6; background: var(--paper); color: var(--ink); font-family: Geist, Arial, sans-serif; } .ds-station-icon { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid currentColor; border-radius: 50%; background: #eceeff; color: var(--blue); box-shadow: 0 0 0 5px var(--paper), 0 0 0 6px currentColor; } .ds-station-icon svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; } .ds-world-station h3 { margin: 1px 0 8px; font-size: 18px; letter-spacing: -0.02em; } .ds-world-station p { margin: 0; color: #60675d; font-size: 13px; line-height: 1.55; }"
+    },
+    {
+      "name": "World Status Band",
+      "kind": "custom",
+      "description": "Estado, saldo e proteção lidos em uma única faixa antes da Command Table.",
+      "html": "<section class=\"ds-status-band\"><div><small>World selecionado</small><strong>Conexão protegida</strong></div><div><small>Saldo disponível</small><strong>R$ 42,80</strong></div><div><small>Proteção</small><strong>Backup automático</strong></div></section>",
+      "css": ".ds-status-band { display: grid; grid-template-columns: 1.25fr 0.75fr 0.85fr; overflow: hidden; border: 1px solid var(--night-line); border-radius: 16px 16px 0 0; background: #07101e; color: var(--white); font-family: Geist, Arial, sans-serif; } .ds-status-band > div { display: flex; flex-direction: column; justify-content: center; gap: 3px; min-height: 76px; padding: 14px 20px; } .ds-status-band > div + div { border-left: 1px solid var(--night-line); } .ds-status-band small { color: #8f9bad; font-size: 11px; } .ds-status-band strong { font-size: 13px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "A Mesa Central do World",
+    "overview": "GameWake transforma o World persistente na mesa onde o grupo se reúne. Papel quente, tinta quase preta, regras técnicas finas e um terreno circular ilustrado dão presença ao que continua existindo; Verde Despertar, Índigo de Jornada, Âmbar de Preparação e Coral de Atenção tornam ação, orientação, espera e proteção legíveis sem parecer um painel de nuvem.\n\nA landing persuade com uma World Table clara e ampla. A Console traduz a mesma ideia para uma Command Table escura, densa e escaneável. Onboarding, autenticação e fluxos auxiliares preservam os mesmos materiais, tipografia, controles e sinais, mas não são forçados a repetir a composição radial: a topologia serve ao ciclo do World, não a toda página.",
+    "keyCharacteristics": [
+      "Papel quente e tinta noturna alternam os modos persuasivo e operacional.",
+      "Um World circular ilustrado é o foco memorável do ciclo de acordar, jogar e dormir.",
+      "Verde elétrico marca a ação prioritária; pervinca orienta; âmbar prepara; coral protege e alerta.",
+      "Hairlines, círculos, órbitas e ícones lineares compactos organizam informação sem decoração gratuita.",
+      "Geist sustenta títulos compactos e corpo direto; Geist Mono fica restrito a metadados operacionais.",
+      "Superfícies de trabalho são planas; profundidade tátil fica concentrada em ações e focos reais."
+    ],
+    "rules": [
+      {
+        "name": "The Wake Signal Rule",
+        "body": "Verde Despertar identifica a ação mais importante ou um estado positivo; sua raridade preserva o significado.",
+        "section": "colors"
+      },
+      {
+        "name": "The Guidance, Not Action Rule",
+        "body": "Índigo de Jornada orienta seleção e progresso, mas não substitui Verde Despertar como chamada principal.",
+        "section": "colors"
+      },
+      {
+        "name": "The Contextual Neutral Rule",
+        "body": "Papel e sálvia sustentam superfícies claras; tinta e névoa noturna sustentam superfícies operacionais escuras sem trocar o vocabulário de sinais.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tracking Floor Rule",
+        "body": "Tracking negativo nunca passa de -0.04em; densidade vem de escala, peso e line-height, não de letras colidindo.",
+        "section": "typography"
+      },
+      {
+        "name": "The Metadata Is Instrumentation Rule",
+        "body": "Mono e caixa alta pertencem a dados realmente instrumentais; texto essencial e linguagem persuasiva permanecem em Geist sans.",
+        "section": "typography"
+      },
+      {
+        "name": "The Scoped World Table Rule",
+        "body": "Use Mesa Central ou Command Table quando amigos, Discord, custo, proteção e ações pertencem ao mesmo ciclo de um World; onboarding, autenticação, configurações e tabelas podem usar composições próprias sem orbitar um centro artificial.",
+        "section": "layout"
+      },
+      {
+        "name": "The Collapse, Don't Squeeze Rule",
+        "body": "No mobile, grades viram pilhas e navegação muda de forma; conteúdo essencial não é apenas comprimido.",
+        "section": "layout"
+      },
+      {
+        "name": "The Flat-at-Work Rule",
+        "body": "Superfícies operacionais são planas em repouso; sombra não substitui borda, hierarquia ou espaçamento.",
+        "section": "elevation"
+      },
+      {
+        "name": "The One Tactile Protagonist Rule",
+        "body": "Uma composição pode ter um protagonista com sombra deslocada; repetir o efeito em todo card destrói sua força.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Hairline Geometry Rule",
+        "body": "Bordas, órbitas e conectores usam linhas de 1px para estruturar relações; peso visual maior fica com o World, o título ou a ação.",
+        "section": "shapes"
+      },
+      {
+        "name": "The Pill Means State Rule",
+        "body": "Formas totalmente arredondadas pertencem a status, Roles, badges e escolhas compactas, não a todo botão.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "**Do** alternar Papel Neblina e Tinta Noturna conforme o modo sem trocar os sinais semânticos.",
+      "**Do** reservar Verde Despertar para a ação prioritária, sucesso e presença online.",
+      "**Do** aplicar Mesa Central e Command Table ao ciclo compartilhado de um World, mantendo outras jornadas livres para a composição adequada.",
+      "**Do** combinar ícone linear, texto e estado para que informação não dependa apenas de cor.",
+      "**Do** preservar foco visível, navegação por teclado, redução de movimento e contraste WCAG 2.2 AA.",
+      "**Do** manter tracking negativo em -0.04em ou mais aberto."
+    ],
+    "donts": [
+      "**Don't** transformar a narrativa principal da landing em um hero SaaS genérico seguido por uma grade de feature cards.",
+      "**Don't** transformar a Console em um painel corporativo de nuvem ou um mural de KPIs.",
+      "**Don't** obrigar onboarding, autenticação, configurações ou tabelas a imitar a composição orbital do World.",
+      "**Don't** cobrir a interface com glassmorphism; blur pertence a camadas funcionais como topbar e backdrop.",
+      "**Don't** adicionar sombra a todo card ou usar Verde Despertar e Índigo de Jornada como CTAs concorrentes.",
+      "**Don't** inventar provas sociais, métricas, clientes ou imagens de jogo apresentadas como evidência real."
+    ]
+  }
+}

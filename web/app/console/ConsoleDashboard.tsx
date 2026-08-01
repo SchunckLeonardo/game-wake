@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
+import { Icon, type IconName } from "../Icon";
 import { gameWakeFetch, gameWakeIdempotencyKey } from "../gamewakeApi";
 import { useHydrated } from "../useHydrated";
 
@@ -113,13 +115,13 @@ type ConfigurationField = {
   officialDocumentationUrl: string;
 };
 
-const sections: Array<{ id: Section; label: string; symbol: string }> = [
-  { id: "worlds", label: "Worlds", symbol: "◉" },
-  { id: "wallet", label: "Wallet", symbol: "◒" },
-  { id: "members", label: "Membros e Roles", symbol: "♙" },
-  { id: "configuration", label: "Configuração", symbol: "≡" },
-  { id: "backups", label: "Backups", symbol: "↺" },
-  { id: "activity", label: "Atividade", symbol: "⌁" },
+const sections: Array<{ id: Section; label: string; icon: IconName }> = [
+  { id: "worlds", label: "Worlds", icon: "globe" },
+  { id: "wallet", label: "Wallet", icon: "wallet" },
+  { id: "members", label: "Membros e Roles", icon: "users" },
+  { id: "configuration", label: "Configuração", icon: "settings" },
+  { id: "backups", label: "Backups", icon: "database" },
+  { id: "activity", label: "Atividade", icon: "activity" },
 ];
 
 const permissionLabels: Record<string, string> = {
@@ -273,12 +275,12 @@ export function ConsoleDashboard({
   const statusCopy = useMemo(
     () =>
       ({
-        sleeping: { label: "Dormindo", detail: "R$ 0,00/h agora", icon: "☾" },
-        waking: { label: "Acordando", detail: "Restaurando o World", icon: "↗" },
-        online: { label: "Online", detail: "Pronto para conectar", icon: "●" },
-        going_to_sleep: { label: "Indo dormir", detail: "Salvando e validando o World", icon: "↘" },
-        needs_attention: { label: "Precisa de atenção", detail: "A operação precisa ser revisada", icon: "!" },
-        pending_deletion: { label: "Exclusão pendente", detail: "Dados protegidos durante 7 dias", icon: "○" },
+        sleeping: { label: "Dormindo", detail: "R$ 0,00/h agora", icon: "moon" as IconName },
+        waking: { label: "Acordando", detail: "Restaurando o World", icon: "power" as IconName },
+        online: { label: "Online", detail: "Pronto para conectar", icon: "globe" as IconName },
+        going_to_sleep: { label: "Indo dormir", detail: "Salvando e validando o World", icon: "shield" as IconName },
+        needs_attention: { label: "Precisa de atenção", detail: "A operação precisa ser revisada", icon: "warning" as IconName },
+        pending_deletion: { label: "Exclusão pendente", detail: "Dados protegidos durante 7 dias", icon: "clock" as IconName },
       })[worldStatus],
     [worldStatus],
   );
@@ -903,13 +905,13 @@ export function ConsoleDashboard({
     >
       <aside className="console-sidebar">
         <Link className="brand console-brand" href="/" aria-label="GameWake — início">
-          <span className="brand-mark">G</span>
+          <span className="brand-mark"><Icon name="power" size={19} /></span>
           <span>GameWake</span>
         </Link>
         <div className="account-switcher">
           <span className="account-avatar">S</span>
           <div><strong>{accountName}</strong><small>Conta compartilhada</small></div>
-          <span aria-hidden="true">⌄</span>
+          <Icon name="chevron-down" size={16} />
         </div>
         <nav aria-label="Áreas da Console">
           <span className="nav-caption">GERENCIAR</span>
@@ -922,7 +924,7 @@ export function ConsoleDashboard({
               onClick={() => setSection(item.id)}
               type="button"
             >
-              <span aria-hidden="true">{item.symbol}</span>
+              <span aria-hidden="true"><Icon name={item.icon} size={18} /></span>
               {item.label}
             </button>
           ))}
@@ -930,34 +932,34 @@ export function ConsoleDashboard({
         <div className="sidebar-foot">
           <span className="avatar avatar-small">L</span>
           <div><strong>{isDemo ? "Leonardo" : "Você"}</strong><small>GameWake</small></div>
-          <button aria-label="Configurações da conta" type="button">•••</button>
+          <button aria-label="Configurações da conta" type="button"><Icon name="menu" size={18} /></button>
         </div>
       </aside>
 
       <section className="console-main">
         <header className="console-topbar">
           <div>
-            <span className="mobile-brand">GW</span>
+            <span className="mobile-brand"><Icon name="power" size={17} /></span>
             <strong>{sections.find((item) => item.id === section)?.label}</strong>
           </div>
           <div className="topbar-actions">
-            <button aria-label="Notificações" className="icon-button" type="button">♢</button>
+            <button aria-label="Notificações" className="icon-button" type="button"><Icon name="bell" size={18} /></button>
             <span className="wallet-pill"><small>Saldo</small><strong>{formattedWallet}</strong></span>
           </div>
         </header>
 
         <div className="console-content">
-          {error && <div className="config-notice" role="alert"><span>!</span><p>{error}</p></div>}
+          {error && <div className="config-notice" role="alert"><span><Icon name="warning" size={15} /></span><p>{error}</p></div>}
           {loading && <p role="status">Carregando sua GameWake Console…</p>}
           {section === "worlds" && (
             <>
               <div className="welcome-row">
                 <div>
-                  <span className="section-index">VISÃO GERAL</span>
-                  <h1>{isDemo ? "Bom jogo, Leonardo " : "Bom jogo, seu grupo "}<span aria-hidden="true">✦</span></h1>
+                  {isDemo && <span className="console-demo-label">Dados demonstrativos</span>}
+                  <h1>{isDemo ? "Bom jogo, Leonardo" : "Bom jogo, seu grupo"}</h1>
                   <p>{world ? "Seu grupo tem um World pronto para a próxima sessão." : "Crie o primeiro World do grupo para começar."}</p>
                 </div>
-                <button className="button button-outline" disabled={!hydrated} onClick={() => setShowNewWorld((current) => !current)} type="button">+ Novo World</button>
+                <button aria-label="+ Novo World" className="button button-outline" disabled={!hydrated} onClick={() => setShowNewWorld((current) => !current)} type="button"><Icon name="plus" size={17} />Novo World</button>
               </div>
 
               {showNewWorld && <article className="contribution-panel"><h2>Criar World</h2><p>Palworld em São Paulo, com preço confirmado antes de cada sessão.</p><label>Nome do novo World<input aria-label="Nome do novo World" autoFocus onChange={(event) => setNewWorldName(event.target.value)} value={newWorldName} /></label><button className="button button-primary" disabled={!newWorldName.trim()} onClick={() => void createWorld()} type="button">Criar World</button></article>}
@@ -983,104 +985,107 @@ export function ConsoleDashboard({
                 </div>
               )}
 
-              <article className={`world-card world-${worldStatus}`}>
-                <div className="world-art" aria-hidden="true">
-                  <span className="world-sun" />
-                  <span className="world-hill hill-one" />
-                  <span className="world-hill hill-two" />
-                  <span className="world-creature">P</span>
+              <section className={`console-world-stage world-${worldStatus}`}>
+                <div className="console-status-band">
+                  <div>
+                    <span className={`status-band-icon status-${worldStatus}`}><Icon name={statusCopy.icon} size={19} /></span>
+                    <span><small>World selecionado</small><strong>{world ? "Conexão protegida" : "Nenhum World"}</strong></span>
+                    <span className={`world-status status-${worldStatus}`}>{statusCopy.label}</span>
+                  </div>
+                  <div><Icon name="wallet" size={20} /><span><small>Saldo disponível</small><strong>{formattedWallet}</strong></span></div>
+                  <div><Icon name="shield" size={20} /><span><small>Proteção</small><strong>Backup automático</strong></span></div>
                 </div>
-                <div className="world-card-body">
-                  <div className="world-title-row">
-                    <div>
+
+                <div className="command-table-grid">
+                  <aside className="world-side-panel friends-panel">
+                    <div className="side-panel-heading"><Icon name="users" size={20} /><h3>Amigos</h3></div>
+                    <strong>{isDemo ? "3 prontos" : "Grupo conectado"}</strong>
+                    <ul>
+                      {(isDemo ? ["Leonardo", "Ana", "Bia"] : ["Você"]).map((name, index) => (
+                        <li key={name}><span>{name[0]}</span><div><strong>{name}</strong><small>{index < 3 ? "Pronto para jogar" : "Offline"}</small></div><i aria-hidden="true" /></li>
+                      ))}
+                    </ul>
+                    <button onClick={() => setSection("members")} type="button">Gerenciar grupo <Icon name="arrow-right" size={15} /></button>
+                  </aside>
+
+                  <div className="console-world-center">
+                    <div className="console-world-visual" aria-hidden="true">
+                      <span className="world-ring ring-outer" />
+                      <span className="world-ring ring-inner" />
+                      <Image alt="" height={1254} priority sizes="(max-width: 760px) 76vw, 500px" src="/world-map.png" unoptimized width={1254} />
+                    </div>
+                    <div className="console-world-identity">
                       <span className="game-label">PALWORLD · {(world?.region ?? "sa-east-1").toUpperCase()}</span>
                       <h2>{world?.name ?? "Nenhum World"}</h2>
+                      <span className={`world-status status-${worldStatus}`}><Icon name={statusCopy.icon} size={15} />{statusCopy.label}</span>
+                      <p>{statusCopy.detail}</p>
                     </div>
-                    <span className={`world-status status-${worldStatus}`}>
-                      <span>{statusCopy.icon}</span>{statusCopy.label}
-                    </span>
+                    {["waking", "going_to_sleep"].includes(worldStatus) && (
+                      <div className="operation-progress" role="status">
+                        <div><span>{operationProgress?.label ?? (worldStatus === "waking" ? "Preparando despertar" : "Preparando sono seguro")}</span><strong>{operationProgress ? `${operationProgress.current} de ${operationProgress.total}` : "Aguardando fase"}</strong></div>
+                        <div className="meter"><span style={{ width: `${operationProgress?.percentage ?? 8}%` }} /></div>
+                        <small>Você pode sair desta tela. A operação continua protegida.</small>
+                      </div>
+                    )}
                   </div>
-                  <p className="world-detail">{statusCopy.detail}</p>
+
+                  <aside className="world-side-panel discord-panel">
+                    <div className="side-panel-heading"><Icon name="discord" size={21} /><h3>Discord</h3></div>
+                    <code>/gamewake acordar</code>
+                    <p>A turma acompanha restauração, conexão e sono seguro no canal.</p>
+                    <div className="discord-protection"><Icon name="shield" size={17} /><span><strong>Dados privados</strong><small>Endereço e senha só aparecem para quem pode conectar.</small></span></div>
+                  </aside>
+                </div>
+
+                <label className="auto-sleep-setting">
+                  <span><strong>Auto Sleep</strong><small>Dorme com save seguro quando o servidor fica vazio.</small></span>
+                  <select
+                    aria-label="Auto Sleep"
+                    disabled={!world}
+                    onChange={(event) => void updateAutoSleep(event.target.value)}
+                    value={world?.autoSleepMinutes === null ? "off" : String(world?.autoSleepMinutes ?? 20)}
+                  >
+                    <option value="10">10 minutos</option>
+                    <option value="20">20 minutos</option>
+                    <option value="30">30 minutos</option>
+                    <option value="60">60 minutos</option>
+                    <option value="off">Desligado · gera alerta de custo</option>
+                  </select>
+                </label>
+
+                <div className="world-action-dock">
                   <div className="world-stats">
                     <div><small>Última sessão</small><strong>{isDemo ? "Ontem · 2h 38min" : "Consulte em Atividade"}</strong></div>
-                    <div><small>Proteção do save</small><strong>Backup verificado no sono seguro</strong></div>
-                    <div><small>Preço da sessão</small><strong>Confirmado ao acordar</strong></div>
+                    <div><small>Save</small><strong>Verificado no sono seguro</strong></div>
+                    <div><small>Preço</small><strong>Confirmado ao acordar</strong></div>
                   </div>
-                  <label className="auto-sleep-setting">
-                    <span><strong>Auto Sleep</strong><small>Dorme com save seguro quando o servidor fica vazio.</small></span>
-                    <select
-                      aria-label="Auto Sleep"
-                      disabled={!world}
-                      onChange={(event) => void updateAutoSleep(event.target.value)}
-                      value={world?.autoSleepMinutes === null ? "off" : String(world?.autoSleepMinutes ?? 20)}
-                    >
-                      <option value="10">10 minutos</option>
-                      <option value="20">20 minutos</option>
-                      <option value="30">30 minutos</option>
-                      <option value="60">60 minutos</option>
-                      <option value="off">Desligado · gera alerta de custo</option>
-                    </select>
-                  </label>
-                  {["waking", "going_to_sleep"].includes(worldStatus) && (
-                    <div className="operation-progress" role="status">
-                      <div><span>{operationProgress?.label ?? (worldStatus === "waking" ? "Preparando despertar" : "Preparando sono seguro")}</span><strong>{operationProgress ? `${operationProgress.current} de ${operationProgress.total}` : "Aguardando fase"}</strong></div>
-                      <div className="meter"><span style={{ width: `${operationProgress?.percentage ?? 8}%` }} /></div>
-                      <small>Fase real persistida pela Step Functions. Você pode sair desta tela com segurança.</small>
-                    </div>
-                  )}
                   <div className="world-actions">
-                    <button
-                      className="button button-primary wake-button"
-                      data-testid="wake-world"
-                      disabled={worldStatus !== "sleeping"}
-                      onClick={wakeWorld}
-                      type="button"
-                    >
-                      <span aria-hidden="true">↗</span>
+                    <button className="button button-primary wake-button" data-testid="wake-world" disabled={worldStatus !== "sleeping"} onClick={wakeWorld} type="button">
+                      <Icon name="power" size={18} />
                       {worldStatus === "sleeping" ? "Acordar World" : statusCopy.label}
                     </button>
                     {worldStatus === "online" && (
                       <>
-                        <button
-                          className="button button-primary"
-                          data-testid="connect-world"
-                          onClick={connectWorld}
-                          type="button"
-                        >
-                          Conectar
-                        </button>
-                        <button
-                          className="button button-quiet-dark"
-                          data-testid="sleep-world"
-                          onClick={sleepWorld}
-                          type="button"
-                        >
-                          Dormir com segurança
-                        </button>
+                        <button className="button button-primary" data-testid="connect-world" onClick={connectWorld} type="button"><Icon name="globe" size={18} />Conectar</button>
+                        <button className="button button-quiet-dark" data-testid="sleep-world" onClick={sleepWorld} type="button"><Icon name="moon" size={18} />Dormir com segurança</button>
                       </>
                     )}
-                    <button
-                      className="button button-quiet-dark"
-                      onClick={() => setSection("configuration")}
-                      type="button"
-                    >
-                      Configurar
-                    </button>
-                    <button className="icon-button" aria-label="Mais ações" type="button">•••</button>
+                    <button className="button button-quiet-dark" onClick={() => setSection("configuration")} type="button"><Icon name="settings" size={18} />Configurar</button>
+                    <button className="icon-button" aria-label="Mais ações" type="button"><Icon name="menu" size={18} /></button>
                   </div>
                 </div>
-              </article>
+              </section>
 
-              <div className="overview-grid">
+              <div className="overview-grid console-support-strip">
                 <article className="overview-card">
-                  <div className="card-heading"><div><span className="card-symbol">◒</span><h3>Wallet</h3></div><button onClick={() => setSection("wallet")} type="button">Ver extrato →</button></div>
+                  <div className="card-heading"><div><span className="card-symbol"><Icon name="wallet" size={18} /></span><h3>Wallet</h3></div><button onClick={() => setSection("wallet")} type="button">Ver extrato <Icon name="arrow-right" size={14} /></button></div>
                   <strong className="overview-balance">{formattedWallet}</strong>
                   <p>Saldo disponível para as próximas sessões</p>
                   <div className="meter wallet-meter"><span /></div>
                   <small>Balance Guard ativo · sono seguro reservado</small>
                 </article>
                 <article className="overview-card">
-                  <div className="card-heading"><div><span className="card-symbol">♙</span><h3>Grupo</h3></div><button onClick={() => setSection("members")} type="button">Gerenciar →</button></div>
+                  <div className="card-heading"><div><span className="card-symbol"><Icon name="users" size={18} /></span><h3>Grupo</h3></div><button onClick={() => setSection("members")} type="button">Gerenciar <Icon name="arrow-right" size={14} /></button></div>
                   <div className="member-stack" aria-label={isDemo ? "5 membros" : "Grupo GameWake"}>
                     {isDemo ? <><span>L</span><span>A</span><span>B</span><span>C</span><span>+1</span></> : <span>GW</span>}
                   </div>
@@ -1088,7 +1093,7 @@ export function ConsoleDashboard({
                   <p>{isDemo ? "1 Owner · 1 Manager · 3 Players" : "Player, Manager, Owner e Roles personalizadas"}</p>
                 </article>
                 <article className="overview-card activity-preview">
-                  <div className="card-heading"><div><span className="card-symbol">⌁</span><h3>Atividade recente</h3></div><button onClick={() => setSection("activity")} type="button">Ver tudo →</button></div>
+                  <div className="card-heading"><div><span className="card-symbol"><Icon name="activity" size={18} /></span><h3>Atividade recente</h3></div><button onClick={() => setSection("activity")} type="button">Ver tudo <Icon name="arrow-right" size={14} /></button></div>
                   <ul>
                     <li><span className="event-dot green" /><div><strong>Backup verificado</strong><small>Ontem, 23:42</small></div></li>
                     <li><span className="event-dot amber" /><div><strong>World entrou em sono seguro</strong><small>Ontem, 23:41</small></div></li>
@@ -1101,7 +1106,7 @@ export function ConsoleDashboard({
 
           {section === "wallet" && (
             <div className="panel-page" data-testid="wallet-panel">
-              <div className="panel-heading"><div><span className="section-index">WALLET COMPARTILHADA</span><h1>Créditos do grupo</h1><p>Todo valor é explicado em um ledger imutável. A Wallet nunca fica negativa.</p></div></div>
+              <div className="panel-heading"><div><h1>Créditos do grupo</h1><p>Todo valor é explicado em um ledger imutável. A Wallet nunca fica negativa.</p></div></div>
               <div className="wallet-layout">
                 <article className="balance-panel"><small>Saldo disponível</small><strong>{formattedWallet}</strong><span>BRL</span><div className="guard-status"><i /> Balance Guard ativo</div></article>
                 <article className="contribution-panel">
@@ -1151,12 +1156,12 @@ export function ConsoleDashboard({
 
           {section === "members" && (
             <div className="panel-page" data-testid="members-panel">
-              <div className="panel-heading split"><div><span className="section-index">ACESSO SIMPLES</span><h1>Membros e Roles</h1><p>Use Player, Manager e Owner. Convites do Discord continuam aceitos explicitamente.</p></div></div>
+              <div className="panel-heading split"><div><h1>Membros e Roles</h1><p>Use Player, Manager e Owner. Convites do Discord continuam aceitos explicitamente.</p></div></div>
               <article className="contribution-panel">
                 <h2>Convidar amigos</h2>
                 <p>No Discord, use <code>/gamewake convidar @amigo1 @amigo2</code>. Aqui, informe os IDs internos separados por vírgula.</p>
                 <label>IDs dos amigos<input aria-label="IDs dos amigos" onChange={(event) => setInviteUserIds(event.target.value)} placeholder="user-1, user-2" value={inviteUserIds} /></label>
-                <button className="button button-primary" data-testid="invite-friends" onClick={() => void inviteFriends()} type="button">+ Criar convites</button>
+                <button className="button button-primary" data-testid="invite-friends" onClick={() => void inviteFriends()} type="button"><Icon name="plus" size={17} />Criar convites</button>
                 {saved && <small>Convites criados. Cada amigo ainda precisa aceitar.</small>}
               </article>
               <article className="table-card">
@@ -1169,7 +1174,7 @@ export function ConsoleDashboard({
                       {membership.roles.map((role) => (
                         <span className={`role role-${role.role}`} key={role.id}>
                           {customRoles.find((custom) => custom.id === role.role)?.name ?? role.role}
-                          <button aria-label={`Remover Role ${role.role} de ${membership.userId}`} disabled={confirmationName !== accountName} onClick={() => void removeRole(membership.id, role.id)} type="button">×</button>
+                          <button aria-label={`Remover Role ${role.role} de ${membership.userId}`} disabled={confirmationName !== accountName} onClick={() => void removeRole(membership.id, role.id)} type="button"><Icon name="close" size={12} /></button>
                         </span>
                       ))}
                     </div>
@@ -1195,7 +1200,7 @@ export function ConsoleDashboard({
 
           {section === "configuration" && (
             <div className="panel-page" data-testid="configuration-panel">
-              <div className="panel-heading split"><div><span className="section-index">PALWORLD · CONFIGURAÇÃO GUIADA</span><h1>Configuração</h1><p>Veja o impacto, os valores aceitos e a documentação oficial antes de alterar.</p></div><a className="button button-outline" href="https://tech.palworldgame.com/settings-and-operation/configuration/" rel="noreferrer" target="_blank">Documentação do Palworld ↗</a></div>
+              <div className="panel-heading split"><div><h1>Configuração</h1><p>Veja o impacto, os valores aceitos e a documentação oficial antes de alterar.</p></div><a className="button button-outline" href="https://tech.palworldgame.com/settings-and-operation/configuration/" rel="noreferrer" target="_blank">Documentação do Palworld <Icon name="arrow-right" size={16} /></a></div>
               <div className="config-notice"><span>i</span><p>As alterações criam uma revisão imutável e entram no próximo despertar. Se o World estiver Online, você poderá escolher uma reinicialização segura.</p></div>
               <div className="config-grid">{liveConfigurationFields.map((field) => <article className="config-card" key={field.key}><div><span className="config-key">{field.key}</span><h2>{field.label}</h2><p>{field.impact}</p></div><label>Valor{field.valueType === "boolean" ? <select aria-label={field.label} onChange={(event) => setConfigurationValues((current) => ({ ...current, [field.key]: event.target.value === "true" }))} value={String(configurationValues[field.key] ?? field.default)}><option value="true">Ativado</option><option value="false">Desativado</option></select> : <input aria-label={field.label} onChange={(event) => setConfigurationValues((current) => ({ ...current, [field.key]: field.valueType === "string" ? event.target.value : Number(event.target.value) }))} type={field.valueType === "string" ? "text" : "number"} value={String(configurationValues[field.key] ?? field.default)} />}</label><small>Valores aceitos: <strong>{field.acceptedValues}</strong></small></article>)}</div>
               <div className="sticky-save"><div><strong>{liveConfigurationFields.length} opções validadas</strong><small>Uma revisão imutável será criada · reinicialização pode ser necessária</small></div><button className="button button-primary" data-testid="save-configuration" onClick={() => void saveConfiguration()} type="button">{saved ? "Configuração salva ✓" : "Revisar e salvar"}</button></div>
@@ -1204,10 +1209,10 @@ export function ConsoleDashboard({
 
           {section === "backups" && (
             <div className="panel-page" data-testid="backups-panel">
-              <div className="panel-heading split"><div><span className="section-index">RECOVERY GUARANTEE</span><h1>Backups</h1><p>A última cópia recuperável nunca é removida. Restaurar sempre cria antes um ponto de retorno.</p></div><div className="world-actions"><button className="button button-primary" disabled={!isDemo && worldStatus !== "sleeping"} onClick={() => void createManualBackup()} type="button">+ Backup manual</button><button className="button button-outline" onClick={() => void exportWorld()} type="button">Exportar World</button></div></div>
+              <div className="panel-heading split"><div><h1>Backups</h1><p>A última cópia recuperável nunca é removida. Restaurar sempre cria antes um ponto de retorno.</p></div><div className="world-actions"><button aria-label="+ Backup manual" className="button button-primary" disabled={!isDemo && worldStatus !== "sleeping"} onClick={() => void createManualBackup()} type="button"><Icon name="plus" size={17} />Backup manual</button><button className="button button-outline" onClick={() => void exportWorld()} type="button">Exportar World</button></div></div>
               <article className="storage-card"><div><small>Armazenamento durável</small><strong>{isDemo ? "3 cópias protegidas" : `${backups.length} cópia${backups.length === 1 ? "" : "s"} protegida${backups.length === 1 ? "" : "s"}`}</strong></div><p>Backups, estado atual e exports usam armazenamento privado criptografado.</p>{exportUrl && <a className="button button-primary" href={exportUrl} rel="noreferrer">Baixar export privado</a>}</article>
               <article className="table-card backup-list">
-                {(isDemo ? [{ id: "demo-backup", kind: "manual" as const, sizeBytes: 1_200_000_000, checksumVerified: true, createdAt: "2026-07-31T23:42:00Z" }] : backups).map((backup) => <div className="backup-row" key={backup.id}><span className="backup-icon">{backup.checksumVerified ? "✓" : "!"}</span><div><strong>{backupLabels[backup.kind]}</strong><small>{backup.createdAt ? new Date(backup.createdAt).toLocaleString("pt-BR") : "Data indisponível"} · {formatBytes(backup.sizeBytes)} · {backup.checksumVerified ? "checksum verificado" : "verificação pendente"}</small></div><span className={`backup-badge${backup.kind === "manual" ? " manual" : ""}`}>{backup.kind.toUpperCase()}</span><button aria-label={`Restaurar ${backupLabels[backup.kind]}`} disabled={isDemo || worldStatus !== "sleeping"} onClick={() => void restoreBackup(backup.id)} type="button">Restaurar</button></div>)}
+                {(isDemo ? [{ id: "demo-backup", kind: "manual" as const, sizeBytes: 1_200_000_000, checksumVerified: true, createdAt: "2026-07-31T23:42:00Z" }] : backups).map((backup) => <div className="backup-row" key={backup.id}><span className="backup-icon"><Icon name={backup.checksumVerified ? "check" : "warning"} size={17} /></span><div><strong>{backupLabels[backup.kind]}</strong><small>{backup.createdAt ? new Date(backup.createdAt).toLocaleString("pt-BR") : "Data indisponível"} · {formatBytes(backup.sizeBytes)} · {backup.checksumVerified ? "checksum verificado" : "verificação pendente"}</small></div><span className={`backup-badge${backup.kind === "manual" ? " manual" : ""}`}>{backup.kind.toUpperCase()}</span><button aria-label={`Restaurar ${backupLabels[backup.kind]}`} disabled={isDemo || worldStatus !== "sleeping"} onClick={() => void restoreBackup(backup.id)} type="button">Restaurar</button></div>)}
                 {!isDemo && backups.length === 0 && <p>Nenhum Backup disponível. O primeiro será criado ao concluir o sono seguro.</p>}
               </article>
               {!isDemo && world && <details className="advanced-roles"><summary>Exclusão e portabilidade</summary>{worldStatus === "pending_deletion" ? <><p>Este World está em Pending Deletion por sete dias. O Backup final permanece protegido e você ainda pode exportar ou cancelar.</p><button className="button button-outline" onClick={() => void cancelWorldDeletion()} type="button">Cancelar exclusão</button></> : <><p>Excluir cria um Backup final e inicia sete dias de proteção. Confirme digitando o nome exato do World.</p><label>Nome do World<input aria-label="Confirme o nome do World" onChange={(event) => setDeletionConfirmation(event.target.value)} value={deletionConfirmation} /></label><button className="button button-outline" disabled={worldStatus !== "sleeping" || deletionConfirmation !== world.name} onClick={() => void scheduleWorldDeletion()} type="button">Agendar exclusão</button></>}</details>}
@@ -1216,7 +1221,7 @@ export function ConsoleDashboard({
 
           {section === "activity" && (
             <div className="panel-page" data-testid="activity-panel">
-              <div className="panel-heading"><div><span className="section-index">AUDITORIA REDIGIDA</span><h1>Atividade</h1><p>O grupo acompanha o que aconteceu sem expor senha, token ou dados de pagamento.</p></div></div>
+              <div className="panel-heading"><div><h1>Atividade</h1><p>O grupo acompanha o que aconteceu sem expor senha, token ou dados de pagamento.</p></div></div>
               <article className="timeline-card">
                 <div className="timeline-date">EVENTOS IMUTÁVEIS</div>
                 {(isDemo ? [{ id: "demo-event", action: "role_assignment.revoked", actorUserId: "Leonardo", subjectId: "role-demo", occurredAt: "2026-07-31T23:42:00Z" }] : activityEvents).map((event) => <div className="timeline-row" key={event.id}><span className="event-dot blue" /><div><strong>{activityLabels[event.action] ?? event.action}</strong><p>Recurso {event.subjectId}. O payload é redigido na origem.</p><small>{new Date(event.occurredAt).toLocaleString("pt-BR")} · {event.actorUserId}</small></div></div>)}
@@ -1229,7 +1234,7 @@ export function ConsoleDashboard({
         </div>
 
         <nav className="mobile-nav" aria-label="Navegação móvel">
-          {sections.map((item) => <button className={section === item.id ? "active" : ""} data-testid={`nav-${item.id}`} disabled={!hydrated} key={item.id} onClick={() => setSection(item.id)} type="button"><span>{item.symbol}</span><small>{item.label.split(" ")[0]}</small></button>)}
+          {sections.map((item) => <button className={section === item.id ? "active" : ""} data-testid={`nav-${item.id}`} disabled={!hydrated} key={item.id} onClick={() => setSection(item.id)} type="button"><span><Icon name={item.icon} size={19} /></span><small>{item.label.split(" ")[0]}</small></button>)}
         </nav>
       </section>
       {connectionDetails && (
@@ -1247,7 +1252,7 @@ export function ConsoleDashboard({
                 onClick={() => setConnectionDetails(null)}
                 type="button"
               >
-                ×
+                <Icon name="close" size={19} />
               </button>
             </div>
             <h2>Entre no jogo</h2>
@@ -1263,7 +1268,7 @@ export function ConsoleDashboard({
               </label>
             )}
             <button className="button button-primary full-button" onClick={() => void copyConnection()} type="button">
-              {connectionCopied ? "Conexão copiada ✓" : "Copiar conexão"}
+              {connectionCopied ? "Conexão copiada" : "Copiar conexão"}
             </button>
           </section>
         </div>
@@ -1278,7 +1283,7 @@ export function ConsoleDashboard({
           >
             <div className="dialog-heading">
               <strong>Preço desta sessão</strong>
-              <button aria-label="Cancelar despertar" onClick={() => setWakeEstimate(null)} type="button">×</button>
+              <button aria-label="Cancelar despertar" onClick={() => setWakeEstimate(null)} type="button"><Icon name="close" size={19} /></button>
             </div>
             <h2>{new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(wakeEstimate.hourlyRate))}/h</h2>
             <p>O preço fica travado até o fim da sessão. Para proteger inicialização, pelo menos 15 minutos online e sono seguro, reservaremos {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(wakeEstimate.minimumReservation))} por {wakeEstimate.reservedMinutes} minutos; o valor não usado volta para a Wallet.</p>

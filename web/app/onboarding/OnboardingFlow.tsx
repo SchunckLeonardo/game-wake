@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { Icon } from "../Icon";
 import { gameWakeFetch, gameWakeIdempotencyKey } from "../gamewakeApi";
 import { useHydrated } from "../useHydrated";
 
@@ -63,7 +64,7 @@ export function OnboardingFlow() {
     >
       <header>
         <Link className="brand" href="/">
-          <span className="brand-mark">G</span>
+          <span className="brand-mark"><Icon name="power" size={19} /></span>
           <span>GameWake</span>
         </Link>
         <span>Passo {Math.min(step, 2)} de 2</span>
@@ -72,8 +73,7 @@ export function OnboardingFlow() {
       <section className="onboarding-card">
         {step === 1 && (
           <>
-            <span className="onboarding-symbol" aria-hidden="true">♙</span>
-            <span className="section-index">SEU GRUPO</span>
+            <span className="onboarding-symbol" aria-hidden="true"><Icon name="users" size={23} /></span>
             <h1>Como vocês se chamam?</h1>
             <p>Essa será a conta compartilhada dos amigos. Você poderá convidar todo mundo logo depois.</p>
             <label>
@@ -98,8 +98,7 @@ export function OnboardingFlow() {
         )}
         {step === 2 && (
           <>
-            <span className="onboarding-symbol violet" aria-hidden="true">◉</span>
-            <span className="section-index">PRIMEIRO WORLD</span>
+            <span className="onboarding-symbol violet" aria-hidden="true"><Icon name="globe" size={23} /></span>
             <h1>Onde a aventura vai continuar?</h1>
             <p>Escolha só o que importa para o jogo. O GameWake cuida do resto.</p>
             <label>
@@ -130,8 +129,7 @@ export function OnboardingFlow() {
         )}
         {step === 3 && (
           <div className="onboarding-success">
-            <span aria-hidden="true">✓</span>
-            <span className="section-index">GAMEWAKE CONFIGURADO</span>
+            <span aria-hidden="true"><Icon name="check" size={26} /></span>
             <h1>Tudo pronto para jogar</h1>
             <p><strong>{worldName}</strong> pertence ao grupo <strong>{groupName}</strong>. Agora convide os amigos ou acorde o World.</p>
             {recoveryCodes.length > 0 && (

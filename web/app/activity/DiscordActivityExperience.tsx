@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { ConsoleDashboard } from "../console/ConsoleDashboard";
 import { gameWakeFetch } from "../gamewakeApi";
+import { Icon } from "../Icon";
 import { DiscordActivityBridge } from "./DiscordActivityBridge";
 
 type AccountList = { accounts: Array<{ id: string }> };
@@ -27,8 +28,7 @@ export function DiscordActivityExperience() {
       {needsOnboarding ? (
         <main className="onboarding-shell">
           <section className="onboarding-card">
-            <span className="onboarding-symbol" aria-hidden="true">◉</span>
-            <span className="section-index">PRIMEIRO ACESSO</span>
+            <span className="onboarding-symbol" aria-hidden="true"><Icon name="globe" size={23} /></span>
             <h1>Crie seu primeiro grupo</h1>
             <p>Abra a Console no navegador uma vez para concluir o onboarding.</p>
             <a className="button button-primary" href="/onboarding" target="_blank">

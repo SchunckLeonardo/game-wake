@@ -5,6 +5,7 @@ import {
   GAMEWAKE_SESSION_KEY,
   gameWakeFetch,
 } from "../../gamewakeApi";
+import { Icon } from "../../Icon";
 
 type AccountList = { accounts: Array<{ id: string }> };
 type OwnerRecovery = {
@@ -65,8 +66,7 @@ export function AuthCallback() {
     return (
       <main className="onboarding-shell">
         <section className="onboarding-card">
-          <span className="onboarding-symbol" aria-hidden="true">⌘</span>
-          <span className="section-index">OWNER RECOVERY</span>
+          <span className="onboarding-symbol" aria-hidden="true"><Icon name="shield" size={23} /></span>
           <h1>Guarde seus códigos de recuperação</h1>
           <p>Seu e-mail verificado é <strong>{ownerRecovery[0].verifiedEmail}</strong>. Cada código funciona uma única vez; o GameWake não consegue exibi-los novamente.</p>
           <pre className="recovery-codes">{ownerRecovery.flatMap((item) => item.codes).join("\n")}</pre>
@@ -79,8 +79,7 @@ export function AuthCallback() {
   return (
     <main className="onboarding-shell">
       <section aria-live="polite" className="onboarding-card" role="status">
-        <span className="onboarding-symbol" aria-hidden="true">◉</span>
-        <span className="section-index">DISCORD SIGN-IN</span>
+        <span className="onboarding-symbol" aria-hidden="true"><Icon name="discord" size={23} /></span>
         <h1>Entrando no GameWake</h1>
         <p>{message}</p>
       </section>
