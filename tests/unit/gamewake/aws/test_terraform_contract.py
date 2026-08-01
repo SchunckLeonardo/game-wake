@@ -81,8 +81,9 @@ def test_standard_workflow_invokes_the_worker_with_structured_logs():
     assert "ReadDiscordNotificationToken" in orchestration
 
 
-def test_world_data_is_kms_encrypted_versioned_and_never_public():
+def test_world_data_is_kms_encrypted_versioned_bounded_and_never_public():
     storage = source("gamewake-storage.tf")
+    orchestration = source("gamewake-orchestration.tf")
 
     assert 'resource "aws_s3_bucket" "world_data"' in storage
     assert 'resource "aws_kms_key" "world_data"' in storage
@@ -90,9 +91,17 @@ def test_world_data_is_kms_encrypted_versioned_and_never_public():
     assert "restrict_public_buckets = true" in storage
     assert 'sse_algorithm     = "aws:kms"' in storage
     assert "force_destroy = false" in storage
+    assert 'id     = "expire-hidden-state-versions"' in storage
+    assert 'prefix = "states/"' in storage
+    assert 'id     = "expire-hidden-backup-versions"' in storage
+    assert 'prefix = "backups/"' in storage
+    assert "noncurrent_version_expiration" in storage
+    assert "var.world_data_noncurrent_version_retention_days" in storage
+    assert '"s3:DeleteObjectVersion"' in orchestration
+    assert '"s3:ListBucketVersions"' in orchestration
 
 
-def test_disposable_runtimes_use_a_launch_template_and_reconciliation_schedule():
+def test_disposable_runtimes_use_a_launch_template_without_idle_reconciliation_polling():
     runtime = source("gamewake-runtime.tf")
     schedules = source("gamewake-schedules.tf")
 
@@ -100,8 +109,8 @@ def test_disposable_runtimes_use_a_launch_template_and_reconciliation_schedule()
     assert 'instance_initiated_shutdown_behavior = "terminate"' in runtime
     assert "metadata_options" in runtime
     assert 'http_tokens                 = "required"' in runtime
-    assert 'resource "aws_scheduler_schedule" "reconciliation"' in schedules
-    assert 'schedule_expression = "rate(5 minutes)"' in schedules
+    assert 'resource "aws_scheduler_schedule" "reconciliation"' not in schedules
+    assert 'schedule_expression = "rate(5 minutes)"' not in schedules
 
 
 def test_legacy_single_server_stack_is_removed():
@@ -157,14 +166,24 @@ def test_runtime_pricing_is_injected_into_api_and_usage_meter_worker():
     assert "RUNTIME_PROFILE_HOURLY_RATES_JSON" in api
     assert "PostgresBillingRepository" not in orchestration
     assert "AURORA_CLUSTER_ARN" in orchestration
+    assert "palworld-small = 5.50" in variables
 
 
-def test_online_session_monitor_runs_every_minute_for_auto_sleep_and_balance_guard():
+def test_online_session_monitor_runs_inside_the_active_world_workflow_only():
     schedules = source("gamewake-schedules.tf")
+    orchestration = source("gamewake-orchestration.tf")
+    state_machine = source("state-machines/world-operation.asl.json")
 
-    assert 'resource "aws_scheduler_schedule" "session_monitor"' in schedules
-    assert 'schedule_expression = "rate(1 minute)"' in schedules
-    assert 'action            = "monitor_sessions"' in schedules
+    assert 'resource "aws_scheduler_schedule" "session_monitor"' not in schedules
+    assert 'resource "aws_scheduler_schedule" "reconciliation"' not in schedules
+    assert 'schedule_expression = "rate(1 minute)"' not in schedules
+    assert 'schedule_expression = "rate(5 minutes)"' not in schedules
+    assert 'action            = "monitor_sessions"' not in schedules
+    assert "world_operation_state_machine_arn" in orchestration
+    assert '"WaitBeforeSessionCheck"' in state_machine
+    assert '"action": "monitor_session"' in state_machine
+    assert '"RenewSessionMonitor"' in state_machine
+    assert '"states:StartExecution"' in orchestration
 
 
 def test_daily_data_maintenance_enforces_pending_deletion_and_storage_grace():

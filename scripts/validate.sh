@@ -39,7 +39,11 @@ if [[ $lambda_hash_before != "$lambda_hash_after" ]]; then
   exit 1
 fi
 
-terraform -chdir=terraform fmt -check -recursive
+terraform_files=()
+while IFS= read -r terraform_file; do
+  terraform_files+=("$project_root/$terraform_file")
+done < <(git -C "$project_root" ls-files 'terraform/*.tf')
+terraform fmt -check "${terraform_files[@]}"
 if [[ ! -d terraform/.terraform ]]; then
   terraform -chdir=terraform init -backend=false
 fi

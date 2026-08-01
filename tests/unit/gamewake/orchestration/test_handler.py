@@ -51,6 +51,8 @@ def test_handler_advances_one_durable_phase_and_reports_progress():
     assert result == {
         "account_id": "account-123",
         "operation_id": "operation-123",
+        "world_id": "world-123",
+        "operation_type": "wake",
         "status": "running",
         "phase": "starting_game",
         "terminal": False,

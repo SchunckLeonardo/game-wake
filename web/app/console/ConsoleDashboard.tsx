@@ -468,8 +468,8 @@ export function ConsoleDashboard({
     if (isDemo) {
       setWakeEstimate({
         currency: "BRL",
-        hourlyRate: "3.60",
-        minimumReservation: "1.50",
+        hourlyRate: "5.50",
+        minimumReservation: "2.30",
         reservedMinutes: 25,
       });
       return;

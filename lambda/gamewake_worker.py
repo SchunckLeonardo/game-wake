@@ -33,10 +33,13 @@ from gamewake.persistence import (
     PostgresWorldRepository,
 )
 from gamewake.worlds import (
+    OperationStatus,
+    OperationType,
     StoragePolicy,
     StoragePolicyService,
     WorldData,
     WorldOperationWorker,
+    WorldStatus,
 )
 
 
@@ -181,33 +184,50 @@ def handle_event(event: dict[str, Any], *, services: Any) -> dict[str, Any]:
         for operation in operations:
             orchestrator.ensure_running(str(operation["account_id"]), str(operation["id"]))
         return {"reconciled": len(operations)}
-    if action == "monitor_sessions":
+    if action == "monitor_session":
         state_machine_arn = event.get("state_machine_arn")
         if not isinstance(state_machine_arn, str) or not state_machine_arn:
             raise ValueError("state_machine_arn is required for session monitoring")
+        account_id = event.get("account_id")
+        world_id = event.get("world_id")
+        if not isinstance(account_id, str) or not isinstance(world_id, str):
+            raise ValueError("account_id and world_id are required for session monitoring")
         raw_idle_minutes = event.get("idle_minutes")
         idle_minutes = int(raw_idle_minutes) if raw_idle_minutes is not None else None
-        with services.database.transaction() as transaction:
-            worlds = transaction.fetch_all(
-                """
-                SELECT account_id, id
-                FROM worlds
-                WHERE status = 'online'
-                ORDER BY account_id, id
-                """
-            )
+        monitor_checks = int(event.get("monitor_checks", 0))
+        if monitor_checks < 0:
+            raise ValueError("monitor_checks must be non-negative")
+        world = services.world_repository.get(account_id, world_id)
         orchestrator = services.orchestrator_factory(state_machine_arn)
-        sleep_operations = 0
-        for world in worlds:
+        operation = None
+        if world.status is WorldStatus.ONLINE:
             operation = services.worker.monitor_session(
-                str(world["account_id"]),
-                str(world["id"]),
+                account_id,
+                world_id,
                 idle_minutes=idle_minutes,
             )
-            if operation is not None:
-                orchestrator.ensure_running(str(world["account_id"]), operation.id)
-                sleep_operations += 1
-        return {"monitored": len(worlds), "sleep_operations": sleep_operations}
+        elif world.status is WorldStatus.GOING_TO_SLEEP:
+            operation = next(
+                (
+                    candidate
+                    for candidate in reversed(
+                        services.world_repository.list_operations(account_id, world_id)
+                    )
+                    if candidate.operation_type is OperationType.SLEEP
+                    and candidate.status in {OperationStatus.PENDING, OperationStatus.RUNNING}
+                ),
+                None,
+            )
+        if operation is not None:
+            orchestrator.ensure_running(account_id, operation.id)
+        return {
+            "account_id": account_id,
+            "world_id": world_id,
+            "session_monitor": True,
+            "monitor_checks": monitor_checks + 1,
+            "continue_monitoring": world.status is WorldStatus.ONLINE and operation is None,
+            "sleep_operation_id": operation.id if operation is not None else None,
+        }
     if action == "maintain_data":
         raw_observed_at = event.get("observed_at")
         observed_at = (

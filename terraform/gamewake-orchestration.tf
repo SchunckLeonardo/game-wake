@@ -143,8 +143,10 @@ data "aws_iam_policy_document" "operation_worker" {
     effect = "Allow"
     actions = [
       "s3:DeleteObject",
+      "s3:DeleteObjectVersion",
       "s3:GetObject",
       "s3:ListBucket",
+      "s3:ListBucketVersions",
       "s3:PutObject",
     ]
     resources = [
@@ -267,6 +269,13 @@ data "aws_iam_policy_document" "step_functions" {
   }
 
   statement {
+    sid       = "RenewLongRunningSessionMonitor"
+    effect    = "Allow"
+    actions   = ["states:StartExecution"]
+    resources = [local.world_operation_state_machine_arn]
+  }
+
+  statement {
     sid    = "DeliverWorkflowLogs"
     effect = "Allow"
     actions = [
@@ -294,7 +303,8 @@ resource "aws_sfn_state_machine" "world_operation" {
   role_arn = aws_iam_role.step_functions.arn
   type     = "STANDARD"
   definition = templatefile("${path.module}/state-machines/world-operation.asl.json", {
-    operation_worker_arn = aws_lambda_function.operation_worker.arn
+    operation_worker_arn              = aws_lambda_function.operation_worker.arn
+    world_operation_state_machine_arn = local.world_operation_state_machine_arn
   })
 
   logging_configuration {

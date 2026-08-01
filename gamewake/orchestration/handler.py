@@ -28,6 +28,8 @@ def advance_operation(event: Mapping[str, Any], *, worker: Any) -> dict[str, obj
     return {
         "account_id": account_id,
         "operation_id": operation_id,
+        "world_id": operation.world_id,
+        "operation_type": operation.operation_type.value,
         "status": operation.status.value,
         "phase": operation.phase.value,
         "terminal": operation.status in _TERMINAL_STATUSES,

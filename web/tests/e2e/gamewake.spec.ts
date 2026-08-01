@@ -50,7 +50,7 @@ test("group contributes, invites friends, wakes, connects, configures and sleeps
 
   await navigation(page, "worlds").click();
   await page.getByTestId("wake-world").click();
-  await expect(page.getByRole("dialog", { name: "Confirmar despertar de Palpagos" })).toContainText("R$ 3,60/h");
+  await expect(page.getByRole("dialog", { name: "Confirmar despertar de Palpagos" })).toContainText("R$ 5,50/h");
   await page.getByRole("button", { name: "Confirmar e acordar" }).click();
   await expect(page.getByRole("status")).toContainText("Restaurando World");
   await expect(page.getByTestId("connect-world")).toBeVisible();
@@ -227,7 +227,7 @@ test("authenticated Console loads and mutates the real World through bearer API"
   await page.route("**/api/v1/accounts/account-live/worlds/world-live/wake/estimate", async (route) => {
     await route.fulfill({
       contentType: "application/json",
-      body: JSON.stringify({ estimate: { currency: "BRL", hourlyRate: "3.60", minimumReservation: "1.50", reservedMinutes: 25 } }),
+      body: JSON.stringify({ estimate: { currency: "BRL", hourlyRate: "5.50", minimumReservation: "2.30", reservedMinutes: 25 } }),
     });
   });
 
@@ -235,7 +235,7 @@ test("authenticated Console loads and mutates the real World through bearer API"
   await expect(page.getByText("Mundo real")).toBeVisible();
   await expect(page.getByText("R$ 18,50").first()).toBeVisible();
   await page.getByTestId("wake-world").click();
-  await expect(page.getByRole("dialog", { name: "Confirmar despertar de Mundo real" })).toContainText("R$ 3,60/h");
+  await expect(page.getByRole("dialog", { name: "Confirmar despertar de Mundo real" })).toContainText("R$ 5,50/h");
   await page.getByRole("button", { name: "Confirmar e acordar" }).click();
 
   expect(wakeBody).toMatchObject({ idempotencyKey: expect.any(String) });

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import gamewake_worker
 
 from gamewake.billing import InsufficientFundsError
-from gamewake.worlds import OperationPhase, OperationStatus
+from gamewake.worlds import OperationPhase, OperationStatus, OperationType, WorldStatus
 
 
 class Migrations:
@@ -51,14 +51,20 @@ class Orchestrator:
 
 
 class Worker:
+    def __init__(self):
+        self.monitor_calls = []
+
     def advance(self, account_id, operation_id):
         return SimpleNamespace(
+            world_id="world-1",
+            operation_type=OperationType.WAKE,
             status=OperationStatus.RUNNING,
             phase=OperationPhase.STARTING_GAME,
         )
 
     def monitor_session(self, account_id, world_id, **kwargs):
         assert kwargs["idle_minutes"] is None
+        self.monitor_calls.append((account_id, world_id))
         return SimpleNamespace(id=f"sleep-{world_id}")
 
 
@@ -92,11 +98,22 @@ class Billing:
 
 
 class Repository:
+    def __init__(self, *, world_status=WorldStatus.ONLINE):
+        self.world_status = world_status
+
     def get_operation(self, account_id, operation_id):
-        return SimpleNamespace(id=operation_id, world_id="world-1")
+        return SimpleNamespace(
+            id=operation_id,
+            world_id="world-1",
+            operation_type=OperationType.SLEEP,
+            status=OperationStatus.PENDING,
+        )
 
     def get(self, account_id, world_id):
-        return SimpleNamespace(id=world_id)
+        return SimpleNamespace(id=world_id, status=self.world_status)
+
+    def list_operations(self, account_id, world_id):
+        return ()
 
 
 class AccountRepository:
@@ -120,8 +137,9 @@ def test_worker_composition_source_includes_persistent_runtime_usage_billing():
     assert "PostgresBillingRepository" in source
 
 
-def services(orchestrator=None):
+def services(orchestrator=None, *, repository=None):
     orchestrator = orchestrator or Orchestrator()
+    repository = repository or Repository()
     return SimpleNamespace(
         migrations=Migrations(),
         database=Database(),
@@ -130,7 +148,7 @@ def services(orchestrator=None):
         storage=Storage(),
         billing=Billing(),
         storage_rate_per_gib_month=Decimal("2.00"),
-        world_repository=Repository(),
+        world_repository=repository,
         account_repository=AccountRepository(),
         notifier=Notifier(),
         orchestrator_factory=lambda arn: orchestrator,
@@ -170,6 +188,8 @@ def test_default_action_advances_exactly_one_world_operation_phase():
     assert result == {
         "account_id": "account-1",
         "operation_id": "operation-1",
+        "world_id": "world-1",
+        "operation_type": "wake",
         "status": "running",
         "phase": "starting_game",
         "terminal": False,
@@ -182,6 +202,7 @@ def test_terminal_operation_notifies_the_accounts_discord_channel():
         status=OperationStatus.SUCCEEDED,
         phase=OperationPhase.COMPLETE,
         world_id="world-1",
+        operation_type=OperationType.WAKE,
     )
 
     result = gamewake_worker.handle_event(
@@ -194,21 +215,78 @@ def test_terminal_operation_notifies_the_accounts_discord_channel():
     assert composed.notifier.calls == [("account-1", "world-1", "operation-1")]
 
 
-def test_monitor_sessions_dispatches_safe_sleep_operations():
+def test_active_world_monitor_dispatches_one_safe_sleep_operation_and_stops_looping():
     orchestrator = Orchestrator()
+    composed = services(orchestrator)
     result = gamewake_worker.handle_event(
         {
-            "action": "monitor_sessions",
+            "action": "monitor_session",
+            "account_id": "account-1",
+            "world_id": "world-1",
+            "monitor_checks": 41,
             "state_machine_arn": "arn:aws:states:us-east-1:123:stateMachine:worlds",
         },
-        services=services(orchestrator),
+        services=composed,
     )
 
-    assert result == {"monitored": 2, "sleep_operations": 2}
-    assert orchestrator.calls == [
-        ("account-1", "sleep-operation-1"),
-        ("account-2", "sleep-operation-2"),
-    ]
+    assert result == {
+        "account_id": "account-1",
+        "world_id": "world-1",
+        "session_monitor": True,
+        "monitor_checks": 42,
+        "continue_monitoring": False,
+        "sleep_operation_id": "sleep-world-1",
+    }
+    assert composed.worker.monitor_calls == [("account-1", "world-1")]
+    assert orchestrator.calls == [("account-1", "sleep-world-1")]
+
+
+def test_active_world_monitor_keeps_looping_while_the_world_needs_no_sleep():
+    composed = services()
+    composed.worker.monitor_session = lambda *args, **kwargs: None
+
+    result = gamewake_worker.handle_event(
+        {
+            "action": "monitor_session",
+            "account_id": "account-1",
+            "world_id": "world-1",
+            "state_machine_arn": "arn:aws:states:us-east-1:123:stateMachine:worlds",
+        },
+        services=composed,
+    )
+
+    assert result["continue_monitoring"] is True
+    assert result["sleep_operation_id"] is None
+    assert result["monitor_checks"] == 1
+
+
+def test_active_world_monitor_recovers_a_sleep_dispatch_after_a_retry():
+    repository = Repository(world_status=WorldStatus.GOING_TO_SLEEP)
+    repository.list_operations = lambda account_id, world_id: (
+        SimpleNamespace(
+            id="sleep-existing",
+            operation_type=OperationType.SLEEP,
+            status=OperationStatus.PENDING,
+        ),
+    )
+    orchestrator = Orchestrator()
+    composed = services(orchestrator, repository=repository)
+
+    result = gamewake_worker.handle_event(
+        {
+            "action": "monitor_session",
+            "account_id": "account-1",
+            "world_id": "world-1",
+            "state_machine_arn": "arn:aws:states:us-east-1:123:stateMachine:worlds",
+        },
+        services=composed,
+    )
+
+    assert result["continue_monitoring"] is False
+    assert result["sleep_operation_id"] == "sleep-existing"
+    assert result["monitor_checks"] == 1
+    assert composed.worker.monitor_calls == []
+    assert orchestrator.calls == [("account-1", "sleep-existing")]
 
 
 def test_daily_data_maintenance_purges_due_deletions_and_evaluates_storage_grace():

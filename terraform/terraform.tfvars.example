@@ -25,14 +25,15 @@ abacatepay_packages = [
 
 # Preco de beta ilustrativo: valide custo, impostos e margem antes de publicar.
 runtime_profile_hourly_rates = {
-  palworld-small = 3.60
+  palworld-small = 5.50
 }
 
 # 10 GiB incluidos por conta; excedente sem saldo entra em 30 dias de tolerancia.
-storage_allowance_bytes = 10737418240
-storage_grace_days      = 30
-storage_rate_per_gib_month_brl = 2
-operations_alarm_email         = "operacoes@example.com"
+storage_allowance_bytes                         = 10737418240
+storage_grace_days                              = 30
+storage_rate_per_gib_month_brl                  = 2
+world_data_noncurrent_version_retention_days    = 7
+operations_alarm_email                          = "operacoes@example.com"
 
 palworld_allowed_cidr = "0.0.0.0/0"
 

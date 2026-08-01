@@ -183,7 +183,7 @@ variable "runtime_profile_hourly_rates" {
   description = "Preco final por hora em BRL de cada Runtime Profile oferecido no MVP."
   type        = map(number)
   default = {
-    palworld-small = 3.60
+    palworld-small = 5.50
   }
 
   validation {
@@ -256,6 +256,21 @@ variable "storage_rate_per_gib_month_brl" {
   validation {
     condition     = var.storage_rate_per_gib_month_brl > 0
     error_message = "storage_rate_per_gib_month_brl deve ser positivo."
+  }
+}
+
+variable "world_data_noncurrent_version_retention_days" {
+  description = "Dias de seguranca antes de remover versoes S3 nao atuais que nao foram apagadas explicitamente."
+  type        = number
+  default     = 7
+
+  validation {
+    condition = (
+      var.world_data_noncurrent_version_retention_days >= 1 &&
+      var.world_data_noncurrent_version_retention_days <= 30 &&
+      floor(var.world_data_noncurrent_version_retention_days) == var.world_data_noncurrent_version_retention_days
+    )
+    error_message = "world_data_noncurrent_version_retention_days deve ser um numero inteiro entre 1 e 30."
   }
 }
 

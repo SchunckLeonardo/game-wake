@@ -15,7 +15,11 @@ esac
 
 "$project_root/scripts/package-lambda.sh"
 terraform -chdir="$terraform_dir" init
-terraform -chdir="$terraform_dir" fmt -check -recursive
+terraform_files=()
+while IFS= read -r terraform_file; do
+  terraform_files+=("$project_root/$terraform_file")
+done < <(git -C "$project_root" ls-files 'terraform/*.tf')
+terraform fmt -check "${terraform_files[@]}"
 terraform -chdir="$terraform_dir" validate
 terraform -chdir="$terraform_dir" plan -out=tfplan
 terraform -chdir="$terraform_dir" show -no-color tfplan
@@ -34,4 +38,3 @@ if [[ $confirmation != APLICAR ]]; then
 fi
 
 terraform -chdir="$terraform_dir" apply tfplan
-

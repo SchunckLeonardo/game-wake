@@ -85,6 +85,40 @@ resource "aws_s3_bucket_lifecycle_configuration" "world_data" {
     }
   }
 
+  rule {
+    id     = "expire-hidden-state-versions"
+    status = "Enabled"
+
+    filter {
+      prefix = "states/"
+    }
+
+    expiration {
+      expired_object_delete_marker = true
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = var.world_data_noncurrent_version_retention_days
+    }
+  }
+
+  rule {
+    id     = "expire-hidden-backup-versions"
+    status = "Enabled"
+
+    filter {
+      prefix = "backups/"
+    }
+
+    expiration {
+      expired_object_delete_marker = true
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = var.world_data_noncurrent_version_retention_days
+    }
+  }
+
   depends_on = [aws_s3_bucket_versioning.world_data]
 }
 

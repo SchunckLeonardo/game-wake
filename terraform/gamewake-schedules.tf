@@ -43,66 +43,6 @@ resource "aws_iam_role_policy" "scheduler" {
   policy = data.aws_iam_policy_document.scheduler.json
 }
 
-resource "aws_scheduler_schedule" "reconciliation" {
-  name                = "${local.name_prefix}-reconcile-operations"
-  schedule_expression = "rate(5 minutes)"
-  state               = "ENABLED"
-
-  flexible_time_window {
-    mode = "OFF"
-  }
-
-  target {
-    arn      = aws_lambda_function.operation_worker.arn
-    role_arn = aws_iam_role.scheduler.arn
-    input = jsonencode({
-      action            = "reconcile"
-      state_machine_arn = aws_sfn_state_machine.world_operation.arn
-    })
-
-    dead_letter_config {
-      arn = aws_sqs_queue.operations_dead_letter.arn
-    }
-
-    retry_policy {
-      maximum_event_age_in_seconds = 900
-      maximum_retry_attempts       = 3
-    }
-  }
-
-  depends_on = [aws_iam_role_policy.scheduler]
-}
-
-resource "aws_scheduler_schedule" "session_monitor" {
-  name                = "${local.name_prefix}-monitor-sessions"
-  schedule_expression = "rate(1 minute)"
-  state               = "ENABLED"
-
-  flexible_time_window {
-    mode = "OFF"
-  }
-
-  target {
-    arn      = aws_lambda_function.operation_worker.arn
-    role_arn = aws_iam_role.scheduler.arn
-    input = jsonencode({
-      action            = "monitor_sessions"
-      state_machine_arn = aws_sfn_state_machine.world_operation.arn
-    })
-
-    dead_letter_config {
-      arn = aws_sqs_queue.operations_dead_letter.arn
-    }
-
-    retry_policy {
-      maximum_event_age_in_seconds = 300
-      maximum_retry_attempts       = 2
-    }
-  }
-
-  depends_on = [aws_iam_role_policy.scheduler]
-}
-
 resource "aws_scheduler_schedule" "data_maintenance" {
   name                = "${local.name_prefix}-maintain-world-data"
   schedule_expression = "cron(0 3 * * ? *)"

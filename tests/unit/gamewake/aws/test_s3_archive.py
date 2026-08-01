@@ -52,6 +52,11 @@ class FakeS3Client:
         }
         self.copy_calls = []
         self.delete_calls = []
+        self.current_versions = {
+            "states/account-123/world-123/state-123.tar.zst": "state-current",
+        }
+        self.previous_versions = []
+        self.delete_markers = []
 
     def head_object(self, *, Bucket, Key, **kwargs):
         del Bucket, kwargs
@@ -72,6 +77,7 @@ class FakeS3Client:
             "Metadata": Metadata,
             "LastModified": NOW,
         }
+        self.current_versions[Key] = f"current-{len(self.current_versions) + 1}"
 
     def list_objects_v2(self, *, Bucket, Prefix, **kwargs):
         del Bucket, kwargs
@@ -96,6 +102,18 @@ class FakeS3Client:
             "Metadata": Metadata,
             "LastModified": NOW,
         }
+        self.current_versions[Key] = f"current-{len(self.current_versions) + 1}"
+
+    def list_object_versions(self, *, Bucket, Prefix, **kwargs):
+        del Bucket, kwargs
+        versions = [
+            {"Key": key, "VersionId": version_id}
+            for key, version_id in self.current_versions.items()
+            if key.startswith(Prefix)
+        ]
+        versions.extend(item for item in self.previous_versions if item["Key"].startswith(Prefix))
+        markers = [item for item in self.delete_markers if item["Key"].startswith(Prefix)]
+        return {"Versions": versions, "DeleteMarkers": markers, "IsTruncated": False}
 
     def generate_presigned_url(self, operation, *, Params, ExpiresIn):
         assert operation == "get_object"
@@ -105,7 +123,21 @@ class FakeS3Client:
         del Bucket
         self.delete_calls.append(Delete)
         for entry in Delete["Objects"]:
-            self.objects.pop(entry["Key"], None)
+            key = entry["Key"]
+            version_id = entry.get("VersionId")
+            if version_id is None or self.current_versions.get(key) == version_id:
+                self.objects.pop(key, None)
+                self.current_versions.pop(key, None)
+            self.previous_versions = [
+                item
+                for item in self.previous_versions
+                if not (item["Key"] == key and item["VersionId"] == version_id)
+            ]
+            self.delete_markers = [
+                item
+                for item in self.delete_markers
+                if not (item["Key"] == key and item["VersionId"] == version_id)
+            ]
 
 
 def test_automatic_backup_copies_a_validated_state_once_with_durable_metadata():
@@ -186,6 +218,25 @@ def test_delete_world_data_removes_only_the_selected_tenant_prefixes():
         "ContentLength": 4,
         "Metadata": {},
     }
+    client.current_versions["states/other-account/world-123/keep.tar.zst"] = "keep-current"
+    client.previous_versions.extend(
+        [
+            {
+                "Key": "states/account-123/world-123/state-123.tar.zst",
+                "VersionId": "state-hidden",
+            },
+            {
+                "Key": "states/other-account/world-123/keep.tar.zst",
+                "VersionId": "keep-hidden",
+            },
+        ]
+    )
+    client.delete_markers.append(
+        {
+            "Key": "backups/account-123/world-123/automatic/deleted.tar.zst",
+            "VersionId": "deleted-marker",
+        }
+    )
     archive = S3WorldArchiveStore("world-data", client=client, clock=lambda: NOW)
     archive.create_automatic(
         world(),
@@ -200,3 +251,40 @@ def test_delete_world_data_removes_only_the_selected_tenant_prefixes():
     )
 
     assert set(client.objects) == {"states/other-account/world-123/keep.tar.zst"}
+    assert client.previous_versions == [
+        {
+            "Key": "states/other-account/world-123/keep.tar.zst",
+            "VersionId": "keep-hidden",
+        }
+    ]
+    assert client.delete_markers == []
+    deleted = [entry for call in client.delete_calls for entry in call["Objects"]]
+    assert all("VersionId" in entry for entry in deleted)
+
+
+def test_pruning_an_automatic_backup_removes_every_billable_version():
+    client = FakeS3Client()
+    archive = S3WorldArchiveStore("world-data", client=client, clock=lambda: NOW)
+    backup = archive.create_automatic(
+        world(),
+        StoredWorldState(id="state-123", checksum="sha256:abc123", validated=True),
+        idempotency_key="sleep-123:backup",
+    )
+    backup_key = next(key for key in client.objects if key.startswith("backups/"))
+    current_version = client.current_versions[backup_key]
+    client.previous_versions.append({"Key": backup_key, "VersionId": "backup-hidden"})
+
+    pruned = archive.prune_oldest_automatic(
+        "account-123",
+        (world(),),
+        bytes_to_free=1,
+    )
+
+    assert pruned == (backup,)
+    assert backup_key not in client.objects
+    assert all(item["Key"] != backup_key for item in client.previous_versions)
+    deleted = [entry for call in client.delete_calls for entry in call["Objects"]]
+    assert {entry["VersionId"] for entry in deleted} >= {
+        "backup-hidden",
+        current_version,
+    }

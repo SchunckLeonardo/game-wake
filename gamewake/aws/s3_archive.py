@@ -157,15 +157,8 @@ class S3WorldArchiveStore:
             f"backups/{account_id}/{world_id}/",
             f"exports/{account_id}/{world_id}/",
         )
-        keys = [item["Key"] for prefix in prefixes for item in self._list(prefix)]
-        for offset in range(0, len(keys), 1000):
-            self._client.delete_objects(
-                Bucket=self._bucket,
-                Delete={
-                    "Objects": [{"Key": key} for key in keys[offset : offset + 1000]],
-                    "Quiet": True,
-                },
-            )
+        versions = [item for prefix in prefixes for item in self._list_versions(prefix)]
+        self._delete_versions(versions)
 
     def storage_usage(self, account_id: str, worlds: tuple[World, ...]) -> int:
         active_worlds = tuple(
@@ -210,10 +203,9 @@ class S3WorldArchiveStore:
         for backup in candidates:
             if freed >= bytes_to_free:
                 break
-            self._client.delete_objects(
-                Bucket=self._bucket,
-                Delete={"Objects": [{"Key": self._backup_key(backup)}], "Quiet": True},
-            )
+            key = self._backup_key(backup)
+            versions = tuple(item for item in self._list_versions(key) if item["Key"] == key)
+            self._delete_versions(versions or ({"Key": key},))
             pruned.append(backup)
             freed += backup.size_bytes
         return tuple(pruned)
@@ -297,6 +289,33 @@ class S3WorldArchiveStore:
             if not response.get("IsTruncated"):
                 return
             token = response["NextContinuationToken"]
+
+    def _list_versions(self, prefix: str) -> Iterator[dict[str, str]]:
+        key_marker = None
+        version_marker = None
+        while True:
+            request: dict[str, Any] = {"Bucket": self._bucket, "Prefix": prefix}
+            if key_marker is not None:
+                request["KeyMarker"] = key_marker
+            if version_marker is not None:
+                request["VersionIdMarker"] = version_marker
+            response = self._client.list_object_versions(**request)
+            for item in (*response.get("Versions", []), *response.get("DeleteMarkers", [])):
+                yield {"Key": str(item["Key"]), "VersionId": str(item["VersionId"])}
+            if not response.get("IsTruncated"):
+                return
+            key_marker = response["NextKeyMarker"]
+            version_marker = response.get("NextVersionIdMarker")
+
+    def _delete_versions(self, versions: tuple[dict[str, str], ...] | list[dict[str, str]]) -> None:
+        for offset in range(0, len(versions), 1000):
+            self._client.delete_objects(
+                Bucket=self._bucket,
+                Delete={
+                    "Objects": versions[offset : offset + 1000],
+                    "Quiet": True,
+                },
+            )
 
     def _presigned(self, key: str) -> str:
         return self._client.generate_presigned_url(

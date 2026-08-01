@@ -1,7 +1,18 @@
 {
   "Comment": "Advance a persisted GameWake World operation one idempotent phase at a time",
-  "StartAt": "AdvanceOperation",
+  "StartAt": "RouteExecution",
   "States": {
+    "RouteExecution": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.session_monitor",
+          "BooleanEquals": true,
+          "Next": "WaitBeforeSessionCheck"
+        }
+      ],
+      "Default": "AdvanceOperation"
+    },
     "AdvanceOperation": {
       "Type": "Task",
       "Resource": "${operation_worker_arn}",
@@ -35,6 +46,23 @@
       "Type": "Choice",
       "Choices": [
         {
+          "And": [
+            {
+              "Variable": "$.terminal",
+              "BooleanEquals": true
+            },
+            {
+              "Variable": "$.status",
+              "StringEquals": "succeeded"
+            },
+            {
+              "Variable": "$.operation_type",
+              "StringEquals": "wake"
+            }
+          ],
+          "Next": "InitializeSessionMonitor"
+        },
+        {
           "Variable": "$.terminal",
           "BooleanEquals": true,
           "Next": "OperationComplete"
@@ -46,6 +74,99 @@
       "Type": "Wait",
       "Seconds": 2,
       "Next": "AdvanceOperation"
+    },
+    "InitializeSessionMonitor": {
+      "Type": "Pass",
+      "Parameters": {
+        "account_id.$": "$.account_id",
+        "world_id.$": "$.world_id",
+        "session_monitor": true,
+        "monitor_checks": 0
+      },
+      "Next": "WaitBeforeSessionCheck"
+    },
+    "WaitBeforeSessionCheck": {
+      "Type": "Wait",
+      "Seconds": 60,
+      "Next": "MonitorSession"
+    },
+    "MonitorSession": {
+      "Type": "Task",
+      "Resource": "${operation_worker_arn}",
+      "Parameters": {
+        "action": "monitor_session",
+        "account_id.$": "$.account_id",
+        "world_id.$": "$.world_id",
+        "monitor_checks.$": "$.monitor_checks",
+        "state_machine_arn": "${world_operation_state_machine_arn}"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "BackoffRate": 2,
+          "MaxAttempts": 5
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.monitor_failure",
+          "Next": "SessionMonitorBackoff"
+        }
+      ],
+      "Next": "SessionStillOnline"
+    },
+    "SessionStillOnline": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.continue_monitoring",
+              "BooleanEquals": true
+            },
+            {
+              "Variable": "$.monitor_checks",
+              "NumericGreaterThanEquals": 600
+            }
+          ],
+          "Next": "RenewSessionMonitor"
+        },
+        {
+          "Variable": "$.continue_monitoring",
+          "BooleanEquals": true,
+          "Next": "WaitBeforeSessionCheck"
+        }
+      ],
+      "Default": "OperationComplete"
+    },
+    "RenewSessionMonitor": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::states:startExecution",
+      "Parameters": {
+        "StateMachineArn": "${world_operation_state_machine_arn}",
+        "Name.$": "States.Format('session-monitor-{}', States.UUID())",
+        "Input": {
+          "account_id.$": "$.account_id",
+          "world_id.$": "$.world_id",
+          "session_monitor": true,
+          "monitor_checks": 0,
+          "AWS_STEP_FUNCTIONS_STARTED_BY_EXECUTION_ID.$": "$$.Execution.Id"
+        }
+      },
+      "ResultPath": null,
+      "Next": "OperationComplete"
+    },
+    "SessionMonitorBackoff": {
+      "Type": "Wait",
+      "Seconds": 300,
+      "Next": "MonitorSession"
     },
     "RecordFailure": {
       "Type": "Task",

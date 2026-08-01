@@ -55,8 +55,6 @@ output "gamewake_control_plane" {
     state_machine_arn          = aws_sfn_state_machine.world_operation.arn
     runtime_launch_template_id = aws_launch_template.gamewake_runtime.id
     world_data_bucket          = aws_s3_bucket.world_data.id
-    reconciliation_schedule    = aws_scheduler_schedule.reconciliation.arn
-    session_monitor_schedule   = aws_scheduler_schedule.session_monitor.arn
     data_maintenance_schedule  = aws_scheduler_schedule.data_maintenance.arn
     operations_dead_letter_url = aws_sqs_queue.operations_dead_letter.url
     operations_dashboard       = aws_cloudwatch_dashboard.gamewake.dashboard_name
