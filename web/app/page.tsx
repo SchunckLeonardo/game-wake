@@ -8,8 +8,7 @@ export const metadata: Metadata = {
     "Mundos persistentes para jogar com seus amigos. A infraestrutura acorda quando vocês jogam e dorme quando terminam.",
 };
 
-const apiOrigin = (process.env.NEXT_PUBLIC_GAMEWAKE_API_URL ?? "").replace(/\/$/, "");
-const discordSignIn = `${apiOrigin}/auth/discord/start`;
+const discordSignIn = "/auth/discord/start";
 
 const friendInitials = ["L", "A", "B"];
 

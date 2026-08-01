@@ -3,12 +3,18 @@ from decimal import Decimal
 
 import pytest
 
+import gamewake.billing as billing_package
 from gamewake.billing import ContributionCheckoutRequest
 from gamewake.billing.abacatepay import (
     AbacatePayPaymentProvider,
     AbacatePayWebhookHandler,
     InvalidWebhookSignature,
 )
+
+
+def test_abacatepay_adapters_are_exposed_by_the_billing_public_api():
+    assert billing_package.AbacatePayPaymentProvider is AbacatePayPaymentProvider
+    assert billing_package.AbacatePayWebhookHandler is AbacatePayWebhookHandler
 
 
 class RecordingHttpClient:

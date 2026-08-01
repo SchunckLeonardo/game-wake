@@ -17,10 +17,20 @@ resource "aws_db_subnet_group" "gamewake" {
   tags = { Name = "${local.name_prefix}-database" }
 }
 
+data "aws_rds_orderable_db_instance" "gamewake" {
+  engine                 = "aurora-postgresql"
+  engine_version         = var.aurora_engine_version
+  instance_class         = "db.serverless"
+  license_model          = "postgresql-license"
+  storage_type           = "aurora"
+  supported_engine_modes = ["provisioned"]
+  vpc                    = true
+}
+
 resource "aws_rds_cluster" "gamewake" {
   cluster_identifier          = "${local.name_prefix}-gamewake"
   engine                      = "aurora-postgresql"
-  engine_version              = var.aurora_engine_version
+  engine_version              = data.aws_rds_orderable_db_instance.gamewake.engine_version
   engine_mode                 = "provisioned"
   database_name               = var.aurora_database_name
   master_username             = "gamewake_admin"

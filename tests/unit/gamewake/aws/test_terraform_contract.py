@@ -56,7 +56,13 @@ def test_aurora_serverless_v2_uses_data_api_encryption_and_private_subnets():
     assert 'resource "aws_rds_cluster" "gamewake"' in database
     assert 'engine_mode                 = "provisioned"' in database
     assert "serverlessv2_scaling_configuration" in database
-    assert "engine_version              = var.aurora_engine_version" in database
+    assert 'data "aws_rds_orderable_db_instance" "gamewake"' in database
+    assert "engine_version         = var.aurora_engine_version" in database
+    assert 'instance_class         = "db.serverless"' in database
+    assert (
+        "engine_version              = data.aws_rds_orderable_db_instance.gamewake.engine_version"
+        in database
+    )
     assert "seconds_until_auto_pause = var.aurora_auto_pause_seconds" in database
     assert "enable_http_endpoint        = true" in database
     assert "storage_encrypted           = true" in database

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-async function render(path = "/") {
+async function render(path = "/", environment = {}) {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}-${path}`);
   const { default: worker } = await import(workerUrl.href);
@@ -14,6 +14,7 @@ async function render(path = "/") {
       ASSETS: {
         fetch: async () => new Response("Not found", { status: 404 }),
       },
+      ...environment,
     },
     {
       waitUntil() {},
@@ -21,6 +22,22 @@ async function render(path = "/") {
     },
   );
 }
+
+test("redirects the site Discord login route to the GameWake API", async () => {
+  const previousApiUrl = process.env.GAMEWAKE_API_URL;
+  process.env.GAMEWAKE_API_URL = "https://api.gamewake.example/";
+  try {
+    const response = await render("/auth/discord/start");
+    assert.equal(response.status, 307);
+    assert.equal(
+      response.headers.get("location"),
+      "https://api.gamewake.example/auth/discord/start",
+    );
+  } finally {
+    if (previousApiUrl === undefined) delete process.env.GAMEWAKE_API_URL;
+    else process.env.GAMEWAKE_API_URL = previousApiUrl;
+  }
+});
 
 test("renders the public GameWake landing page without starter artifacts", async () => {
   const response = await render();

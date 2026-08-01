@@ -283,7 +283,12 @@ variable "aurora_database_name" {
 variable "aurora_engine_version" {
   description = "Aurora PostgreSQL compativel com Serverless v2 auto-pause em zero ACUs."
   type        = string
-  default     = "16.3"
+  default     = "16.14"
+
+  validation {
+    condition     = can(regex("^16\\.([3-9]|[1-9][0-9]+)$", var.aurora_engine_version))
+    error_message = "aurora_engine_version deve usar Aurora PostgreSQL 16.3 ou superior para suportar auto-pause em zero ACUs."
+  }
 }
 
 variable "aurora_min_acu" {
