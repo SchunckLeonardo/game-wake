@@ -1,0 +1,284 @@
+name: Continuous integration
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            lambda/requirements.txt
+            lambda/requirements-dev.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r lambda/requirements.txt -r lambda/requirements-dev.txt
+
+      - name: Run tests
+        run: python -m pytest -q -m "not integration"
+
+  postgres-integration:
+    name: PostgreSQL integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: gamewake_test
+          POSTGRES_USER: gamewake
+          POSTGRES_PASSWORD: gamewake
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U gamewake -d gamewake_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      GAMEWAKE_TEST_DATABASE_URL: postgresql://gamewake:gamewake@127.0.0.1:5432/gamewake_test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: lambda/requirements-dev.txt
+
+      - name: Install test dependencies
+        run: python -m pip install -r lambda/requirements.txt -r lambda/requirements-dev.txt
+
+      - name: Run real PostgreSQL repository contracts
+        run: python -m pytest -q -m integration
+
+  python-quality:
+    name: Python quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: lambda/requirements-dev.txt
+
+      - name: Install quality tools
+        run: python -m pip install -r lambda/requirements-dev.txt
+
+      - name: Ruff lint
+        run: python -m ruff check gamewake lambda server scripts shared tests palworld
+
+      - name: Ruff format check
+        run: python -m ruff format --check gamewake lambda server scripts shared tests palworld
+
+  web-quality:
+    name: Web quality and rendering
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Audit production and development dependencies
+        run: npm audit --audit-level=high
+
+      - name: Lint and build rendered routes
+        run: npm run lint && npm test
+
+  web-e2e:
+    name: Browser E2E
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run desktop and mobile journeys
+        run: npm run test:e2e
+
+      - name: Upload Playwright diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            web/playwright-report
+            web/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+  shell-quality:
+    name: Shell quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install ShellCheck
+        run: sudo apt-get update && sudo apt-get install -y ripgrep shellcheck
+
+      - name: Check shell syntax
+        run: bash -n scripts/*.sh server/*.sh terraform/user-data.sh.tpl
+
+      - name: Run ShellCheck
+        run: shellcheck scripts/*.sh server/*.sh
+
+      - name: Check server safety invariants
+        run: |
+          if rg -n 'palworld_api POST save[[:space:]]*(>|$)' server/*.sh; then
+            echo "Every REST save call must send an empty JSON body: '{}'." >&2
+            exit 1
+          fi
+          rg --fixed-strings --line-regexp --quiet 'RuntimeDirectory=palworld' server/palworld.service
+          rg --fixed-strings --line-regexp --quiet 'RuntimeDirectoryMode=0750' server/palworld.service
+
+  terraform-validation:
+    name: Terraform and Lambda package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.11.4
+
+      - name: Verify reproducible Lambda package
+        run: |
+          ./scripts/package-lambda.sh
+          cp build/lambda.zip "${RUNNER_TEMP}/lambda-first.zip"
+          ./scripts/package-lambda.sh
+          cmp --silent "${RUNNER_TEMP}/lambda-first.zip" build/lambda.zip
+
+      - name: Check Terraform format
+        run: terraform -chdir=terraform fmt -check -recursive
+
+      - name: Initialize Terraform without backend
+        run: terraform -chdir=terraform init -backend=false
+
+      - name: Validate Terraform
+        run: terraform -chdir=terraform validate
+
+  dependency-review:
+    name: Dependency review
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Review dependency changes
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+
+      - name: No dependency diff outside pull requests
+        if: github.event_name != 'pull_request'
+        run: echo "Dependency review runs against pull request diffs."
+
+  quality-gate:
+    name: Required quality gate
+    if: always()
+    needs:
+      - unit-tests
+      - postgres-integration
+      - python-quality
+      - web-quality
+      - web-e2e
+      - shell-quality
+      - terraform-validation
+      - dependency-review
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      UNIT_TESTS_RESULT: ${{ needs.unit-tests.result }}
+      POSTGRES_INTEGRATION_RESULT: ${{ needs.postgres-integration.result }}
+      PYTHON_QUALITY_RESULT: ${{ needs.python-quality.result }}
+      WEB_QUALITY_RESULT: ${{ needs.web-quality.result }}
+      WEB_E2E_RESULT: ${{ needs.web-e2e.result }}
+      SHELL_QUALITY_RESULT: ${{ needs.shell-quality.result }}
+      TERRAFORM_VALIDATION_RESULT: ${{ needs.terraform-validation.result }}
+      DEPENDENCY_REVIEW_RESULT: ${{ needs.dependency-review.result }}
+    steps:
+      - name: Require every validation to pass
+        run: |
+          for result in \
+            "$UNIT_TESTS_RESULT" \
+            "$POSTGRES_INTEGRATION_RESULT" \
+            "$PYTHON_QUALITY_RESULT" \
+            "$WEB_QUALITY_RESULT" \
+            "$WEB_E2E_RESULT" \
+            "$SHELL_QUALITY_RESULT" \
+            "$TERRAFORM_VALIDATION_RESULT" \
+            "$DEPENDENCY_REVIEW_RESULT"; do
+            if [[ "$result" != success ]]; then
+              echo "A required validation finished with status: $result" >&2
+              exit 1
+            fi
+          done

@@ -1,0 +1,49 @@
+project_name  = "gamewake"
+environment   = "prod"
+aws_region    = "us-east-1"
+instance_type = "m6a.xlarge"
+
+# Aurora PostgreSQL Serverless v2 (Data API). PostgreSQL 16.3+ permite auto-pause em 0 ACU.
+aurora_engine_version       = "16.3"
+aurora_min_acu              = 0
+aurora_max_acu              = 4
+aurora_auto_pause_seconds   = 900
+aurora_deletion_protection  = true
+aurora_skip_final_snapshot  = false
+
+# Discord Developer Portal (nao sao segredos)
+discord_application_id = "123456789012345678"
+discord_public_key     = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+# Origem publica exata da Console e produtos avulsos configurados na AbacatePay v2.
+gamewake_console_url = "https://app.seu-dominio.com"
+abacatepay_packages = [
+  { id = "credits-25", amount = 25, product_id = "prod_abc123" },
+  { id = "credits-50", amount = 50, product_id = "prod_def456" },
+  { id = "credits-100", amount = 100, product_id = "prod_ghi789" },
+]
+
+# Preco de beta ilustrativo: valide custo, impostos e margem antes de publicar.
+runtime_profile_hourly_rates = {
+  palworld-small = 5.50
+}
+
+# 10 GiB incluidos por conta; excedente sem saldo entra em 30 dias de tolerancia.
+storage_allowance_bytes                         = 10737418240
+storage_grace_days                              = 30
+storage_rate_per_gib_month_brl                  = 2
+world_data_noncurrent_version_retention_days    = 7
+operations_alarm_email                          = "operacoes@example.com"
+
+palworld_allowed_cidr = "0.0.0.0/0"
+
+# Gameplay and server identity are managed with: ./palworld settings
+
+# SSH permanece fechado. Para uma excecao temporaria, configure tambem um Key Pair:
+# enable_ssh       = true
+# ssh_allowed_cidr = "203.0.113.10/32"
+# ssh_key_name     = "minha-chave"
+
+extra_tags = {
+  Owner = "seu-nome"
+}

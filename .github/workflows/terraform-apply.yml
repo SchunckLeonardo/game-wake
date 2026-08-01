@@ -1,0 +1,113 @@
+name: Terraform apply or destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Protected GitHub Environment
+        required: true
+        default: production
+        type: environment
+      action:
+        description: Explicit infrastructure action
+        required: true
+        default: apply
+        type: choice
+        options:
+          - apply
+          - destroy
+      confirmation:
+        description: Type APPLY for apply or DESTROY for destroy
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: palworld-terraform-mutation
+  cancel-in-progress: false
+
+jobs:
+  mutate:
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.environment }}
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_VAR_aws_region: ${{ vars.AWS_REGION }}
+      TF_VAR_discord_application_id: ${{ vars.DISCORD_APPLICATION_ID }}
+      TF_VAR_discord_public_key: ${{ vars.DISCORD_PUBLIC_KEY }}
+      TF_VAR_project_name: ${{ vars.PROJECT_NAME || 'gamewake' }}
+      TF_VAR_environment: ${{ vars.DEPLOYMENT_ENVIRONMENT || 'prod' }}
+      TF_VAR_instance_type: ${{ vars.INSTANCE_TYPE || 'm6a.xlarge' }}
+      TF_VAR_gamewake_console_url: ${{ vars.GAMEWAKE_CONSOLE_URL }}
+      TF_VAR_abacatepay_packages: ${{ vars.ABACATEPAY_PACKAGES_JSON }}
+      TF_VAR_runtime_profile_hourly_rates: ${{ vars.RUNTIME_PROFILE_HOURLY_RATES_JSON }}
+      TF_VAR_storage_allowance_bytes: ${{ vars.STORAGE_ALLOWANCE_BYTES || '10737418240' }}
+      TF_VAR_storage_grace_days: ${{ vars.STORAGE_GRACE_DAYS || '30' }}
+      TF_VAR_storage_rate_per_gib_month_brl: ${{ vars.STORAGE_RATE_PER_GIB_MONTH_BRL || '2' }}
+      TF_VAR_aurora_engine_version: ${{ vars.AURORA_ENGINE_VERSION || '16.3' }}
+      TF_VAR_aurora_min_acu: ${{ vars.AURORA_MIN_ACU || '0' }}
+      TF_VAR_aurora_max_acu: ${{ vars.AURORA_MAX_ACU || '4' }}
+      TF_VAR_aurora_auto_pause_seconds: ${{ vars.AURORA_AUTO_PAUSE_SECONDS || '900' }}
+      TF_VAR_operations_alarm_email: ${{ vars.OPERATIONS_ALARM_EMAIL || 'null' }}
+      TF_VAR_palworld_allowed_cidr: ${{ vars.PALWORLD_ALLOWED_CIDR || '0.0.0.0/0' }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_STATE_KEY: ${{ vars.TF_STATE_KEY }}
+    steps:
+      - name: Check explicit confirmation
+        env:
+          REQUESTED_ACTION: ${{ inputs.action }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          if [[ "$REQUESTED_ACTION" == apply && "$CONFIRMATION" != APPLY ]]; then
+            echo "Apply exige a confirmação APPLY." >&2
+            exit 1
+          fi
+          if [[ "$REQUESTED_ACTION" == destroy && "$CONFIRMATION" != DESTROY ]]; then
+            echo "Destroy exige a confirmação DESTROY." >&2
+            exit 1
+          fi
+
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.11.4
+
+      - name: Configure AWS credentials with OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Package Lambda
+        run: ./scripts/package-lambda.sh
+
+      - name: Initialize Terraform
+        run: >-
+          terraform -chdir=terraform init
+          -backend-config="bucket=$TF_STATE_BUCKET"
+          -backend-config="key=$TF_STATE_KEY"
+          -backend-config="region=$TF_VAR_aws_region"
+          -backend-config="encrypt=true"
+          -backend-config="use_lockfile=true"
+
+      - name: Create and display saved plan
+        env:
+          REQUESTED_ACTION: ${{ inputs.action }}
+        run: |
+          if [[ "$REQUESTED_ACTION" == destroy ]]; then
+            terraform -chdir=terraform plan -destroy -input=false -out=tfplan
+          else
+            terraform -chdir=terraform plan -input=false -out=tfplan
+          fi
+          terraform -chdir=terraform show -no-color tfplan
+
+      - name: Apply exactly the displayed plan
+        run: terraform -chdir=terraform apply -input=false -auto-approve tfplan

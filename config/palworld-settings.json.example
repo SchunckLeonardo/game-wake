@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "settings": {
+    "server_name": "Palworld Friends Server",
+    "server_description": "Private server started on demand through Discord",
+    "max_players": 16,
+    "exp_rate": 1.0,
+    "collection_drop_rate": 1.0,
+    "enemy_drop_item_rate": 1.0,
+    "supply_drop_span": 180,
+    "base_camp_worker_max_num": 15,
+    "monster_farm_action_speed_rate": 1.0,
+    "allow_global_palbox_export": false,
+    "allow_global_palbox_import": false,
+    "pal_auto_hp_regen_rate_in_sleep": 1.0,
+    "pal_egg_default_hatching_time": 72.0,
+    "pal_spawn_rate": 1.0,
+    "death_penalty": "Item",
+    "pal_damage_attack_rate": 1.0,
+    "pal_damage_defense_rate": 1.0,
+    "player_damage_attack_rate": 1.0,
+    "player_damage_defense_rate": 1.0,
+    "pal_stamina_decrease_rate": 1.0,
+    "pal_stomach_decrease_rate": 1.0,
+    "player_stamina_decrease_rate": 1.0,
+    "item_weight_rate": 1.0
+  }
+}
