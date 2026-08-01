@@ -3,8 +3,8 @@ environment   = "prod"
 aws_region    = "us-east-1"
 instance_type = "m6a.xlarge"
 
-# Aurora PostgreSQL Serverless v2 (Data API). PostgreSQL 16.3+ permite auto-pause em 0 ACU.
-aurora_engine_version       = "16.3"
+# Aurora PostgreSQL Serverless v2 (Data API). A versao fixada deve estar disponivel na regiao.
+aurora_engine_version       = "16.14"
 aurora_min_acu              = 0
 aurora_max_acu              = 4
 aurora_auto_pause_seconds   = 900

@@ -1,5 +1,6 @@
 """Public interface for prepaid Wallets and usage billing."""
 
+from .abacatepay import AbacatePayPaymentProvider, AbacatePayWebhookHandler
 from .in_memory import InMemoryBillingRepository
 from .model import (
     BalanceGuardDecision,
@@ -28,6 +29,8 @@ from .runtime import BillingRuntimeUsageRecorder
 from .service import Billing
 
 __all__ = [
+    "AbacatePayPaymentProvider",
+    "AbacatePayWebhookHandler",
     "BalanceGuardDecision",
     "BalanceGuardState",
     "Billing",

@@ -22,7 +22,7 @@ python3 --version
 node --version
 ```
 
-O Aurora precisa suportar Serverless v2 com `min_capacity = 0` na combinação região/versão escolhida. O exemplo usa Aurora PostgreSQL `16.3`, `0–4 ACUs` e pausa após 900 segundos. Se a região não aceitar essa combinação, escolha uma versão compatível antes do plan. A primeira chamada depois de uma pausa pode demorar mais enquanto o banco retoma.
+O Aurora precisa suportar Serverless v2 com `min_capacity = 0` na combinação região/versão escolhida. O exemplo usa Aurora PostgreSQL `16.14`, `0–4 ACUs` e pausa após 900 segundos. O `terraform plan` consulta as opções atuais do RDS e falha antes do apply se a versão não estiver disponível na região. A primeira chamada depois de uma pausa pode demorar mais enquanto o banco retoma.
 
 ## 2. Preparar e validar o repositório
 
@@ -86,7 +86,7 @@ discord_application_id = "..."
 discord_public_key     = "..."
 gamewake_console_url   = "https://app.seu-dominio.com"
 
-aurora_engine_version      = "16.3"
+aurora_engine_version      = "16.14"
 aurora_min_acu             = 0
 aurora_max_acu             = 4
 aurora_auto_pause_seconds  = 900

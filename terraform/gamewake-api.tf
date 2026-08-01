@@ -229,18 +229,18 @@ resource "aws_lambda_function_url" "gamewake_api" {
   }
 }
 
-resource "aws_lambda_permission" "gamewake_api_url" {
-  statement_id           = "AllowPublicGameWakeFunctionUrl"
-  action                 = "lambda:InvokeFunctionUrl"
-  function_name          = aws_lambda_function.gamewake_api.function_name
-  principal              = "*"
-  function_url_auth_type = "NONE"
+removed {
+  from = aws_lambda_permission.gamewake_api_url
+
+  lifecycle {
+    destroy = false
+  }
 }
 
-resource "aws_lambda_permission" "gamewake_api_url_invoke" {
-  statement_id             = "AllowPublicGameWakeInvokeOnlyViaFunctionUrl"
-  action                   = "lambda:InvokeFunction"
-  function_name            = aws_lambda_function.gamewake_api.function_name
-  principal                = "*"
-  invoked_via_function_url = true
+removed {
+  from = aws_lambda_permission.gamewake_api_url_invoke
+
+  lifecycle {
+    destroy = false
+  }
 }
