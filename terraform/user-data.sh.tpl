@@ -24,17 +24,21 @@ install_payload '${install_script_b64}' /usr/local/sbin/install-palworld.sh 0755
 install_payload '${configure_script_b64}' /usr/local/sbin/configure-palworld.sh 0755
 install_payload '${start_script_b64}' /usr/local/sbin/start-palworld.sh 0755
 install_payload '${stop_script_b64}' /usr/local/sbin/stop-palworld.sh 0755
+install_payload '${palworld_service_b64}' /etc/systemd/system/palworld.service 0644
+%{ if host_mode == "legacy" }
 install_payload '${backup_script_b64}' /usr/local/sbin/backup-palworld.sh 0755
 install_payload '${autostop_script_b64}' /usr/local/sbin/autostop.sh 0755
 install_payload '${notify_script_b64}' /usr/local/sbin/notify-discord.sh 0755
 install_payload '${healthcheck_script_b64}' /usr/local/sbin/healthcheck.sh 0755
-install_payload '${gamewake_operation_script_b64}' /opt/gamewake/bin/gamewake-operation 0755
-install_payload '${palworld_service_b64}' /etc/systemd/system/palworld.service 0644
 install_payload '${notify_service_b64}' /etc/systemd/system/palworld-notify.service 0644
 install_payload '${autostop_service_b64}' /etc/systemd/system/palworld-autostop.service 0644
 install_payload '${autostop_timer_b64}' /etc/systemd/system/palworld-autostop.timer 0644
 install_payload '${backup_service_b64}' /etc/systemd/system/palworld-backup.service 0644
 install_payload '${backup_timer_b64}' /etc/systemd/system/palworld-backup.timer 0644
+%{ endif }
+%{ if host_mode == "disposable" }
+install_payload '${gamewake_operation_script_b64}' /opt/gamewake/bin/gamewake-operation 0755
+%{ endif }
 
 cat >/etc/palworld/palworld.env <<'ENVIRONMENT'
 AWS_REGION=${aws_region}
@@ -91,19 +95,19 @@ systemctl enable --now snap.amazon-ssm-agent.amazon-ssm-agent.service || \
 systemctl daemon-reload
 systemctl enable palworld.service
 
-if [[ '${host_mode}' == 'legacy' ]]; then
-  systemctl enable palworld-notify.service palworld-autostop.timer palworld-backup.timer
-  systemctl start --no-block palworld.service || true
-  systemctl start --no-block palworld-notify.service || true
-  systemctl start palworld-autostop.timer palworld-backup.timer
+%{ if host_mode == "legacy" }
+systemctl enable palworld-notify.service palworld-autostop.timer palworld-backup.timer
+systemctl start --no-block palworld.service || true
+systemctl start --no-block palworld-notify.service || true
+systemctl start palworld-autostop.timer palworld-backup.timer
 
-  if [[ '${stop_after_initial_bootstrap}' == 'true' ]]; then
-    systemd-run \
-      --unit=palworld-initial-bootstrap-stop \
-      --description='Stop initial Palworld bootstrap EC2' \
-      --on-active=15m \
-      /usr/local/sbin/stop-palworld.sh --shutdown
-  fi
+if [[ '${stop_after_initial_bootstrap}' == 'true' ]]; then
+  systemd-run \
+    --unit=palworld-initial-bootstrap-stop \
+    --description='Stop initial Palworld bootstrap EC2' \
+    --on-active=15m \
+    /usr/local/sbin/stop-palworld.sh --shutdown
 fi
+%{ endif }
 
 echo "Bootstrap Palworld concluido"

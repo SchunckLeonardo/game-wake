@@ -3,8 +3,7 @@ data "aws_ssm_parameter" "ubuntu_ami" {
 }
 
 locals {
-  user_data = templatefile("${path.module}/user-data.sh.tpl", {
-    host_mode                                = "legacy"
+  palworld_user_data_variables = {
     aws_region                               = var.aws_region
     palworld_port                            = var.palworld_port
     palworld_rest_api_port                   = var.palworld_rest_api_port
@@ -61,7 +60,11 @@ locals {
     backup_service_b64                       = filebase64("${path.module}/../server/palworld-backup.service")
     backup_timer_b64                         = filebase64("${path.module}/../server/palworld-backup.timer")
     gamewake_operation_script_b64            = filebase64("${path.module}/../server/gamewake-operation.sh")
-  })
+  }
+  user_data = templatefile(
+    "${path.module}/user-data.sh.tpl",
+    merge(local.palworld_user_data_variables, { host_mode = "legacy" }),
+  )
 }
 
 resource "aws_instance" "palworld" {

@@ -1,8 +1,7 @@
 locals {
-  gamewake_runtime_user_data = replace(
-    local.user_data,
-    "GAMEWAKE_HOST_MODE=legacy",
-    "GAMEWAKE_HOST_MODE=disposable",
+  gamewake_runtime_user_data = templatefile(
+    "${path.module}/user-data.sh.tpl",
+    merge(local.palworld_user_data_variables, { host_mode = "disposable" }),
   )
 }
 

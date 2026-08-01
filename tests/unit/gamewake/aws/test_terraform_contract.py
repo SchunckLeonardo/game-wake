@@ -1,10 +1,74 @@
+import base64
+import gzip
+import re
 from pathlib import Path
 
 TERRAFORM = Path(__file__).parents[4] / "terraform"
+PROJECT_ROOT = TERRAFORM.parent
+EC2_USER_DATA_LIMIT_BYTES = 16 * 1024
+
+USER_DATA_PAYLOADS = {
+    "common_script_b64": "palworld-common.sh",
+    "render_settings_script_b64": "render_settings.py",
+    "install_script_b64": "install-palworld.sh",
+    "configure_script_b64": "configure-palworld.sh",
+    "start_script_b64": "start-palworld.sh",
+    "stop_script_b64": "stop-palworld.sh",
+    "backup_script_b64": "backup-palworld.sh",
+    "autostop_script_b64": "autostop.sh",
+    "notify_script_b64": "notify-discord.sh",
+    "healthcheck_script_b64": "healthcheck.sh",
+    "palworld_service_b64": "palworld.service",
+    "notify_service_b64": "palworld-notify.service",
+    "autostop_service_b64": "palworld-autostop.service",
+    "autostop_timer_b64": "palworld-autostop.timer",
+    "backup_service_b64": "palworld-backup.service",
+    "backup_timer_b64": "palworld-backup.timer",
+    "gamewake_operation_script_b64": "gamewake-operation.sh",
+}
+
+
+def render_user_data(host_mode: str) -> str:
+    template = source("user-data.sh.tpl")
+    mode_block = re.compile(
+        r'%\{\s*if host_mode == "(?P<mode>legacy|disposable)"\s*\}(?P<body>.*?)%\{\s*endif\s*\}',
+        re.DOTALL,
+    )
+    template = mode_block.sub(
+        lambda match: match.group("body") if match.group("mode") == host_mode else "",
+        template,
+    )
+    values = {
+        key: base64.b64encode((PROJECT_ROOT / "server" / filename).read_bytes()).decode()
+        for key, filename in USER_DATA_PAYLOADS.items()
+    }
+    values.update(
+        {
+            "host_mode": host_mode,
+            "palworld_server_name_b64": base64.b64encode(b"n" * 100).decode(),
+            "palworld_server_description_b64": base64.b64encode(b"d" * 500).decode(),
+        }
+    )
+    rendered = re.sub(
+        r"\$\{([a-z0-9_]+)\}",
+        lambda match: values.get(match.group(1), "x" * 96),
+        template,
+    )
+    assert "${" not in rendered
+    return rendered
 
 
 def source(name):
     return (TERRAFORM / name).read_text()
+
+
+def test_each_ec2_bootstrap_fits_the_user_data_limit_with_headroom():
+    sizes = {
+        mode: len(gzip.compress(render_user_data(mode).encode(), mtime=0))
+        for mode in ("legacy", "disposable")
+    }
+
+    assert all(size <= EC2_USER_DATA_LIMIT_BYTES - 1024 for size in sizes.values()), sizes
 
 
 def test_aurora_serverless_v2_uses_data_api_encryption_and_private_subnets():
