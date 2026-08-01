@@ -1,4 +1,18 @@
+from unittest.mock import patch
+
 from gamewake.auth import DiscordOAuthClient
+from gamewake.auth.discord_oauth import UrllibOAuthHttpClient
+
+
+class JsonResponse:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return None
+
+    def read(self):
+        return b'{"ok": true}'
 
 
 class FakeHttpClient:
@@ -15,6 +29,29 @@ class FakeHttpClient:
             "email": "leo@example.com",
             "verified": True,
         }
+
+
+def test_urllib_client_identifies_gamewake_with_a_discord_compliant_user_agent():
+    captured = {}
+
+    def open_request(request, *, timeout):
+        captured["user_agent"] = request.get_header("User-agent")
+        captured["timeout"] = timeout
+        return JsonResponse()
+
+    with patch("gamewake.auth.discord_oauth.urlopen", side_effect=open_request):
+        response = UrllibOAuthHttpClient().request(
+            "POST",
+            "https://discord.invalid/oauth2/token",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            form={"code": "one-time-code"},
+        )
+
+    assert response == {"ok": True}
+    assert captured == {
+        "user_agent": "DiscordBot (https://gamewake.com.br, 0.1.0)",
+        "timeout": 15,
+    }
 
 
 def test_oauth_url_and_code_exchange_use_verified_discord_email_for_owner_recovery():

@@ -9,6 +9,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 _DISCORD_API = "https://discord.com/api/v10"
+_DISCORD_USER_AGENT = "DiscordBot (https://gamewake.com.br, 0.1.0)"
 
 
 class OAuthHttpClient(Protocol):
@@ -34,7 +35,7 @@ class UrllibOAuthHttpClient:
         request = Request(
             url,
             data=urlencode(form).encode() if form is not None else None,
-            headers=dict(headers),
+            headers={**headers, "User-Agent": _DISCORD_USER_AGENT},
             method=method,
         )
         try:
