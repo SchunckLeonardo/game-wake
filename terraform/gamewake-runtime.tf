@@ -1,7 +1,7 @@
 locals {
   gamewake_runtime_user_data = templatefile(
     "${path.module}/user-data.sh.tpl",
-    merge(local.palworld_user_data_variables, { host_mode = "disposable" }),
+    local.gamewake_runtime_user_data_variables,
   )
 }
 

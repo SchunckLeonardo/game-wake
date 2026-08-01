@@ -3,9 +3,6 @@ environment   = "prod"
 aws_region    = "us-east-1"
 instance_type = "m6a.xlarge"
 
-# O prototipo de EC2 unica fica desligado. Worlds do GameWake usam Launch Template descartavel.
-enable_legacy_single_server = false
-
 # Aurora PostgreSQL Serverless v2 (Data API). PostgreSQL 16.3+ permite auto-pause em 0 ACU.
 aurora_engine_version       = "16.3"
 aurora_min_acu              = 0
@@ -17,7 +14,6 @@ aurora_skip_final_snapshot  = false
 # Discord Developer Portal (nao sao segredos)
 discord_application_id = "123456789012345678"
 discord_public_key     = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-discord_guild_id       = "123456789012345678"
 
 # Origem publica exata da Console e produtos avulsos configurados na AbacatePay v2.
 gamewake_console_url = "https://app.seu-dominio.com"
@@ -38,26 +34,9 @@ storage_grace_days      = 30
 storage_rate_per_gib_month_brl = 2
 operations_alarm_email         = "operacoes@example.com"
 
-# Pelo menos uma das listas deve autorizar alguem.
-discord_allowed_user_ids = [
-  "123456789012345678",
-]
-discord_allowed_role_ids = [
-  "234567890123456789",
-]
-
 palworld_allowed_cidr = "0.0.0.0/0"
 
 # Gameplay and server identity are managed with: ./palworld settings
-
-autostop_check_minutes = 5
-autostop_idle_minutes  = 20
-
-enable_s3_backup = false
-
-# Contas novas podem ter limite total Lambda igual a 10, o que impede reservas.
-lambda_reserved_concurrent_executions = -1
-lambda_memory_size_mb                  = 512
 
 # SSH permanece fechado. Para uma excecao temporaria, configure tambem um Key Pair:
 # enable_ssh       = true

@@ -33,6 +33,7 @@ def test_installer_creates_the_private_operation_directory():
 def test_configuration_action_uses_only_per_world_parameter_names():
     source = SCRIPT.read_text()
 
-    assert "PALWORLD_CONFIG_PARAMETER_NAME=$1" in source
-    assert "SERVER_PASSWORD_PARAMETER_NAME=$2" in source
-    assert "ADMIN_PASSWORD_PARAMETER_NAME=$3" in source
+    assert "PALWORLD_CONFIG_PARAMETER_NAME=%q" in source
+    assert "SERVER_PASSWORD_PARAMETER_NAME=%q" in source
+    assert "ADMIN_PASSWORD_PARAMETER_NAME=%q" in source
+    assert "/etc/palworld/world.env" in source

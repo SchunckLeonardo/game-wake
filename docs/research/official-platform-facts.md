@@ -105,7 +105,7 @@ O contrato do Discord exige:
 - enviar a resposta inicial em até 3 segundos; depois disso o token é invalidado;
 - tokens de interação permanecem válidos por 15 minutos para follow-ups.
 
-Fontes: [Interactions overview — Discord](https://docs.discord.com/developers/interactions/overview) e [Receiving and responding — Discord](https://docs.discord.com/developers/interactions/receiving-and-responding). Portanto `/palworld ligar` deve apenas iniciar a EC2 e responder imediatamente; não deve bloquear esperando o Palworld ficar pronto.
+Fontes: [Interactions overview — Discord](https://docs.discord.com/developers/interactions/overview) e [Receiving and responding — Discord](https://docs.discord.com/developers/interactions/receiving-and-responding). Portanto `/gamewake acordar` deve apenas iniciar a operação durável e responder imediatamente; não deve bloquear esperando o Palworld ficar pronto.
 
 ### Ubuntu 24.04 e SSM Agent
 

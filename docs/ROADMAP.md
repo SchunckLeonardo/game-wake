@@ -5,7 +5,7 @@ Este roadmap registra a transformação do protótipo Palworld no MVP definido n
 ## Estratégia
 
 - Entregar fatias verticais que possam ser demonstradas e testadas de ponta a ponta.
-- Preservar o servidor Palworld atual como ambiente de referência durante a migração.
+- Manter somente os contratos reutilizáveis do Palworld; o servidor único usado na migração foi removido.
 - Extrair contratos antes de trocar implementações.
 - Começar como modular monolith com um worker durável.
 - Não criar microserviços, múltiplos jogos ou múltiplos provedores antes de a Closed Beta provar necessidade.
@@ -16,14 +16,10 @@ Este roadmap registra a transformação do protótipo Palworld no MVP definido n
 | Ativo atual | Como será reutilizado | Limite que precisa ser removido |
 |---|---|---|
 | `lambda/discord_signature.py` | Adapter de autenticação das interações Discord | Discord ID ainda não resolve User e Membership internos |
-| `lambda/handler.py` | Referência dos comandos e respostas rápidas | Handler combina interação, autorização e ciclo de uma única EC2 |
-| `lambda/config_service.py` | Bootstrap temporário da primeira conta | Allowlist binária não oferece Roles, scopes ou multi-tenancy |
-| `lambda/ec2_service.py` | Primeira implementação do AWS Runtime Provider | Controla uma instância fixa e não uma frota de Runtimes descartáveis |
 | `shared/palworld_settings_catalog.py` | Base do esquema do Palworld Game Template | Catálogo ainda é específico e não versionado como contrato de jogo |
-| `lambda/settings_*` | Referência da configuração guiada no Discord | Estado e fluxo ainda são específicos do bot |
 | `server/*.sh` e unidades systemd | Runner do Palworld Game Template | Scripts estão acoplados ao bootstrap Terraform da instância |
-| S3 opcional e scripts de Backup | Base para Backup e World Export | O World ainda não tem armazenamento canônico independente do Runtime |
-| Terraform e IAM existentes | Baseline de segurança e primeiro ambiente AWS | Stack cria um servidor, não um control plane multi-tenant |
+| S3 e scripts do Runtime | Base para Backup e World Export | O armazenamento canônico passou a ser independente do Runtime |
+| Terraform e IAM existentes | Baseline de segurança e primeiro ambiente AWS | Stack agora cria o control plane e o Launch Template descartável |
 | Testes, Ruff, ShellCheck e Actions | Gate inicial de regressão | Faltam testes de domínio, contratos, ledger, concorrência e E2E da Console |
 
 ## Ordem de entrega
@@ -48,14 +44,14 @@ Billing começa depois de o ciclo de vida ser confiável porque não devemos cob
 - Adotar GameWake na documentação, interface e novos módulos sem renomear recursos AWS em produção de forma destrutiva.
 - Publicar Context Map, Foundation, ADRs e roadmap como fontes de decisão.
 - Inventariar segredos, estado Terraform local e recursos existentes; remover qualquer artefato sensível do histórico antes da expansão.
-- Manter o fluxo Palworld atual executável como referência.
+- Remover a EC2 fixa e o fluxo de comandos do protótipo após concluir a migração.
 - Acrescentar testes que congelem os comportamentos reutilizáveis: assinatura Discord, sono seguro, Backup e renderização de configurações.
 
 ### Gate
 
 - Suite atual verde.
 - Nenhuma alteração automática de infraestrutura existente.
-- Fluxo `/palworld` documentado como protótipo legado e GameWake definido como produto alvo.
+- Somente o fluxo `/gamewake` é registrado no Discord.
 
 ## Marco 1 — Platform skeleton
 
@@ -99,7 +95,7 @@ Billing começa depois de o ciclo de vida ser confiável porque não devemos cob
 ### Entregas
 
 - Modelar World, World Status, World Operation e Operation Progress.
-- Envolver `EC2Service` no contrato AWS Runtime Provider antes de substituir seu comportamento.
+- Operar hosts por meio do contrato AWS Runtime Provider.
 - Implementar despertar idempotente com fases observáveis e verificação real de saúde.
 - Implementar sono seguro, Auto Sleep e limites de repetição.
 - Implementar Automatic Recovery com três tentativas em 15 minutos.

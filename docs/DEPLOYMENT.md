@@ -1,6 +1,6 @@
 # Deploy de produção do GameWake
 
-Este guia instala o MVP com Aurora PostgreSQL Serverless v2 e Step Functions Standard. Execute primeiro em uma conta AWS de beta separada e mantenha `enable_legacy_single_server = false`.
+Este guia instala o MVP com Aurora PostgreSQL Serverless v2, Step Functions Standard e runtimes EC2 descartáveis. Execute primeiro em uma conta AWS de beta separada.
 
 ## 1. Pré-requisitos
 
@@ -82,11 +82,8 @@ environment   = "prod"
 aws_region    = "us-east-1"
 instance_type = "m6a.xlarge"
 
-enable_legacy_single_server = false
-
 discord_application_id = "..."
 discord_public_key     = "..."
-discord_guild_id       = "..."
 gamewake_console_url   = "https://app.seu-dominio.com"
 
 aurora_engine_version      = "16.3"
@@ -99,7 +96,7 @@ aurora_skip_final_snapshot = false
 operations_alarm_email = "operacoes@seu-dominio.com"
 ```
 
-Também defina os produtos AbacatePay, preço final por hora, allowance e preço de armazenamento, CIDR UDP e pelo menos um `discord_allowed_user_ids` ou `discord_allowed_role_ids`. Os valores de preço no exemplo são ilustrativos e não devem ser publicados sem custos, impostos e margem validados.
+Também defina os produtos AbacatePay, preço final por hora, allowance, preço de armazenamento e CIDR UDP. A autorização de pessoas e grupos é administrada pelas Accounts, Memberships e Roles do GameWake. Os valores de preço no exemplo são ilustrativos e não devem ser publicados sem custos, impostos e margem validados.
 
 Preencha `.env` somente na máquina operacional:
 
@@ -111,9 +108,6 @@ DISCORD_CLIENT_SECRET=...
 ABACATEPAY_API_KEY=...
 ABACATEPAY_WEBHOOK_SECRET=...
 ABACATEPAY_PUBLIC_KEY=...
-PALWORLD_SERVER_PASSWORD=...
-PALWORLD_ADMIN_PASSWORD=...
-DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
 AWS_REGION=us-east-1
 ```
 
@@ -166,7 +160,7 @@ Registre os comandos de guild para feedback imediato durante a beta:
 ./scripts/register-discord-commands.sh
 ```
 
-O script registra `/gamewake` e mantém `/palworld` apenas para compatibilidade do protótipo legado. A jornada nova começa em `/gamewake comecar`.
+O script registra somente `/gamewake`. A jornada começa em `/gamewake comecar`.
 
 ## 8. Publicar a Console
 
@@ -189,8 +183,7 @@ Crie um GitHub Environment protegido chamado `production`, com aprovação obrig
 - `AWS_ROLE_TO_ASSUME`: role confiando no OIDC do repositório;
 - `AWS_REGION`;
 - `TF_STATE_BUCKET` e `TF_STATE_KEY`;
-- `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY`, `DISCORD_GUILD_ID`;
-- `DISCORD_ALLOWED_USER_IDS_JSON` e `DISCORD_ALLOWED_ROLE_IDS_JSON`;
+- `DISCORD_APPLICATION_ID` e `DISCORD_PUBLIC_KEY`;
 - `GAMEWAKE_CONSOLE_URL`;
 - `ABACATEPAY_PACKAGES_JSON`;
 - `RUNTIME_PROFILE_HOURLY_RATES_JSON`;

@@ -4,13 +4,10 @@
 from __future__ import annotations
 
 import argparse
-import base64
 import json
 import os
-import re
 import shutil
 import subprocess
-import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,31 +25,6 @@ from shared.palworld_settings_catalog import (
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SETTINGS_PATH = PROJECT_ROOT / "config" / "palworld-settings.json"
 DEFAULT_TEMPLATE_PATH = PROJECT_ROOT / "config" / "palworld-settings.json.example"
-LEGACY_TFVARS_KEYS = {
-    "palworld_server_name": "server_name",
-    "palworld_server_description": "server_description",
-    "palworld_max_players": "max_players",
-    "palworld_exp_rate": "exp_rate",
-    "palworld_collection_drop_rate": "collection_drop_rate",
-    "palworld_enemy_drop_item_rate": "enemy_drop_item_rate",
-    "palworld_supply_drop_span": "supply_drop_span",
-    "palworld_base_camp_worker_max_num": "base_camp_worker_max_num",
-    "palworld_monster_farm_action_speed_rate": "monster_farm_action_speed_rate",
-    "palworld_allow_global_palbox_export": "allow_global_palbox_export",
-    "palworld_allow_global_palbox_import": "allow_global_palbox_import",
-    "palworld_pal_auto_hp_regen_rate_in_sleep": "pal_auto_hp_regen_rate_in_sleep",
-    "palworld_pal_egg_default_hatching_time": "pal_egg_default_hatching_time",
-    "palworld_spawn_rate": "pal_spawn_rate",
-    "palworld_death_penalty": "death_penalty",
-    "palworld_pal_damage_attack_rate": "pal_damage_attack_rate",
-    "palworld_pal_damage_defense_rate": "pal_damage_defense_rate",
-    "palworld_player_damage_attack_rate": "player_damage_attack_rate",
-    "palworld_player_damage_defense_rate": "player_damage_defense_rate",
-    "palworld_pal_stamina_decrease_rate": "pal_stamina_decrease_rate",
-    "palworld_pal_stomach_decrease_rate": "pal_stomach_decrease_rate",
-    "palworld_player_stamina_decrease_rate": "player_stamina_decrease_rate",
-    "palworld_item_weight_rate": "item_weight_rate",
-}
 
 
 @dataclass(frozen=True)
@@ -92,30 +64,6 @@ def _display_value(value: object) -> str:
     return str(value)
 
 
-def _read_legacy_tfvars(path: Path) -> dict[str, object]:
-    if not path.is_file():
-        return {}
-
-    updates: dict[str, object] = {}
-    assignment_pattern = re.compile(r"^\s*([A-Za-z0-9_]+)\s*=\s*(.+?)\s*$")
-    decoder = json.JSONDecoder()
-    for line in path.read_text(encoding="utf-8").splitlines():
-        match = assignment_pattern.match(line)
-        if not match or match.group(1) not in LEGACY_TFVARS_KEYS:
-            continue
-        raw_value = match.group(2)
-        try:
-            value, end = decoder.raw_decode(raw_value)
-        except json.JSONDecodeError as error:
-            raise SettingsValidationError(
-                f"could not migrate {match.group(1)} from {path}"
-            ) from error
-        if raw_value[end:].strip() and not raw_value[end:].lstrip().startswith("#"):
-            raise SettingsValidationError(f"could not migrate {match.group(1)} from {path}")
-        updates[LEGACY_TFVARS_KEYS[match.group(1)]] = value
-    return updates
-
-
 class SettingsDocument:
     """Validated, canonical Palworld settings document."""
 
@@ -129,10 +77,8 @@ class SettingsDocument:
         path: Path,
         *,
         template_path: Path | None = None,
-        legacy_tfvars_path: Path | None = None,
     ) -> SettingsDocument:
         path = path.expanduser().resolve()
-        created = False
         if not path.exists():
             if template_path is None:
                 raise SettingsValidationError(
@@ -144,7 +90,6 @@ class SettingsDocument:
             path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(template_path, path)
             os.chmod(path, 0o600)
-            created = True
 
         try:
             raw_document = json.loads(path.read_text(encoding="utf-8"))
@@ -152,13 +97,7 @@ class SettingsDocument:
             raise SettingsValidationError(
                 f"invalid JSON in {path}: line {error.lineno}, column {error.colno}"
             ) from error
-        document = cls(path, raw_document)
-        if created and legacy_tfvars_path is not None:
-            legacy_updates = _read_legacy_tfvars(legacy_tfvars_path.expanduser().resolve())
-            if legacy_updates:
-                document.update(legacy_updates)
-                document.save()
-        return document
+        return cls(path, raw_document)
 
     @property
     def values(self) -> Mapping[str, str | int | float | bool]:
@@ -300,142 +239,6 @@ def _run_passthrough(command: Sequence[str]) -> int:
     return completed.returncode
 
 
-def _run_capture(command: Sequence[str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        command,
-        cwd=PROJECT_ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-
-
-def _terraform_output(name: str) -> str:
-    completed = _run_capture(["terraform", "-chdir=terraform", "output", "-raw", name])
-    if completed.returncode != 0:
-        raise RuntimeError(completed.stderr.strip() or f"could not read Terraform output {name}")
-    return completed.stdout.strip()
-
-
-def _bash_ssm_command(script: str) -> str:
-    encoded = base64.b64encode(script.encode()).decode()
-    return f"printf '%s' '{encoded}' | base64 --decode | sudo bash"
-
-
-def _activate_when_empty(output_fn: Callable[[str], None]) -> int:
-    instance_id = _terraform_output("instance_id")
-    region = _terraform_output("aws_region")
-    state_result = _run_capture(
-        [
-            "aws",
-            "ec2",
-            "describe-instances",
-            "--region",
-            region,
-            "--instance-ids",
-            instance_id,
-            "--query",
-            "Reservations[0].Instances[0].State.Name",
-            "--output",
-            "text",
-        ]
-    )
-    if state_result.returncode != 0:
-        raise RuntimeError(state_result.stderr.strip() or "could not read the EC2 state")
-    state = state_result.stdout.strip()
-    if state == "stopped":
-        output_fn("Settings published. They will be activated on the next server start.")
-        return 0
-    if state in {"pending", "stopping"}:
-        output_fn(
-            f"Settings published while the instance is {state}. "
-            "They will be activated on the next safe server start."
-        )
-        return 0
-    if state != "running":
-        output_fn(f"Settings published, but the instance state is {state}; activation was skipped.")
-        return 0
-
-    activation_script = "\n".join(
-        [
-            "set -Eeuo pipefail",
-            "/usr/local/sbin/stop-palworld.sh",
-            "systemctl start palworld.service",
-            "systemctl restart palworld-notify.service",
-        ]
-    )
-    remote_script = _bash_ssm_command(activation_script)
-    send_result = _run_capture(
-        [
-            "aws",
-            "ssm",
-            "send-command",
-            "--region",
-            region,
-            "--instance-ids",
-            instance_id,
-            "--document-name",
-            "AWS-RunShellScript",
-            "--comment",
-            "Apply Palworld settings after a safe player check",
-            "--parameters",
-            json.dumps({"commands": [remote_script]}),
-            "--query",
-            "Command.CommandId",
-            "--output",
-            "text",
-        ]
-    )
-    if send_result.returncode != 0:
-        raise RuntimeError(send_result.stderr.strip() or "could not send the activation command")
-
-    command_id = send_result.stdout.strip()
-    output_fn(f"Waiting for safe activation command {command_id}...")
-    deadline = time.monotonic() + 360
-    while time.monotonic() < deadline:
-        invocation = _run_capture(
-            [
-                "aws",
-                "ssm",
-                "get-command-invocation",
-                "--region",
-                region,
-                "--command-id",
-                command_id,
-                "--instance-id",
-                instance_id,
-                "--output",
-                "json",
-            ]
-        )
-        if invocation.returncode != 0:
-            if "InvocationDoesNotExist" in invocation.stderr:
-                time.sleep(2)
-                continue
-            raise RuntimeError(invocation.stderr.strip() or "could not read the activation result")
-        payload = json.loads(invocation.stdout)
-        status = payload.get("Status")
-        if status == "Success":
-            output_fn("Settings activated after a safe save, backup, and restart.")
-            return 0
-        if status in {"Cancelled", "TimedOut", "Failed", "Cancelling"}:
-            details = (
-                payload.get("StandardErrorContent") or payload.get("StandardOutputContent") or ""
-            ).strip()
-            output_fn(
-                f"Settings were published, but immediate activation did not complete ({status})."
-            )
-            if details:
-                output_fn(details)
-            output_fn(
-                "No player was treated as disconnected; the change remains pending "
-                "for a safe start."
-            )
-            return 10
-        time.sleep(2)
-    raise RuntimeError("timed out waiting for the safe activation command")
-
-
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="./palworld settings",
@@ -452,13 +255,7 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("show", help="show the current settings")
     subparsers.add_parser("validate", help="validate the settings file")
     subparsers.add_parser("plan", help="validate settings and generate a Terraform plan")
-    apply_parser = subparsers.add_parser("apply", help="apply settings and activate them safely")
-    apply_parser.add_argument(
-        "--activate",
-        choices=("when-empty", "next-start"),
-        default="when-empty",
-        help="activate now only when no players are connected, or wait for the next start",
-    )
+    subparsers.add_parser("apply", help="deploy the base settings for future World starts")
     return parser
 
 
@@ -476,7 +273,6 @@ def run_settings_cli(
         document = SettingsDocument.load(
             args.file,
             template_path=DEFAULT_TEMPLATE_PATH,
-            legacy_tfvars_path=PROJECT_ROOT / "terraform" / "terraform.tfvars",
         )
         if action == "show":
             _emit_lines(document.summary_lines(), output_fn)
@@ -495,12 +291,8 @@ def run_settings_cli(
             exit_code = _run_passthrough([str(PROJECT_ROOT / "scripts" / "deploy.sh"), "apply"])
             if exit_code != 0:
                 return exit_code
-            if args.activate == "next-start":
-                output_fn(
-                    "Settings published. Activation was deferred until the next server start."
-                )
-                return 0
-            return _activate_when_empty(output_fn)
+            output_fn("Base settings deployed for the next World configuration.")
+            return 0
     except (OSError, RuntimeError, SettingsValidationError, json.JSONDecodeError) as error:
         output_fn(f"Error: {error}")
         return 2

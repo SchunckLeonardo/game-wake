@@ -14,37 +14,19 @@ USER_DATA_PAYLOADS = {
     "configure_script_b64": "configure-palworld.sh",
     "start_script_b64": "start-palworld.sh",
     "stop_script_b64": "stop-palworld.sh",
-    "backup_script_b64": "backup-palworld.sh",
-    "autostop_script_b64": "autostop.sh",
-    "notify_script_b64": "notify-discord.sh",
-    "healthcheck_script_b64": "healthcheck.sh",
     "palworld_service_b64": "palworld.service",
-    "notify_service_b64": "palworld-notify.service",
-    "autostop_service_b64": "palworld-autostop.service",
-    "autostop_timer_b64": "palworld-autostop.timer",
-    "backup_service_b64": "palworld-backup.service",
-    "backup_timer_b64": "palworld-backup.timer",
     "gamewake_operation_script_b64": "gamewake-operation.sh",
 }
 
 
-def render_user_data(host_mode: str) -> str:
+def render_user_data() -> str:
     template = source("user-data.sh.tpl")
-    mode_block = re.compile(
-        r'%\{\s*if host_mode == "(?P<mode>legacy|disposable)"\s*\}(?P<body>.*?)%\{\s*endif\s*\}',
-        re.DOTALL,
-    )
-    template = mode_block.sub(
-        lambda match: match.group("body") if match.group("mode") == host_mode else "",
-        template,
-    )
     values = {
         key: base64.b64encode((PROJECT_ROOT / "server" / filename).read_bytes()).decode()
         for key, filename in USER_DATA_PAYLOADS.items()
     }
     values.update(
         {
-            "host_mode": host_mode,
             "palworld_server_name_b64": base64.b64encode(b"n" * 100).decode(),
             "palworld_server_description_b64": base64.b64encode(b"d" * 500).decode(),
         }
@@ -62,13 +44,10 @@ def source(name):
     return (TERRAFORM / name).read_text()
 
 
-def test_each_ec2_bootstrap_fits_the_user_data_limit_with_headroom():
-    sizes = {
-        mode: len(gzip.compress(render_user_data(mode).encode(), mtime=0))
-        for mode in ("legacy", "disposable")
-    }
+def test_ec2_bootstrap_fits_the_user_data_limit_with_headroom():
+    size = len(gzip.compress(render_user_data().encode(), mtime=0))
 
-    assert all(size <= EC2_USER_DATA_LIMIT_BYTES - 1024 for size in sizes.values()), sizes
+    assert size <= EC2_USER_DATA_LIMIT_BYTES - 1024, size
 
 
 def test_aurora_serverless_v2_uses_data_api_encryption_and_private_subnets():
@@ -125,13 +104,16 @@ def test_disposable_runtimes_use_a_launch_template_and_reconciliation_schedule()
     assert 'schedule_expression = "rate(5 minutes)"' in schedules
 
 
-def test_legacy_always_on_server_is_disabled_by_default():
+def test_legacy_single_server_stack_is_removed():
     variables = source("variables.tf")
-    legacy = source("ec2.tf")
+    runtime = source("gamewake-runtime.tf")
+    bootstrap = source("user-data.sh.tpl")
 
-    assert 'variable "enable_legacy_single_server"' in variables
-    assert "default     = false" in variables
-    assert "count = var.enable_legacy_single_server ? 1 : 0" in legacy
+    assert 'variable "enable_legacy_single_server"' not in variables
+    assert 'resource "aws_instance" "palworld"' not in source("ec2.tf")
+    assert not (TERRAFORM / "lambda.tf").exists()
+    assert "host_mode" not in runtime
+    assert "host_mode" not in bootstrap
 
 
 def test_public_api_uses_kms_sessions_exact_cors_and_managed_provider_secrets():

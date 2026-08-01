@@ -54,15 +54,24 @@ if [[ -f $result_file ]]; then
 fi
 
 run_mutation() {
-  local archive bucket checksum checksum_hex expected_checksum key prefix remote_checksum state_id
+  local archive bucket checksum checksum_hex expected_checksum key parameter world_env prefix remote_checksum state_id
   case "$action" in
     apply-configuration)
       [[ $# -eq 3 ]] || return 64
-      PALWORLD_CONFIG_PARAMETER_NAME=$1 \
-        PALWORLD_OVERRIDES_PARAMETER_NAME="${1%/config}/settings-overrides" \
-        SERVER_PASSWORD_PARAMETER_NAME=$2 \
-        ADMIN_PASSWORD_PARAMETER_NAME=$3 \
-        /usr/local/sbin/configure-palworld.sh
+      for parameter in "$1" "$2" "$3"; do
+        [[ $parameter =~ ^/[A-Za-z0-9_.\/-]+$ ]] || return 65
+      done
+      world_env=/etc/palworld/world.env
+      {
+        printf 'PALWORLD_CONFIG_PARAMETER_NAME=%q\n' "$1"
+        printf 'PALWORLD_OVERRIDES_PARAMETER_NAME=%q\n' "${1%/config}/settings-overrides"
+        printf 'SERVER_PASSWORD_PARAMETER_NAME=%q\n' "$2"
+        printf 'ADMIN_PASSWORD_PARAMETER_NAME=%q\n' "$3"
+      } >"$world_env.tmp"
+      chown root:palworld "$world_env.tmp"
+      chmod 0640 "$world_env.tmp"
+      mv "$world_env.tmp" "$world_env"
+      /usr/local/sbin/configure-palworld.sh
       ;;
     start)
       [[ $# -eq 0 ]] || return 64
@@ -88,7 +97,7 @@ run_mutation() {
       bucket=$1
       key=$2
       checksum=$3
-      [[ $checksum =~ ^sha256:([a-f0-9]{64})$ ]] || return 65
+      [[ $checksum =~ ^sha256:([a-f0-9]{64})$ ]] || return 66
       expected_checksum=${BASH_REMATCH[1]}
       archive=$(mktemp --suffix=.tar.zst)
       trap 'rm -f "${archive:-}"' RETURN
@@ -96,7 +105,7 @@ run_mutation() {
       checksum_hex=$(sha256sum "$archive" | cut -d' ' -f1)
       [[ $checksum_hex == "$expected_checksum" ]] || {
         echo "world state checksum mismatch" >&2
-        return 66
+        return 67
       }
       tar --zstd --list --file "$archive" | awk '
         $0 !~ /^saved\// || $0 ~ /(^|\/)\.\.($|\/)/ { exit 1 }
@@ -124,13 +133,13 @@ run_mutation() {
         --metadata "sha256=$checksum_hex" \
         --query ChecksumSHA256 \
         --output text)
-      [[ -n $remote_checksum && $remote_checksum != None ]] || return 67
+      [[ -n $remote_checksum && $remote_checksum != None ]] || return 68
       [[ $(aws s3api head-object \
         --bucket "$bucket" \
         --key "$key" \
         --checksum-mode ENABLED \
         --query ChecksumSHA256 \
-        --output text) == "$remote_checksum" ]] || return 68
+        --output text) == "$remote_checksum" ]] || return 69
       jq -cn \
         --arg state_id "$state_id" \
         --arg checksum "sha256:$checksum_hex" \

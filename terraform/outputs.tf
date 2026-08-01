@@ -1,13 +1,3 @@
-output "instance_id" {
-  description = "ID da unica EC2 controlada pela Lambda."
-  value       = var.enable_legacy_single_server ? aws_instance.palworld[0].id : null
-}
-
-output "lambda_function_url" {
-  description = "URL publica a configurar como Interactions Endpoint no Discord."
-  value       = var.enable_legacy_single_server ? aws_lambda_function_url.discord[0].function_url : null
-}
-
 output "aws_region" {
   description = "Regiao do deploy."
   value       = var.aws_region
@@ -21,18 +11,11 @@ output "palworld_port" {
 output "parameter_store_names" {
   description = "Nomes dos parametros; nenhum valor secreto e exposto."
   value = {
-    discord_config              = aws_ssm_parameter.discord_config.name
-    palworld_config             = aws_ssm_parameter.palworld_config.name
-    palworld_settings_overrides = aws_ssm_parameter.palworld_settings_overrides.name
-    discord_webhook             = aws_ssm_parameter.discord_webhook_url.name
-    server_password             = aws_ssm_parameter.server_password.name
-    admin_password              = aws_ssm_parameter.admin_password.name
-    runtime_status              = aws_ssm_parameter.server_status.name
-    discord_client_secret       = aws_ssm_parameter.discord_client_secret.name
-    discord_bot_token           = aws_ssm_parameter.discord_bot_token.name
-    abacatepay_api_key          = aws_ssm_parameter.abacatepay_api_key.name
-    abacatepay_webhook_secret   = aws_ssm_parameter.abacatepay_webhook_secret.name
-    abacatepay_public_key       = aws_ssm_parameter.abacatepay_public_key.name
+    discord_client_secret     = aws_ssm_parameter.discord_client_secret.name
+    discord_bot_token         = aws_ssm_parameter.discord_bot_token.name
+    abacatepay_api_key        = aws_ssm_parameter.abacatepay_api_key.name
+    abacatepay_webhook_secret = aws_ssm_parameter.abacatepay_webhook_secret.name
+    abacatepay_public_key     = aws_ssm_parameter.abacatepay_public_key.name
   }
 }
 
@@ -51,11 +34,6 @@ output "parameter_path" {
   value       = local.parameter_path
 }
 
-output "session_manager_command" {
-  description = "Acesso administrativo sem SSH."
-  value       = var.enable_legacy_single_server ? "aws ssm start-session --region ${var.aws_region} --target ${aws_instance.palworld[0].id}" : null
-}
-
 output "post_deploy_instructions" {
   description = "Passos obrigatorios sem segredos."
   value = [
@@ -67,11 +45,6 @@ output "post_deploy_instructions" {
     "6. Confirme a assinatura do email SNS quando operations_alarm_email estiver configurado",
     "7. Execute o smoke test iniciando por /gamewake comecar",
   ]
-}
-
-output "s3_backup_bucket" {
-  description = "Bucket privado de backups quando habilitado."
-  value       = var.enable_s3_backup ? aws_s3_bucket.backups[0].id : null
 }
 
 output "gamewake_control_plane" {

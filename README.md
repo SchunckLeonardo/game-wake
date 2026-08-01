@@ -109,7 +109,6 @@ Antes de abrir a beta, consulte a [auditoria do MVP](docs/MVP_AUDIT.md) e execut
 - [Restore e export de World](docs/runbooks/world-restore-export.md)
 - [Recuperação do Owner](docs/runbooks/owner-recovery.md)
 - [Resposta a incidentes](docs/runbooks/incident-response.md)
-- [Protótipo Palworld legado](docs/LEGACY_PALWORLD.md)
 
 ## Licença
 

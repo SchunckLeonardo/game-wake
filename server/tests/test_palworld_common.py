@@ -34,11 +34,6 @@ BASE_CONFIG = {
     "item_weight_rate": 1.0,
     "rest_api_port": 8212,
     "rest_api_username": "admin",
-    "autostop_check_minutes": 5,
-    "autostop_idle_minutes": 20,
-    "healthcheck_timeout_minutes": 15,
-    "local_backup_retention_days": 14,
-    "s3_backup_uri": "",
 }
 
 

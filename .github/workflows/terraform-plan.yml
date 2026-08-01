@@ -26,9 +26,6 @@ jobs:
       TF_VAR_aws_region: ${{ vars.AWS_REGION }}
       TF_VAR_discord_application_id: ${{ vars.DISCORD_APPLICATION_ID }}
       TF_VAR_discord_public_key: ${{ vars.DISCORD_PUBLIC_KEY }}
-      TF_VAR_discord_guild_id: ${{ vars.DISCORD_GUILD_ID }}
-      TF_VAR_discord_allowed_user_ids: ${{ vars.DISCORD_ALLOWED_USER_IDS_JSON || '[]' }}
-      TF_VAR_discord_allowed_role_ids: ${{ vars.DISCORD_ALLOWED_ROLE_IDS_JSON || '[]' }}
       TF_VAR_project_name: ${{ vars.PROJECT_NAME || 'gamewake' }}
       TF_VAR_environment: ${{ vars.DEPLOYMENT_ENVIRONMENT || 'prod' }}
       TF_VAR_instance_type: ${{ vars.INSTANCE_TYPE || 'm6a.xlarge' }}

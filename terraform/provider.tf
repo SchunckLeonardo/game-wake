@@ -23,12 +23,8 @@ locals {
   name_prefix                = "${var.project_name}-${var.environment}"
   parameter_path             = "/${var.project_name}/${var.environment}"
   lambda_package_file        = abspath("${path.module}/${var.lambda_package_path}")
-  s3_backup_bucket_name      = var.s3_backup_bucket_name != null ? var.s3_backup_bucket_name : "${var.project_name}-${data.aws_caller_identity.current.account_id}-${var.aws_region}"
-  s3_backup_uri              = var.enable_s3_backup ? "s3://${local.s3_backup_bucket_name}/saves" : ""
   world_data_bucket_name     = var.world_data_bucket_name != null ? var.world_data_bucket_name : "${var.project_name}-${var.environment}-${data.aws_caller_identity.current.account_id}-${var.aws_region}-worlds"
   ssm_document_arn           = "arn:${data.aws_partition.current.partition}:ssm:${var.aws_region}::document/AWS-RunShellScript"
-  instance_arn               = var.enable_legacy_single_server ? aws_instance.palworld[0].arn : "arn:${data.aws_partition.current.partition}:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:instance/legacy-disabled"
-  lambda_log_group_name      = "/aws/lambda/${local.name_prefix}-discord"
   palworld_settings_path     = fileexists("${path.module}/../config/palworld-settings.json") ? "${path.module}/../config/palworld-settings.json" : "${path.module}/../config/palworld-settings.json.example"
   palworld_settings_document = jsondecode(file(local.palworld_settings_path))
   palworld_settings          = local.palworld_settings_document.settings
@@ -73,12 +69,6 @@ locals {
     "player_stamina_decrease_rate",
     "item_weight_rate",
   ])
-  discord_config_payload = jsonencode({
-    public_key       = var.discord_public_key
-    guild_id         = var.discord_guild_id
-    allowed_user_ids = var.discord_allowed_user_ids
-    allowed_role_ids = var.discord_allowed_role_ids
-  })
   palworld_config_payload = jsonencode({
     server_name                     = local.palworld_settings.server_name
     server_description              = local.palworld_settings.server_description
@@ -106,11 +96,6 @@ locals {
     item_weight_rate                = local.palworld_settings.item_weight_rate
     rest_api_port                   = var.palworld_rest_api_port
     rest_api_username               = var.palworld_rest_api_username
-    autostop_check_minutes          = var.autostop_check_minutes
-    autostop_idle_minutes           = var.autostop_idle_minutes
-    healthcheck_timeout_minutes     = var.healthcheck_timeout_minutes
-    local_backup_retention_days     = var.local_backup_retention_days
-    s3_backup_uri                   = local.s3_backup_uri
   })
 }
 

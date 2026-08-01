@@ -47,12 +47,6 @@ variable "private_subnet_cidrs" {
   }
 }
 
-variable "enable_legacy_single_server" {
-  description = "Mantem temporariamente a EC2 e a Lambda Discord do prototipo antigo."
-  type        = bool
-  default     = false
-}
-
 variable "vpc_cidr" {
   description = "CIDR da VPC dedicada e economica."
   type        = string
@@ -90,18 +84,6 @@ variable "root_volume_size_gib" {
     condition     = var.root_volume_size_gib >= 30 && var.root_volume_size_gib <= 16384
     error_message = "root_volume_size_gib deve ficar entre 30 e 16384 GiB."
   }
-}
-
-variable "root_volume_delete_on_termination" {
-  description = "Remove o volume raiz ao destruir a EC2. Backups devem existir antes de habilitar."
-  type        = bool
-  default     = true
-}
-
-variable "enable_termination_protection" {
-  description = "Impede terminacao acidental da EC2 pela API; nao impede stop."
-  type        = bool
-  default     = false
 }
 
 variable "palworld_port" {
@@ -172,12 +154,6 @@ variable "discord_public_key" {
   }
 }
 
-variable "discord_guild_id" {
-  description = "Guild ID unica autorizada a executar comandos."
-  type        = string
-  default     = "REPLACE_ME"
-}
-
 variable "gamewake_console_url" {
   description = "Origem HTTPS exata da Console usada por OAuth e CORS."
   type        = string
@@ -219,18 +195,6 @@ variable "runtime_profile_hourly_rates" {
   }
 }
 
-variable "discord_allowed_user_ids" {
-  description = "IDs de usuarios autorizados. Lista vazia nao autoriza usuarios diretamente."
-  type        = list(string)
-  default     = []
-}
-
-variable "discord_allowed_role_ids" {
-  description = "IDs de cargos autorizados. Lista vazia nao autoriza cargos."
-  type        = list(string)
-  default     = []
-}
-
 variable "secure_parameter_placeholder" {
   description = "Placeholder inicial dos SecureStrings; substitua via AWS CLI antes do primeiro start."
   type        = string
@@ -253,56 +217,6 @@ variable "palworld_rest_api_username" {
   description = "Username de Basic Auth da REST API. A documentacao oficial nao o define; valide na versao instalada."
   type        = string
   default     = "admin"
-}
-
-variable "autostop_check_minutes" {
-  description = "Intervalo do timer de verificacao de jogadores."
-  type        = number
-  default     = 5
-
-  validation {
-    condition     = var.autostop_check_minutes >= 1
-    error_message = "autostop_check_minutes deve ser pelo menos 1."
-  }
-}
-
-variable "autostop_idle_minutes" {
-  description = "Tempo vazio antes do save e shutdown automatico."
-  type        = number
-  default     = 20
-
-  validation {
-    condition     = var.autostop_idle_minutes >= var.autostop_check_minutes
-    error_message = "autostop_idle_minutes deve ser maior ou igual ao intervalo de verificacao."
-  }
-}
-
-variable "healthcheck_timeout_minutes" {
-  description = "Tempo maximo de uma tentativa de healthcheck antes de o systemd repetir."
-  type        = number
-  default     = 10
-
-  validation {
-    condition     = var.healthcheck_timeout_minutes >= 1
-    error_message = "healthcheck_timeout_minutes deve ser pelo menos 1."
-  }
-}
-
-variable "local_backup_retention_days" {
-  description = "Retencao dos arquivos tar.gz locais."
-  type        = number
-  default     = 14
-
-  validation {
-    condition     = var.local_backup_retention_days >= 1
-    error_message = "local_backup_retention_days deve ser pelo menos 1."
-  }
-}
-
-variable "enable_s3_backup" {
-  description = "Cria bucket privado e envia backups para S3."
-  type        = bool
-  default     = false
 }
 
 variable "world_data_bucket_name" {
@@ -405,36 +319,6 @@ variable "aurora_skip_final_snapshot" {
   default     = false
 }
 
-variable "s3_backup_bucket_name" {
-  description = "Nome global opcional do bucket; null gera nome com project/account/region."
-  type        = string
-  default     = null
-  nullable    = true
-}
-
-variable "s3_backup_versioning" {
-  description = "Habilita versionamento do bucket de backups."
-  type        = bool
-  default     = true
-}
-
-variable "s3_backup_retention_days" {
-  description = "Expira objetos/versoes de backup no S3 apos este periodo."
-  type        = number
-  default     = 30
-
-  validation {
-    condition     = var.s3_backup_retention_days >= 1
-    error_message = "s3_backup_retention_days deve ser pelo menos 1."
-  }
-}
-
-variable "stop_after_initial_bootstrap" {
-  description = "Agenda stop da EC2 depois do primeiro bootstrap para evitar ociosidade inicial."
-  type        = bool
-  default     = true
-}
-
 variable "cloudwatch_log_retention_days" {
   description = "Retencao dos logs estruturados da Lambda."
   type        = number
@@ -461,42 +345,6 @@ variable "operations_alarm_email" {
       can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.operations_alarm_email))
     )
     error_message = "operations_alarm_email deve ser null ou um email valido."
-  }
-}
-
-variable "lambda_timeout_seconds" {
-  description = "Timeout curto para respeitar a janela de resposta do Discord."
-  type        = number
-  default     = 5
-
-  validation {
-    condition     = var.lambda_timeout_seconds >= 3 && var.lambda_timeout_seconds <= 10
-    error_message = "lambda_timeout_seconds deve ficar entre 3 e 10 segundos."
-  }
-}
-
-variable "lambda_memory_size_mb" {
-  description = "Memoria da Lambda; mais memoria tambem fornece mais CPU para cumprir o prazo do Discord."
-  type        = number
-  default     = 512
-
-  validation {
-    condition     = var.lambda_memory_size_mb >= 256 && var.lambda_memory_size_mb <= 1024
-    error_message = "lambda_memory_size_mb deve ficar entre 256 e 1024 MB."
-  }
-}
-
-variable "lambda_reserved_concurrent_executions" {
-  description = "Concorrencia reservada da Lambda; -1 usa o limite nao reservado da conta."
-  type        = number
-  default     = -1
-
-  validation {
-    condition = (
-      var.lambda_reserved_concurrent_executions == -1 ||
-      var.lambda_reserved_concurrent_executions >= 1
-    )
-    error_message = "lambda_reserved_concurrent_executions deve ser -1 ou pelo menos 1."
   }
 }
 
