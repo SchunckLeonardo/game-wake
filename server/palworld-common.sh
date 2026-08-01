@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 
 PALWORLD_ENV_FILE="${PALWORLD_ENV_FILE:-/etc/palworld/palworld.env}"
+PALWORLD_WORLD_ENV_FILE="${PALWORLD_WORLD_ENV_FILE:-/etc/palworld/world.env}"
 
 if [[ -r "$PALWORLD_ENV_FILE" ]]; then
   # shellcheck disable=SC1090
   source "$PALWORLD_ENV_FILE"
+fi
+if [[ -r "$PALWORLD_WORLD_ENV_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$PALWORLD_WORLD_ENV_FILE"
 fi
 
 palworld_log() {
@@ -159,12 +164,6 @@ load_palworld_config() {
   ITEM_WEIGHT_RATE=$(jq -er '.item_weight_rate | numbers' <<<"$config")
   REST_API_PORT=$(jq -er '.rest_api_port | numbers' <<<"$config")
   REST_API_USERNAME=$(jq -er '.rest_api_username | strings' <<<"$config")
-  AUTOSTOP_CHECK_MINUTES=$(jq -er '.autostop_check_minutes | numbers' <<<"$config")
-  AUTOSTOP_IDLE_MINUTES=$(jq -er '.autostop_idle_minutes | numbers' <<<"$config")
-  HEALTHCHECK_TIMEOUT_MINUTES=$(jq -er '.healthcheck_timeout_minutes | numbers' <<<"$config")
-  LOCAL_BACKUP_RETENTION_DAYS=$(jq -er '.local_backup_retention_days | numbers' <<<"$config")
-  S3_BACKUP_URI=$(jq -er '.s3_backup_uri | strings' <<<"$config")
-
   export PALWORLD_SERVER_NAME PALWORLD_SERVER_DESCRIPTION PALWORLD_PORT
   export PALWORLD_MAX_PLAYERS EXP_RATE COLLECTION_DROP_RATE ENEMY_DROP_ITEM_RATE SUPPLY_DROP_SPAN
   export BASE_CAMP_WORKER_MAX_NUM MONSTER_FARM_ACTION_SPEED_RATE
@@ -174,8 +173,6 @@ load_palworld_config() {
   export PAL_DAMAGE_ATTACK_RATE PAL_DAMAGE_DEFENSE_RATE PLAYER_DAMAGE_ATTACK_RATE
   export PLAYER_DAMAGE_DEFENSE_RATE PAL_STAMINA_DECREASE_RATE PAL_STOMACH_DECREASE_RATE
   export PLAYER_STAMINA_DECREASE_RATE ITEM_WEIGHT_RATE REST_API_PORT REST_API_USERNAME
-  export AUTOSTOP_CHECK_MINUTES AUTOSTOP_IDLE_MINUTES HEALTHCHECK_TIMEOUT_MINUTES
-  export LOCAL_BACKUP_RETENTION_DAYS S3_BACKUP_URI
 }
 
 palworld_api() {
@@ -212,66 +209,4 @@ palworld_player_count() {
   count=$(jq -er '.players | if type == "array" then length else error("players is not an array") end' <<<"$response") || return 1
   [[ "$count" =~ ^[0-9]+$ ]] || return 1
   printf '%s' "$count"
-}
-
-publish_status() {
-  local service_state=$1
-  local players=${2:-null}
-  local detail=${3:-}
-  local payload
-
-  if [[ ! "$players" =~ ^[0-9]+$ ]]; then
-    players=null
-  fi
-  payload=$(jq -cn \
-    --arg service_state "$service_state" \
-    --argjson players "$players" \
-    --arg detail "$detail" \
-    --arg updated_at "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
-    '{service_state:$service_state,players:$players,detail:$detail,updated_at:$updated_at}')
-
-  aws ssm put-parameter \
-    --region "$AWS_REGION" \
-    --name "$STATUS_PARAMETER_NAME" \
-    --type String \
-    --overwrite \
-    --value "$payload" >/dev/null
-}
-
-discord_webhook_send() {
-  local message=$1
-  local webhook_url
-  local payload
-
-  webhook_url=$(ssm_get_secret "$DISCORD_WEBHOOK_PARAMETER_NAME") || return 1
-  payload=$(jq -cn --arg content "$message" '{content:$content,allowed_mentions:{parse:[]}}')
-  printf 'url = "%s"\n' "$webhook_url" | curl --config - \
-    --silent \
-    --show-error \
-    --fail-with-body \
-    --connect-timeout 3 \
-    --max-time 10 \
-    --header "Content-Type: application/json" \
-    --data "$payload" >/dev/null
-}
-
-current_public_ipv4() {
-  local token
-  token=$(curl \
-    --silent \
-    --show-error \
-    --fail \
-    --connect-timeout 1 \
-    --max-time 2 \
-    --request PUT \
-    --header "X-aws-ec2-metadata-token-ttl-seconds: 60" \
-    --url "http://169.254.169.254/latest/api/token") || return 1
-  curl \
-    --silent \
-    --show-error \
-    --fail \
-    --connect-timeout 1 \
-    --max-time 2 \
-    --header "X-aws-ec2-metadata-token: $token" \
-    --url "http://169.254.169.254/latest/meta-data/public-ipv4"
 }

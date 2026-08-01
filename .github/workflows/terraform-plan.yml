@@ -26,9 +26,23 @@ jobs:
       TF_VAR_aws_region: ${{ vars.AWS_REGION }}
       TF_VAR_discord_application_id: ${{ vars.DISCORD_APPLICATION_ID }}
       TF_VAR_discord_public_key: ${{ vars.DISCORD_PUBLIC_KEY }}
-      TF_VAR_discord_guild_id: ${{ vars.DISCORD_GUILD_ID }}
-      TF_VAR_discord_allowed_user_ids: ${{ vars.DISCORD_ALLOWED_USER_IDS_JSON }}
-      TF_VAR_discord_allowed_role_ids: ${{ vars.DISCORD_ALLOWED_ROLE_IDS_JSON }}
+      TF_VAR_project_name: ${{ vars.PROJECT_NAME || 'gamewake' }}
+      TF_VAR_environment: ${{ vars.DEPLOYMENT_ENVIRONMENT || 'prod' }}
+      TF_VAR_instance_type: ${{ vars.INSTANCE_TYPE || 'm6a.xlarge' }}
+      TF_VAR_gamewake_console_url: ${{ vars.GAMEWAKE_CONSOLE_URL }}
+      TF_VAR_abacatepay_packages: ${{ vars.ABACATEPAY_PACKAGES_JSON }}
+      TF_VAR_runtime_profile_hourly_rates: ${{ vars.RUNTIME_PROFILE_HOURLY_RATES_JSON }}
+      TF_VAR_storage_allowance_bytes: ${{ vars.STORAGE_ALLOWANCE_BYTES || '10737418240' }}
+      TF_VAR_storage_grace_days: ${{ vars.STORAGE_GRACE_DAYS || '30' }}
+      TF_VAR_storage_rate_per_gib_month_brl: ${{ vars.STORAGE_RATE_PER_GIB_MONTH_BRL || '2' }}
+      TF_VAR_aurora_engine_version: ${{ vars.AURORA_ENGINE_VERSION || '16.3' }}
+      TF_VAR_aurora_min_acu: ${{ vars.AURORA_MIN_ACU || '0' }}
+      TF_VAR_aurora_max_acu: ${{ vars.AURORA_MAX_ACU || '4' }}
+      TF_VAR_aurora_auto_pause_seconds: ${{ vars.AURORA_AUTO_PAUSE_SECONDS || '900' }}
+      TF_VAR_operations_alarm_email: ${{ vars.OPERATIONS_ALARM_EMAIL || 'null' }}
+      TF_VAR_palworld_allowed_cidr: ${{ vars.PALWORLD_ALLOWED_CIDR || '0.0.0.0/0' }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_STATE_KEY: ${{ vars.TF_STATE_KEY }}
     steps:
       - uses: actions/checkout@v6
 
@@ -36,7 +50,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: 1.11.4
 
@@ -49,16 +63,14 @@ jobs:
       - name: Package Lambda
         run: ./scripts/package-lambda.sh
 
-      - name: Require a persistent remote backend
-        run: |
-          if ! grep -Eq '^[[:space:]]*backend "s3"' terraform/versions.tf; then
-            echo "GitHub runners cannot safely use local Terraform state." >&2
-            echo "Enable and migrate the documented S3 backend before this workflow." >&2
-            exit 1
-          fi
-
       - name: Initialize Terraform
-        run: terraform -chdir=terraform init
+        run: >-
+          terraform -chdir=terraform init
+          -backend-config="bucket=$TF_STATE_BUCKET"
+          -backend-config="key=$TF_STATE_KEY"
+          -backend-config="region=$TF_VAR_aws_region"
+          -backend-config="encrypt=true"
+          -backend-config="use_lockfile=true"
 
       - name: Plan
         run: terraform -chdir=terraform plan -input=false -out=tfplan

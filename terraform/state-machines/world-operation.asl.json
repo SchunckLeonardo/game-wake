@@ -1,0 +1,78 @@
+{
+  "Comment": "Advance a persisted GameWake World operation one idempotent phase at a time",
+  "StartAt": "AdvanceOperation",
+  "States": {
+    "AdvanceOperation": {
+      "Type": "Task",
+      "Resource": "${operation_worker_arn}",
+      "Parameters": {
+        "account_id.$": "$.account_id",
+        "operation_id.$": "$.operation_id"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "BackoffRate": 2,
+          "MaxAttempts": 5
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.failure",
+          "Next": "RecordFailure"
+        }
+      ],
+      "Next": "OperationTerminal"
+    },
+    "OperationTerminal": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.terminal",
+          "BooleanEquals": true,
+          "Next": "OperationComplete"
+        }
+      ],
+      "Default": "WaitBeforeNextPhase"
+    },
+    "WaitBeforeNextPhase": {
+      "Type": "Wait",
+      "Seconds": 2,
+      "Next": "AdvanceOperation"
+    },
+    "RecordFailure": {
+      "Type": "Task",
+      "Resource": "${operation_worker_arn}",
+      "Parameters": {
+        "action": "record_failure",
+        "account_id.$": "$.account_id",
+        "operation_id.$": "$.operation_id",
+        "failure.$": "$.failure"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "BackoffRate": 2,
+          "MaxAttempts": 5
+        }
+      ],
+      "End": true
+    },
+    "OperationComplete": {
+      "Type": "Succeed"
+    }
+  }
+}

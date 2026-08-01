@@ -1,9 +1,0 @@
-[Unit]
-Description=Check Palworld players and stop an idle EC2 safely
-After=palworld.service
-
-[Service]
-Type=oneshot
-EnvironmentFile=/etc/palworld/palworld.env
-ExecStart=/usr/local/sbin/autostop.sh
-

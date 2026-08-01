@@ -16,33 +16,31 @@ fi
 api_url="https://discord.com/api/v10/applications/$DISCORD_APPLICATION_ID/guilds/$DISCORD_GUILD_ID/commands"
 payload=$(jq -cn '[
   {
-    name:"palworld",
-    description:"Controla o servidor dedicado de Palworld",
+    name:"gamewake",
+    description:"Jogue com seus amigos sem manter um servidor ligado",
     type:1,
     default_member_permissions:null,
     dm_permission:false,
     options:[
-      {type:1,name:"ligar",description:"Liga o servidor Palworld"},
-      {type:1,name:"status",description:"Mostra o estado e o endereço atual"},
+      {type:1,name:"comecar",description:"Cria a conta GameWake deste servidor"},
       {
         type:1,
-        name:"desligar",
-        description:"Salva o mundo e desliga com segurança",
+        name:"convidar",
+        description:"Convida até três amigos para a conta GameWake",
         options:[
-          {
-            type:5,
-            name:"forcar",
-            description:"Ignora jogadores/erros; somente administradores",
-            required:false
-          }
+          {type:6,name:"amigo1",description:"Primeiro amigo",required:true},
+          {type:6,name:"amigo2",description:"Segundo amigo",required:false},
+          {type:6,name:"amigo3",description:"Terceiro amigo",required:false}
         ]
       },
-      {
-        type:1,
-        name:"configurar",
-        description:"Abre o painel guiado de configurações do servidor"
-      },
-      {type:1,name:"ajuda",description:"Explica os comandos disponíveis"}
+      {type:1,name:"aceitar",description:"Aceita seu convite pendente para a conta GameWake"},
+      {type:1,name:"status",description:"Mostra o estado do seu World"},
+      {type:1,name:"acordar",description:"Acorda o World para jogar"},
+      {type:1,name:"conectar",description:"Mostra conexão e senha somente para você"},
+      {type:1,name:"dormir",description:"Salva o World e inicia o sono seguro"},
+      {type:1,name:"configurar",description:"Abre o painel guiado de configurações do World"},
+      {type:1,name:"console",description:"Abre a GameWake Console"},
+      {type:1,name:"ajuda",description:"Explica os comandos GameWake"}
     ]
   }
 ]')

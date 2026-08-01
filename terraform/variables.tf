@@ -1,7 +1,7 @@
 variable "project_name" {
   description = "Nome curto usado em recursos, tags e caminhos do Parameter Store."
   type        = string
-  default     = "palworld-cloud-server"
+  default     = "gamewake"
 
   validation {
     condition     = can(regex("^[a-z][a-z0-9-]{2,31}$", var.project_name))
@@ -31,6 +31,20 @@ variable "availability_zone" {
   type        = string
   default     = null
   nullable    = true
+}
+
+variable "private_subnet_cidrs" {
+  description = "Dois CIDRs privados em AZs distintas para o Aurora Serverless v2."
+  type        = list(string)
+  default     = ["10.42.10.0/24", "10.42.11.0/24"]
+
+  validation {
+    condition = (
+      length(var.private_subnet_cidrs) >= 2 &&
+      alltrue([for cidr in var.private_subnet_cidrs : can(cidrnetmask(cidr))])
+    )
+    error_message = "private_subnet_cidrs exige pelo menos dois CIDRs IPv4 validos."
+  }
 }
 
 variable "vpc_cidr" {
@@ -70,18 +84,6 @@ variable "root_volume_size_gib" {
     condition     = var.root_volume_size_gib >= 30 && var.root_volume_size_gib <= 16384
     error_message = "root_volume_size_gib deve ficar entre 30 e 16384 GiB."
   }
-}
-
-variable "root_volume_delete_on_termination" {
-  description = "Remove o volume raiz ao destruir a EC2. Backups devem existir antes de habilitar."
-  type        = bool
-  default     = true
-}
-
-variable "enable_termination_protection" {
-  description = "Impede terminacao acidental da EC2 pela API; nao impede stop."
-  type        = bool
-  default     = false
 }
 
 variable "palworld_port" {
@@ -152,22 +154,45 @@ variable "discord_public_key" {
   }
 }
 
-variable "discord_guild_id" {
-  description = "Guild ID unica autorizada a executar comandos."
+variable "gamewake_console_url" {
+  description = "Origem HTTPS exata da Console usada por OAuth e CORS."
   type        = string
-  default     = "REPLACE_ME"
+  default     = "https://gamewake-mvp.leonardorainha.chatgpt.site"
+
+  validation {
+    condition     = can(regex("^https://[^/]+$", var.gamewake_console_url))
+    error_message = "gamewake_console_url deve ser uma origem HTTPS sem barra final."
+  }
 }
 
-variable "discord_allowed_user_ids" {
-  description = "IDs de usuarios autorizados. Lista vazia nao autoriza usuarios diretamente."
-  type        = list(string)
-  default     = []
+variable "abacatepay_packages" {
+  description = "Pacotes de credito e produtos avulsos correspondentes na AbacatePay v2."
+  type = list(object({
+    id         = string
+    amount     = number
+    product_id = string
+  }))
+  default = [
+    { id = "credits-25", amount = 25, product_id = "REPLACE_ME" },
+    { id = "credits-50", amount = 50, product_id = "REPLACE_ME" },
+    { id = "credits-100", amount = 100, product_id = "REPLACE_ME" },
+  ]
 }
 
-variable "discord_allowed_role_ids" {
-  description = "IDs de cargos autorizados. Lista vazia nao autoriza cargos."
-  type        = list(string)
-  default     = []
+variable "runtime_profile_hourly_rates" {
+  description = "Preco final por hora em BRL de cada Runtime Profile oferecido no MVP."
+  type        = map(number)
+  default = {
+    palworld-small = 3.60
+  }
+
+  validation {
+    condition = (
+      length(var.runtime_profile_hourly_rates) > 0 &&
+      alltrue([for rate in values(var.runtime_profile_hourly_rates) : rate > 0])
+    )
+    error_message = "Todo Runtime Profile deve ter preco final positivo."
+  }
 }
 
 variable "secure_parameter_placeholder" {
@@ -194,84 +219,104 @@ variable "palworld_rest_api_username" {
   default     = "admin"
 }
 
-variable "autostop_check_minutes" {
-  description = "Intervalo do timer de verificacao de jogadores."
-  type        = number
-  default     = 5
-
-  validation {
-    condition     = var.autostop_check_minutes >= 1
-    error_message = "autostop_check_minutes deve ser pelo menos 1."
-  }
-}
-
-variable "autostop_idle_minutes" {
-  description = "Tempo vazio antes do save e shutdown automatico."
-  type        = number
-  default     = 20
-
-  validation {
-    condition     = var.autostop_idle_minutes >= var.autostop_check_minutes
-    error_message = "autostop_idle_minutes deve ser maior ou igual ao intervalo de verificacao."
-  }
-}
-
-variable "healthcheck_timeout_minutes" {
-  description = "Tempo maximo de uma tentativa de healthcheck antes de o systemd repetir."
-  type        = number
-  default     = 10
-
-  validation {
-    condition     = var.healthcheck_timeout_minutes >= 1
-    error_message = "healthcheck_timeout_minutes deve ser pelo menos 1."
-  }
-}
-
-variable "local_backup_retention_days" {
-  description = "Retencao dos arquivos tar.gz locais."
-  type        = number
-  default     = 14
-
-  validation {
-    condition     = var.local_backup_retention_days >= 1
-    error_message = "local_backup_retention_days deve ser pelo menos 1."
-  }
-}
-
-variable "enable_s3_backup" {
-  description = "Cria bucket privado e envia backups para S3."
-  type        = bool
-  default     = false
-}
-
-variable "s3_backup_bucket_name" {
-  description = "Nome global opcional do bucket; null gera nome com project/account/region."
+variable "world_data_bucket_name" {
+  description = "Nome global opcional do bucket persistente de mundos do GameWake."
   type        = string
   default     = null
   nullable    = true
 }
 
-variable "s3_backup_versioning" {
-  description = "Habilita versionamento do bucket de backups."
-  type        = bool
-  default     = true
+variable "storage_allowance_bytes" {
+  description = "Armazenamento duravel incluido por GameWake Account antes do excedente."
+  type        = number
+  default     = 10737418240
+
+  validation {
+    condition     = var.storage_allowance_bytes >= 0
+    error_message = "storage_allowance_bytes nao pode ser negativo."
+  }
 }
 
-variable "s3_backup_retention_days" {
-  description = "Expira objetos/versoes de backup no S3 apos este periodo."
+variable "storage_grace_days" {
+  description = "Dias de tolerancia para excedente de armazenamento sem saldo."
   type        = number
   default     = 30
 
   validation {
-    condition     = var.s3_backup_retention_days >= 1
-    error_message = "s3_backup_retention_days deve ser pelo menos 1."
+    condition     = var.storage_grace_days >= 1
+    error_message = "storage_grace_days deve ser pelo menos 1."
   }
 }
 
-variable "stop_after_initial_bootstrap" {
-  description = "Agenda stop da EC2 depois do primeiro bootstrap para evitar ociosidade inicial."
+variable "storage_rate_per_gib_month_brl" {
+  description = "Preco mensal em BRL por GiB que excede a Storage Allowance. Validar margem antes da beta."
+  type        = number
+  default     = 2
+
+  validation {
+    condition     = var.storage_rate_per_gib_month_brl > 0
+    error_message = "storage_rate_per_gib_month_brl deve ser positivo."
+  }
+}
+
+variable "aurora_database_name" {
+  description = "Banco PostgreSQL usado pelo control plane do GameWake."
+  type        = string
+  default     = "gamewake"
+}
+
+variable "aurora_engine_version" {
+  description = "Aurora PostgreSQL compativel com Serverless v2 auto-pause em zero ACUs."
+  type        = string
+  default     = "16.3"
+}
+
+variable "aurora_min_acu" {
+  description = "Capacidade minima do Aurora Serverless v2."
+  type        = number
+  default     = 0
+
+  validation {
+    condition     = var.aurora_min_acu >= 0 && var.aurora_min_acu <= 128
+    error_message = "aurora_min_acu deve ficar entre 0 e 128 ACUs."
+  }
+}
+
+variable "aurora_max_acu" {
+  description = "Capacidade maxima do Aurora Serverless v2."
+  type        = number
+  default     = 4
+
+  validation {
+    condition     = var.aurora_max_acu >= 1 && var.aurora_max_acu <= 256
+    error_message = "aurora_max_acu deve ficar entre 1 e 256 ACUs."
+  }
+}
+
+variable "aurora_auto_pause_seconds" {
+  description = "Inatividade antes de pausar Aurora Serverless v2 quando min ACU e zero."
+  type        = number
+  default     = 900
+
+  validation {
+    condition = (
+      var.aurora_auto_pause_seconds >= 300 &&
+      var.aurora_auto_pause_seconds <= 86400
+    )
+    error_message = "aurora_auto_pause_seconds deve ficar entre 300 e 86400."
+  }
+}
+
+variable "aurora_deletion_protection" {
+  description = "Protege o banco de producao contra exclusao acidental."
   type        = bool
   default     = true
+}
+
+variable "aurora_skip_final_snapshot" {
+  description = "Somente para ambientes descartaveis; producao deve manter false."
+  type        = bool
+  default     = false
 }
 
 variable "cloudwatch_log_retention_days" {
@@ -288,39 +333,18 @@ variable "cloudwatch_log_retention_days" {
   }
 }
 
-variable "lambda_timeout_seconds" {
-  description = "Timeout curto para respeitar a janela de resposta do Discord."
-  type        = number
-  default     = 5
-
-  validation {
-    condition     = var.lambda_timeout_seconds >= 3 && var.lambda_timeout_seconds <= 10
-    error_message = "lambda_timeout_seconds deve ficar entre 3 e 10 segundos."
-  }
-}
-
-variable "lambda_memory_size_mb" {
-  description = "Memoria da Lambda; mais memoria tambem fornece mais CPU para cumprir o prazo do Discord."
-  type        = number
-  default     = 512
-
-  validation {
-    condition     = var.lambda_memory_size_mb >= 256 && var.lambda_memory_size_mb <= 1024
-    error_message = "lambda_memory_size_mb deve ficar entre 256 e 1024 MB."
-  }
-}
-
-variable "lambda_reserved_concurrent_executions" {
-  description = "Concorrencia reservada da Lambda; -1 usa o limite nao reservado da conta."
-  type        = number
-  default     = -1
+variable "operations_alarm_email" {
+  description = "Email opcional que recebe alarmes operacionais da Closed Beta via SNS. A assinatura precisa ser confirmada."
+  type        = string
+  default     = null
+  nullable    = true
 
   validation {
     condition = (
-      var.lambda_reserved_concurrent_executions == -1 ||
-      var.lambda_reserved_concurrent_executions >= 1
+      var.operations_alarm_email == null ||
+      can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.operations_alarm_email))
     )
-    error_message = "lambda_reserved_concurrent_executions deve ser -1 ou pelo menos 1."
+    error_message = "operations_alarm_email deve ser null ou um email valido."
   }
 }
 

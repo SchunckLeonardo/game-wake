@@ -14,8 +14,7 @@ install_server_files() {
 
   install -d -o palworld -g palworld -m 0750 /opt/palworld
   install -d -o palworld -g palworld -m 0750 /var/lib/palworld/saved
-  install -d -o palworld -g palworld -m 0750 /var/lib/palworld-monitor
-  install -d -o palworld -g palworld -m 0750 /var/backups/palworld
+  install -d -o root -g root -m 0700 /var/lib/gamewake-operations
   install -d -o palworld -g palworld -m 0750 /run/palworld
 }
 
@@ -59,7 +58,8 @@ install_dependencies() {
     steamcmd \
     tar \
     unzip \
-    util-linux
+    util-linux \
+    zstd
 
   install_aws_cli
 }
@@ -103,4 +103,4 @@ fi
 
 update_palworld
 migrate_saved_directory
-chown -R palworld:palworld /opt/palworld /var/lib/palworld /var/lib/palworld-monitor /var/backups/palworld
+chown -R palworld:palworld /opt/palworld /var/lib/palworld

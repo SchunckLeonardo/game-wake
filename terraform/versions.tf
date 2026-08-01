@@ -8,14 +8,7 @@ terraform {
     }
   }
 
-  # Backend local por padrao. Para producao, migre explicitamente depois de criar
-  # um bucket S3 privado e uma tabela/lockfile conforme documentado no README:
-  # backend "s3" {
-  #   bucket       = "SEU-BUCKET-DE-TERRAFORM"
-  #   key          = "palworld-cloud-server/terraform.tfstate"
-  #   region       = "us-east-1"
-  #   use_lockfile = true
-  #   encrypt      = true
-  # }
+  # Valores sao fornecidos pelo ambiente local ou GitHub Environment para que
+  # nenhum nome de bucket/conta fique acoplado ao repositorio.
+  backend "s3" {}
 }
-

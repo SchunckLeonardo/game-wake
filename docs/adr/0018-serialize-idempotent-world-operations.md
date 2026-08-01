@@ -1,0 +1,3 @@
+# Serialize idempotent World Operations
+
+GameWake permits only one active lifecycle World Operation per World. Repeated commands join the existing operation without creating another Usage Reservation, Runtime, or charge; conflicting commands are serialized or cancelled only at a safe point. Operations persist each step before external effects and reconcile real provider state before resuming after interruption; uncertain state moves the World to `Precisa de atenção` instead of repeating an action. Discord and Web observe the same durable operation, preventing concurrent friends, retried requests, and control-plane restarts from duplicating infrastructure or billing.
