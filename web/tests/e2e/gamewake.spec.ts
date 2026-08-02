@@ -77,7 +77,7 @@ test("Discord Activity uses the same safe Console", async ({ page }) => {
   await expect(page.getByText("segredo-do-grupo")).toHaveCount(0);
 });
 
-test("OAuth callback stores the short-lived session and routes an existing member", async ({
+test("OAuth callback stores the short-lived session and selected Discord server", async ({
   page,
 }) => {
   await page.route("**/api/v1/me/accounts", async (route) => {
@@ -90,12 +90,17 @@ test("OAuth callback stores the short-lived session and routes an existing membe
     });
   });
 
-  await page.goto("/auth/callback#session=signed-session");
+  await page.goto(
+    "/auth/callback#session=signed-session&discordGuildId=123456789012345678",
+  );
 
   await expect(page).toHaveURL(/\/accounts\/account-live$/);
   expect(await page.evaluate(() => sessionStorage.getItem("gamewake_session"))).toBe(
     "signed-session",
   );
+  expect(
+    await page.evaluate(() => sessionStorage.getItem("gamewake_discord_guild_id")),
+  ).toBe("123456789012345678");
 });
 
 test("OAuth callback makes one-time Owner recovery codes impossible to miss", async ({
@@ -126,7 +131,10 @@ test("authenticated onboarding creates a real account and Palworld through the A
 }) => {
   let accountBody: unknown;
   let worldBody: unknown;
-  await page.addInitScript(() => sessionStorage.setItem("gamewake_session", "signed-session"));
+  await page.addInitScript(() => {
+    sessionStorage.setItem("gamewake_session", "signed-session");
+    sessionStorage.setItem("gamewake_discord_guild_id", "123456789012345678");
+  });
   await page.route("**/api/v1/accounts", async (route) => {
     accountBody = route.request().postDataJSON();
     await route.fulfill({
@@ -155,7 +163,13 @@ test("authenticated onboarding creates a real account and Palworld through the A
     "href",
     "/accounts/account-new",
   );
-  expect(accountBody).toEqual({ name: "Grupo novo" });
+  expect(accountBody).toEqual({
+    name: "Grupo novo",
+    discordGuildId: "123456789012345678",
+  });
+  expect(
+    await page.evaluate(() => sessionStorage.getItem("gamewake_discord_guild_id")),
+  ).toBeNull();
   expect(worldBody).toMatchObject({
     name: "Novo mundo",
     gameTemplateId: "palworld:1",

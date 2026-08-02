@@ -12,6 +12,7 @@ from urllib.request import Request, urlopen
 from .model import ContributionCheckoutRequest, PaymentCheckout
 
 _DEFAULT_BASE_URL = "https://api.abacatepay.com/v2"
+_ABACATEPAY_USER_AGENT = "GameWake/0.1.0 (+https://gamewake.com.br)"
 
 
 class PaymentProviderError(RuntimeError):
@@ -45,7 +46,7 @@ class UrllibJsonHttpClient:
         request = Request(
             url,
             data=(json.dumps(json_body).encode("utf-8") if json_body is not None else None),
-            headers=dict(headers),
+            headers={**headers, "User-Agent": _ABACATEPAY_USER_AGENT},
             method=method,
         )
         try:

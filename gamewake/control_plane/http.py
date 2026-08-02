@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 from datetime import timedelta
 from typing import Any
 
 from gamewake.auth import InvalidSession
 
 from .api import ApiRequest
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class GameWakeHttpHandler:
@@ -76,6 +79,9 @@ class GameWakeHttpHandler:
                     verified_email=getattr(identity, "verified_email", None),
                 )
                 fragment = f"session={session}"
+                installed_guild_id = getattr(identity, "installed_guild_id", None)
+                if isinstance(installed_guild_id, str) and installed_guild_id.isdigit():
+                    fragment += f"&discordGuildId={installed_guild_id}"
                 if recovery:
                     encoded_recovery = (
                         base64.urlsafe_b64encode(json.dumps(recovery, ensure_ascii=False).encode())
@@ -139,6 +145,14 @@ class GameWakeHttpHandler:
         except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
             code = "invalid_json" if raw_body else "invalid_request"
             return self._error(400, code, "Invalid request", cors)
+        except Exception:
+            _LOGGER.exception("Unhandled GameWake HTTP request failure")
+            return self._error(
+                500,
+                "internal_error",
+                "Não foi possível concluir a ação.",
+                cors,
+            )
 
     def _bootstrap_owner_recovery(
         self,

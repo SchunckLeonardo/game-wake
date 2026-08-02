@@ -1,5 +1,6 @@
 import json
 from decimal import Decimal
+from unittest.mock import patch
 
 import pytest
 
@@ -9,12 +10,47 @@ from gamewake.billing.abacatepay import (
     AbacatePayPaymentProvider,
     AbacatePayWebhookHandler,
     InvalidWebhookSignature,
+    UrllibJsonHttpClient,
 )
+
+
+class JsonResponse:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return None
+
+    def read(self):
+        return b'{"success": true, "data": []}'
 
 
 def test_abacatepay_adapters_are_exposed_by_the_billing_public_api():
     assert billing_package.AbacatePayPaymentProvider is AbacatePayPaymentProvider
     assert billing_package.AbacatePayWebhookHandler is AbacatePayWebhookHandler
+
+
+def test_urllib_client_identifies_gamewake_instead_of_using_the_blocked_python_agent():
+    captured = {}
+
+    def open_request(request, *, timeout):
+        captured["user_agent"] = request.get_header("User-agent")
+        captured["timeout"] = timeout
+        return JsonResponse()
+
+    with patch("gamewake.billing.abacatepay.urlopen", side_effect=open_request):
+        response = UrllibJsonHttpClient().request(
+            "GET",
+            "https://api.abacatepay.com/v2/checkouts/list?limit=1",
+            headers={"Authorization": "Bearer test-key"},
+            json_body=None,
+        )
+
+    assert response == {"success": True, "data": []}
+    assert captured == {
+        "user_agent": "GameWake/0.1.0 (+https://gamewake.com.br)",
+        "timeout": 15,
+    }
 
 
 class RecordingHttpClient:

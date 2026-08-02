@@ -92,6 +92,36 @@ def test_discord_oauth_issues_a_kms_session_only_after_code_exchange():
     )
 
 
+def test_discord_oauth_preserves_the_installed_guild_for_onboarding():
+    class GuildOAuth(OAuth):
+        def authenticate(self, code, *, redirect_uri):
+            identity = super().authenticate(code, redirect_uri=redirect_uri)
+            identity.installed_guild_id = "123456789012345678"
+            return identity
+
+    transport = GameWakeHttpHandler(
+        application=SimpleNamespace(accounts=Accounts()),
+        api=Api(),
+        sessions=Sessions(),
+        oauth=GuildOAuth(),
+        console_url="https://app.gamewake.example",
+        oauth_redirect_uri="https://api.gamewake.example/auth/discord/callback",
+    )
+
+    response = transport.handle(
+        event(
+            "GET",
+            "/auth/discord/callback",
+            query={"code": "discord-code", "state": "token:oauth"},
+        )
+    )
+
+    assert response["headers"]["location"] == (
+        "https://app.gamewake.example/auth/callback"
+        "#session=token:user-123&discordGuildId=123456789012345678"
+    )
+
+
 def test_oauth_bootstraps_owner_recovery_from_verified_discord_email_once():
     class VerifiedOAuth(OAuth):
         def authenticate(self, code, *, redirect_uri):
@@ -237,6 +267,34 @@ def test_invalid_or_expired_session_is_an_unauthorized_response():
 
     assert response["statusCode"] == 401
     assert json.loads(response["body"])["error"]["code"] == "invalid_session"
+
+
+def test_unexpected_api_failure_is_a_safe_cors_response():
+    class FailingApi:
+        def handle(self, request):
+            del request
+            raise RuntimeError("database secret detail")
+
+    response = handler(FailingApi()).handle(
+        event(
+            "GET",
+            "/api/v1/me/accounts",
+            headers={
+                "authorization": "Bearer token:user-123",
+                "origin": "https://app.gamewake.example",
+            },
+        )
+    )
+
+    assert response["statusCode"] == 500
+    assert response["headers"]["access-control-allow-origin"] == ("https://app.gamewake.example")
+    assert json.loads(response["body"]) == {
+        "error": {
+            "code": "internal_error",
+            "message": "Não foi possível concluir a ação.",
+        }
+    }
+    assert "database secret detail" not in response["body"]
 
 
 def test_oauth_callback_uri_can_be_derived_from_the_function_url_event():

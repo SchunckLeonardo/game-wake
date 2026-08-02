@@ -1,4 +1,5 @@
 export const GAMEWAKE_SESSION_KEY = "gamewake_session";
+export const GAMEWAKE_DISCORD_GUILD_ID_KEY = "gamewake_discord_guild_id";
 
 export function gameWakeApiUrl(path: string) {
   const base = (process.env.NEXT_PUBLIC_GAMEWAKE_API_URL ?? "").replace(/\/$/, "");

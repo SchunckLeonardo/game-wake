@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator, Mapping
+import time
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -9,6 +10,7 @@ from typing import Any, Protocol
 
 SqlParameters = Mapping[str, object]
 Row = Mapping[str, object]
+_DATABASE_RESUME_RETRY_DELAYS = (1.0, 2.0, 4.0, 8.0)
 
 
 class Transaction(Protocol):
@@ -103,6 +105,8 @@ class AuroraDataApi:
         database: str,
         *,
         client: Any | None = None,
+        sleep: Callable[[float], None] = time.sleep,
+        resume_retry_delays: tuple[float, ...] = _DATABASE_RESUME_RETRY_DELAYS,
     ) -> None:
         if not resource_arn or not secret_arn or not database:
             raise ValueError("Aurora resource ARN, secret ARN and database are required")
@@ -114,14 +118,36 @@ class AuroraDataApi:
         self.secret_arn = secret_arn
         self.database = database
         self._client = client
+        self._sleep = sleep
+        self._resume_retry_delays = resume_retry_delays
+
+    @staticmethod
+    def _is_database_resuming(error: Exception) -> bool:
+        response = getattr(error, "response", None)
+        if not isinstance(response, Mapping):
+            return False
+        details = response.get("Error")
+        return isinstance(details, Mapping) and details.get("Code") == ("DatabaseResumingException")
+
+    def _begin_transaction(self) -> dict[str, Any]:
+        for attempt in range(len(self._resume_retry_delays) + 1):
+            try:
+                return self._client.begin_transaction(
+                    resourceArn=self.resource_arn,
+                    secretArn=self.secret_arn,
+                    database=self.database,
+                )
+            except Exception as error:
+                if not self._is_database_resuming(error) or attempt == len(
+                    self._resume_retry_delays
+                ):
+                    raise
+                self._sleep(self._resume_retry_delays[attempt])
+        raise AssertionError("unreachable")
 
     @contextmanager
     def transaction(self) -> Iterator[Transaction]:
-        response = self._client.begin_transaction(
-            resourceArn=self.resource_arn,
-            secretArn=self.secret_arn,
-            database=self.database,
-        )
+        response = self._begin_transaction()
         transaction_id = response["transactionId"]
         transaction = _AuroraTransaction(self, transaction_id)
         try:
