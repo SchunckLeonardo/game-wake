@@ -219,14 +219,6 @@ resource "aws_lambda_function_url" "gamewake_api" {
   function_name      = aws_lambda_function.gamewake_api.function_name
   authorization_type = "NONE"
   invoke_mode        = "BUFFERED"
-
-  cors {
-    allow_credentials = false
-    allow_headers     = ["authorization", "content-type", "idempotency-key"]
-    allow_methods     = ["GET", "POST", "PATCH", "DELETE"]
-    allow_origins     = [var.gamewake_console_url]
-    max_age           = 300
-  }
 }
 
 removed {

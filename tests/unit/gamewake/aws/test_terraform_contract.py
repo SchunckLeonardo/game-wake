@@ -131,14 +131,15 @@ def test_legacy_single_server_stack_is_removed():
     assert "host_mode" not in bootstrap
 
 
-def test_public_api_uses_kms_sessions_exact_cors_and_managed_provider_secrets():
+def test_public_api_leaves_exact_cors_to_the_handler_and_uses_managed_secrets():
     api = source("gamewake-api.tf")
     parameters = source("parameter-store.tf")
 
     assert 'resource "aws_lambda_function" "gamewake_api"' in api
     assert 'resource "aws_lambda_function_url" "gamewake_api"' in api
     assert 'authorization_type = "NONE"' in api
-    assert "allow_origins     = [var.gamewake_console_url]" in api
+    assert "cors {" not in api
+    assert "allow_origins" not in api
     assert 'key_usage                = "GENERATE_VERIFY_MAC"' in api
     assert 'customer_master_key_spec = "HMAC_256"' in api
     assert "GAMEWAKE_WORLD_PARAMETER_PREFIX" in api
