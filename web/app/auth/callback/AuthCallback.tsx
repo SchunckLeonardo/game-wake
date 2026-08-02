@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
+  GAMEWAKE_DISCORD_GUILD_ID_KEY,
   GAMEWAKE_SESSION_KEY,
   gameWakeFetch,
 } from "../../gamewakeApi";
@@ -41,6 +42,15 @@ export function AuthCallback() {
         return;
       }
       window.sessionStorage.setItem(GAMEWAKE_SESSION_KEY, session);
+      const discordGuildId = fragment.get("discordGuildId");
+      if (discordGuildId && /^\d+$/.test(discordGuildId)) {
+        window.sessionStorage.setItem(
+          GAMEWAKE_DISCORD_GUILD_ID_KEY,
+          discordGuildId,
+        );
+      } else {
+        window.sessionStorage.removeItem(GAMEWAKE_DISCORD_GUILD_ID_KEY);
+      }
       window.history.replaceState(null, "", window.location.pathname);
       try {
         const response = await gameWakeFetch("/api/v1/me/accounts");

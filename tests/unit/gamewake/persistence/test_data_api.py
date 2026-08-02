@@ -28,6 +28,25 @@ class FakeRdsDataClient:
         self.calls.append(("rollback", kwargs))
 
 
+class DatabaseResumingError(RuntimeError):
+    def __init__(self) -> None:
+        super().__init__("Aurora is resuming")
+        self.response = {"Error": {"Code": "DatabaseResumingException"}}
+
+
+class ResumingRdsDataClient(FakeRdsDataClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.begin_attempts = 0
+
+    def begin_transaction(self, **kwargs):
+        self.begin_attempts += 1
+        self.calls.append(("begin", kwargs))
+        if self.begin_attempts < 3:
+            raise DatabaseResumingError()
+        return {"transactionId": "tx-1"}
+
+
 def test_executes_typed_named_parameters_and_commits() -> None:
     client = FakeRdsDataClient()
     database = AuroraDataApi(
@@ -85,3 +104,21 @@ def test_rolls_back_when_transaction_body_fails() -> None:
         raise RuntimeError("boom")
 
     assert [name for name, _ in client.calls] == ["begin", "rollback"]
+
+
+def test_retries_begin_transaction_while_aurora_is_resuming() -> None:
+    client = ResumingRdsDataClient()
+    delays: list[float] = []
+    database = AuroraDataApi(
+        "cluster-arn",
+        "secret-arn",
+        "gamewake",
+        client=client,
+        sleep=delays.append,
+    )
+
+    with database.transaction():
+        pass
+
+    assert [name for name, _ in client.calls] == ["begin", "begin", "begin", "commit"]
+    assert delays == [1, 2]

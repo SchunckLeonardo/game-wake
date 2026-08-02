@@ -3,7 +3,11 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Icon } from "../Icon";
-import { gameWakeFetch, gameWakeIdempotencyKey } from "../gamewakeApi";
+import {
+  GAMEWAKE_DISCORD_GUILD_ID_KEY,
+  gameWakeFetch,
+  gameWakeIdempotencyKey,
+} from "../gamewakeApi";
 import { useHydrated } from "../useHydrated";
 
 export function OnboardingFlow() {
@@ -26,9 +30,15 @@ export function OnboardingFlow() {
     setSubmitting(true);
     setError("");
     try {
+      const discordGuildId = window.sessionStorage.getItem(
+        GAMEWAKE_DISCORD_GUILD_ID_KEY,
+      );
       const accountResponse = await gameWakeFetch("/api/v1/accounts", {
         method: "POST",
-        body: JSON.stringify({ name: groupName.trim() }),
+        body: JSON.stringify({
+          name: groupName.trim(),
+          ...(discordGuildId ? { discordGuildId } : {}),
+        }),
       });
       const account = (await accountResponse.json()) as {
         account: { id: string };
@@ -47,6 +57,7 @@ export function OnboardingFlow() {
       setAccountId(account.account.id);
       setRecoveryCodes(account.ownerRecovery?.codes ?? []);
       setVerifiedEmail(account.ownerRecovery?.verifiedEmail ?? "");
+      window.sessionStorage.removeItem(GAMEWAKE_DISCORD_GUILD_ID_KEY);
       setStep(3);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Não foi possível criar o World.");

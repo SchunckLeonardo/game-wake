@@ -10,6 +10,7 @@ from urllib.request import Request, urlopen
 
 _DISCORD_API = "https://discord.com/api/v10"
 _DISCORD_USER_AGENT = "DiscordBot (https://gamewake.com.br, 0.1.0)"
+_DISCORD_INSTALL_PERMISSIONS = 3072
 
 
 class OAuthHttpClient(Protocol):
@@ -53,6 +54,7 @@ class DiscordIdentity:
     discord_user_id: str
     display_name: str
     verified_email: str | None = None
+    installed_guild_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -81,7 +83,9 @@ class DiscordOAuthClient:
                 "client_id": self._client_id,
                 "response_type": "code",
                 "redirect_uri": redirect_uri,
-                "scope": "identify email",
+                "scope": "identify email applications.commands bot",
+                "permissions": str(_DISCORD_INSTALL_PERMISSIONS),
+                "integration_type": "0",
                 "state": state,
             }
         )
@@ -126,7 +130,17 @@ class DiscordOAuthClient:
             if user.get("verified") is True and isinstance(raw_email, str) and "@" in raw_email
             else None
         )
+        raw_guild = token.get("guild")
+        raw_guild_id = raw_guild.get("id") if isinstance(raw_guild, Mapping) else None
+        installed_guild_id = (
+            raw_guild_id if isinstance(raw_guild_id, str) and raw_guild_id.isdigit() else None
+        )
         return DiscordOAuthGrant(
-            identity=DiscordIdentity(user_id, display_name, verified_email),
+            identity=DiscordIdentity(
+                user_id,
+                display_name,
+                verified_email,
+                installed_guild_id,
+            ),
             access_token=access_token,
         )

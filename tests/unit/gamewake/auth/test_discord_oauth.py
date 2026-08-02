@@ -1,4 +1,5 @@
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlsplit
 
 from gamewake.auth import DiscordOAuthClient
 from gamewake.auth.discord_oauth import UrllibOAuthHttpClient
@@ -22,7 +23,13 @@ class FakeHttpClient:
     def request(self, method, url, *, headers, form=None):
         self.calls.append((method, url, headers, form))
         if url.endswith("/oauth2/token"):
-            return {"access_token": "discord-access"}
+            return {
+                "access_token": "discord-access",
+                "guild": {
+                    "id": "123456789012345678",
+                    "name": "Sexta com os amigos",
+                },
+            }
         return {
             "id": "discord-user-123",
             "global_name": "Leonardo",
@@ -69,11 +76,20 @@ def test_oauth_url_and_code_exchange_use_verified_discord_email_for_owner_recove
         "one-time-code", redirect_uri="https://api.example/auth/discord/callback"
     )
 
-    assert "scope=identify+email" in url
-    assert "state=signed-state" in url
+    query = parse_qs(urlsplit(url).query)
+    assert set(query["scope"][0].split()) == {
+        "identify",
+        "email",
+        "applications.commands",
+        "bot",
+    }
+    assert query["permissions"] == ["3072"]
+    assert query["integration_type"] == ["0"]
+    assert query["state"] == ["signed-state"]
     assert identity.discord_user_id == "discord-user-123"
     assert identity.display_name == "Leonardo"
     assert identity.verified_email == "leo@example.com"
+    assert identity.installed_guild_id == "123456789012345678"
     assert http.calls[0][3]["grant_type"] == "authorization_code"
     assert http.calls[1][2] == {"Authorization": "Bearer discord-access"}
 
