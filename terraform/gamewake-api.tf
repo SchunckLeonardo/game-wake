@@ -231,7 +231,6 @@ removed {
 
 removed {
   from = aws_lambda_permission.gamewake_api_url_invoke
-
   lifecycle {
     destroy = false
   }
