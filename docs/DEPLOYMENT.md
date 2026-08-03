@@ -68,7 +68,9 @@ Crie produtos avulsos para cada pacote de crédito e preencha `abacatepay_packag
 
 O Control Plane rejeita um checkout ou pagamento cujo valor não coincida com o pacote. A Wallet deriva do ledger imutável interno; a AbacatePay apenas confirma a contribuição.
 
-Após o apply, cadastre o output `gamewake_api.abacatepay_webhook` no painel da AbacatePay e informe o secret ao criar o webhook. A AbacatePay acrescenta esse valor como query parameter `webhookSecret`; configure exatamente o mesmo valor em `ABACATEPAY_WEBHOOK_SECRET`. O endpoint também valida o header `x-webhook-signature` como HMAC-SHA256 Base64 do corpo bruto usando `ABACATEPAY_PUBLIC_KEY`. Não coloque o secret manualmente no output Terraform e não passe o evento por um proxy que reserialize o JSON.
+Após o apply, cadastre o output `gamewake_api.abacatepay_webhook` no painel da AbacatePay e informe o secret ao criar o webhook. A AbacatePay acrescenta esse valor como query parameter `webhookSecret`; configure exatamente o mesmo valor em `ABACATEPAY_WEBHOOK_SECRET`. O endpoint também valida o header `x-webhook-signature` como HMAC-SHA256 Base64 do corpo bruto usando `ABACATEPAY_PUBLIC_KEY`.
+
+`ABACATEPAY_PUBLIC_KEY` é a chave HMAC pública longa publicada na [documentação de segurança dos webhooks](https://docs.abacatepay.com/pages/webhooks/security) e já preenchida em `.env.example`. Ela não é a chave pública curta exibida junto das credenciais da loja. O script recusa valores curtos para impedir uma implantação que rejeitaria todas as notificações reais. Não coloque o secret manualmente no output Terraform e não passe o evento por um proxy que reserialize o JSON.
 
 Auto Recharge não faz parte do MVP. Refund e disputa precisam seguir o runbook de conciliação.
 

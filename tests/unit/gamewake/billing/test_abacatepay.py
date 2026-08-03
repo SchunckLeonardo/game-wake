@@ -199,13 +199,33 @@ def test_webhook_rejects_an_invalid_signature_before_processing_the_event():
     )
     raw_body = json.dumps({"id": "log_1", "event": "checkout.completed", "data": {}}).encode()
 
-    with pytest.raises(InvalidWebhookSignature):
+    with pytest.raises(InvalidWebhookSignature) as caught:
         handler.handle(
             raw_body,
             webhook_secret="url-secret",
             signature="forged-signature",
         )
 
+    assert caught.value.layer == "hmac_signature"
+    assert processed == []
+
+
+def test_webhook_reports_a_url_secret_mismatch_without_parsing_the_event():
+    processed = []
+    handler = AbacatePayWebhookHandler(
+        webhook_secret="url-secret",
+        public_hmac_key="public-hmac-key",
+        event_processor=processed.append,
+    )
+
+    with pytest.raises(InvalidWebhookSignature) as caught:
+        handler.handle(
+            b"not-json",
+            webhook_secret="wrong-secret",
+            signature="forged-signature",
+        )
+
+    assert caught.value.layer == "url_secret"
     assert processed == []
 
 

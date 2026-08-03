@@ -52,7 +52,11 @@ def test_starts_a_standard_execution_with_only_persistent_identifiers():
             ),
             "name": "world-operation-operation-123",
             "input": json.dumps(
-                {"account_id": "account-123", "operation_id": "operation-123"},
+                {
+                    "account_id": "account-123",
+                    "operation_id": "operation-123",
+                    "session_monitor": False,
+                },
                 separators=(",", ":"),
                 sort_keys=True,
             ),
