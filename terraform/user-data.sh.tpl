@@ -2,7 +2,19 @@
 set -Eeuo pipefail
 
 exec > >(tee -a /var/log/palworld-user-data.log | systemd-cat -t palworld-user-data) 2>&1
-trap 'echo "Bootstrap falhou na linha $LINENO"' ERR
+
+runtime_state_dir=/var/lib/gamewake
+install -d -o root -g root -m 0755 "$runtime_state_dir"
+rm -f "$runtime_state_dir/bootstrap-ready" "$runtime_state_dir/bootstrap-failed"
+
+bootstrap_failed() {
+  local exit_code=$?
+  trap - ERR
+  touch "$runtime_state_dir/bootstrap-failed"
+  echo "Bootstrap falhou na linha $1"
+  exit "$exit_code"
+}
+trap 'bootstrap_failed "$LINENO"' ERR
 
 export DEBIAN_FRONTEND=noninteractive
 
@@ -44,4 +56,7 @@ systemctl enable --now snap.amazon-ssm-agent.amazon-ssm-agent.service || \
 systemctl daemon-reload
 systemctl enable palworld.service
 
+touch "$runtime_state_dir/bootstrap-ready.tmp"
+mv "$runtime_state_dir/bootstrap-ready.tmp" "$runtime_state_dir/bootstrap-ready"
+rm -f "$runtime_state_dir/bootstrap-failed"
 echo "Bootstrap Palworld concluido"

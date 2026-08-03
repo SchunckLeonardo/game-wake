@@ -180,6 +180,13 @@ function formatBytes(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function formatBrl(value: string | number) {
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(Number(value));
+}
+
 const configurationFields = [
   {
     key: "enemy_drop_item_rate",
@@ -243,6 +250,7 @@ export function ConsoleDashboard({
     isDemo ? "123456789012345678" : null,
   );
   const [walletBalance, setWalletBalance] = useState(isDemo ? "42.80" : "0.00");
+  const [walletTotalBalance, setWalletTotalBalance] = useState(isDemo ? "42.80" : "0.00");
   const [walletStatement, setWalletStatement] = useState<WalletEntry[]>([]);
   const [error, setError] = useState("");
   const [paymentNotice, setPaymentNotice] = useState("");
@@ -294,13 +302,14 @@ export function ConsoleDashboard({
       })[worldStatus],
     [worldStatus],
   );
-  const formattedWallet = useMemo(
-    () =>
-      new Intl.NumberFormat("pt-BR", {
-        style: "currency",
-        currency: "BRL",
-      }).format(Number(walletBalance)),
-    [walletBalance],
+  const formattedWallet = useMemo(() => formatBrl(walletBalance), [walletBalance]);
+  const reservedWalletAmount = useMemo(
+    () => Math.max(0, Number(walletTotalBalance) - Number(walletBalance)),
+    [walletBalance, walletTotalBalance],
+  );
+  const formattedReservedWallet = useMemo(
+    () => formatBrl(reservedWalletAmount),
+    [reservedWalletAmount],
   );
   const activeOperation = useMemo(
     () => [...worldOperations].reverse().find((operation) => ["pending", "running"].includes(operation.status)) ?? null,
@@ -328,7 +337,7 @@ export function ConsoleDashboard({
       ]);
       const worldsPayload = (await worldsResponse.json()) as { worlds: ApiWorld[] };
       const walletPayload = (await walletResponse.json()) as {
-        wallet: { availableBalance: string; statement: WalletEntry[] };
+        wallet: { balance?: string; availableBalance: string; statement: WalletEntry[] };
       };
       const accountsPayload = (await accountsResponse.json()) as {
         accounts: Array<{ id: string; name: string; discordGuildId?: string | null }>;
@@ -340,6 +349,7 @@ export function ConsoleDashboard({
         return selected;
       });
       setWalletBalance(walletPayload.wallet.availableBalance);
+      setWalletTotalBalance(walletPayload.wallet.balance ?? walletPayload.wallet.availableBalance);
       setWalletStatement(walletPayload.wallet.statement ?? []);
       const account = accountsPayload.accounts.find((item) => item.id === accountId);
       setAccountName(account?.name ?? "Seu grupo");
@@ -1278,6 +1288,7 @@ export function ConsoleDashboard({
                   <div className="card-heading"><div><span className="card-symbol"><Icon name="wallet" size={18} /></span><h3>Wallet</h3></div><button onClick={() => setSection("wallet")} type="button">Ver extrato <Icon name="arrow-right" size={14} /></button></div>
                   <strong className="overview-balance">{formattedWallet}</strong>
                   <p>Saldo disponível para as próximas sessões</p>
+                  {reservedWalletAmount > 0 && <p className="reservation-note">{formattedReservedWallet} reservados temporariamente</p>}
                   <div className="meter wallet-meter"><span /></div>
                   <small>Balance Guard ativo · sono seguro reservado</small>
                 </article>
@@ -1305,7 +1316,7 @@ export function ConsoleDashboard({
             <div className="panel-page" data-testid="wallet-panel">
               <div className="panel-heading"><div><h1>Créditos do grupo</h1><p>Todo valor é explicado em um ledger imutável. A Wallet nunca fica negativa.</p></div></div>
               <div className="wallet-layout">
-                <article className="balance-panel"><small>Saldo disponível</small><strong>{formattedWallet}</strong><span>BRL</span><div className="guard-status"><i /> Balance Guard ativo</div></article>
+                <article className="balance-panel"><small>Saldo disponível</small><strong>{formattedWallet}</strong><span>BRL</span>{reservedWalletAmount > 0 && <p className="balance-reservation">{formattedReservedWallet} reservados temporariamente · não é cobrança</p>}<div className="guard-status"><i /> Balance Guard ativo</div></article>
                 <article className="contribution-panel">
                   <h2>Adicionar créditos</h2>
                   <p>Escolha um pacote. O checkout Pix abre de forma privada na AbacatePay.</p>
@@ -1482,9 +1493,10 @@ export function ConsoleDashboard({
               <strong>Preço desta sessão</strong>
               <button aria-label="Cancelar despertar" onClick={() => setWakeEstimate(null)} type="button"><Icon name="close" size={19} /></button>
             </div>
-            <h2>{new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(wakeEstimate.hourlyRate))}/h</h2>
-            <p>O preço fica travado até o fim da sessão. Para proteger inicialização, pelo menos 15 minutos online e sono seguro, reservaremos {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(wakeEstimate.minimumReservation))} por {wakeEstimate.reservedMinutes} minutos; o valor não usado volta para a Wallet.</p>
-            <button className="button button-primary full-button" onClick={() => void confirmWake()} type="button">Confirmar e acordar</button>
+            <h2>{formatBrl(wakeEstimate.hourlyRate)} por hora</h2>
+            <strong className="wake-reservation">{formatBrl(wakeEstimate.minimumReservation)} reservados agora</strong>
+            <p>Esta reserva não é uma cobrança. Ela protege a inicialização, pelo menos 15 minutos online e o sono seguro durante {wakeEstimate.reservedMinutes} minutos. O valor não usado volta para a Wallet.</p>
+            <button className="button button-primary full-button" onClick={() => void confirmWake()} type="button">Reservar {formatBrl(wakeEstimate.minimumReservation)} e acordar</button>
           </section>
         </div>
       )}

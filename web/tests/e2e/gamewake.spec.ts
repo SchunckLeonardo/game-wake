@@ -86,8 +86,8 @@ test("group contributes, invites friends, wakes, connects, configures and sleeps
 
   await navigation(page, "worlds").click();
   await page.getByTestId("wake-world").click();
-  await expect(page.getByRole("dialog", { name: "Confirmar despertar de Palpagos" })).toContainText("R$ 5,50/h");
-  await page.getByRole("button", { name: "Confirmar e acordar" }).click();
+  await expect(page.getByRole("dialog", { name: "Confirmar despertar de Palpagos" })).toContainText("R$ 5,50 por hora");
+  await page.getByRole("button", { name: "Reservar R$ 2,30 e acordar" }).click();
   await expect(page.getByRole("status")).toContainText("Restaurando World");
   await expect(page.getByTestId("connect-world")).toBeVisible();
   await page.getByTestId("connect-world").click();
@@ -349,9 +349,13 @@ test("authenticated Console loads and mutates the real World through bearer API"
   );
   await expect(page.getByRole("heading", { name: "Mundo real" })).toBeVisible();
   await expect(page.getByText("R$ 18,50").first()).toBeVisible();
+  await expect(page.getByText("R$ 1,50 reservados temporariamente")).toBeVisible();
   await page.getByTestId("wake-world").click();
-  await expect(page.getByRole("dialog", { name: "Confirmar despertar de Mundo real" })).toContainText("R$ 5,50/h");
-  await page.getByRole("button", { name: "Confirmar e acordar" }).click();
+  const wakeDialog = page.getByRole("dialog", { name: "Confirmar despertar de Mundo real" });
+  await expect(wakeDialog).toContainText("R$ 5,50 por hora");
+  await expect(wakeDialog).toContainText("R$ 2,30 reservados agora");
+  await expect(wakeDialog).toContainText("não é uma cobrança");
+  await page.getByRole("button", { name: "Reservar R$ 2,30 e acordar" }).click();
 
   expect(wakeBody).toMatchObject({ idempotencyKey: expect.any(String) });
   await expect(page.getByRole("status")).toContainText("Restaurando World");

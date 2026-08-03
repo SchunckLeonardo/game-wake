@@ -118,3 +118,16 @@ def test_world_operation_retries_while_a_new_runtime_registers_with_ssm():
         "BackoffRate": 2,
         "MaxAttempts": 5,
     }
+
+
+def test_world_operation_retries_while_the_runtime_bootstrap_finishes():
+    definition = json.loads(STATE_MACHINE.read_text())
+    retries = definition["States"]["AdvanceOperation"]["Retry"]
+
+    [bootstrap_retry] = [retry for retry in retries if "RuntimeNotReady" in retry["ErrorEquals"]]
+    assert bootstrap_retry == {
+        "ErrorEquals": ["RuntimeNotReady"],
+        "IntervalSeconds": 15,
+        "BackoffRate": 1.5,
+        "MaxAttempts": 8,
+    }

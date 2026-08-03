@@ -2,6 +2,7 @@ from pathlib import Path
 
 SCRIPT = Path(__file__).parents[1] / "gamewake-operation.sh"
 INSTALLER = Path(__file__).parents[1] / "install-palworld.sh"
+USER_DATA = Path(__file__).parents[2] / "terraform" / "user-data.sh.tpl"
 
 
 def test_host_operation_dispatcher_has_an_idempotency_guard_without_eval():
@@ -37,3 +38,15 @@ def test_configuration_action_uses_only_per_world_parameter_names():
     assert "SERVER_PASSWORD_PARAMETER_NAME=%q" in source
     assert "ADMIN_PASSWORD_PARAMETER_NAME=%q" in source
     assert "/etc/palworld/world.env" in source
+
+
+def test_host_operations_wait_for_the_completed_runtime_bootstrap():
+    operation = SCRIPT.read_text()
+    user_data = USER_DATA.read_text()
+
+    assert "bootstrap-ready" in operation
+    assert "exit 75" in operation
+    assert "bootstrap-ready" in user_data
+    assert user_data.index("/usr/local/sbin/install-palworld.sh") < user_data.rindex(
+        "bootstrap-ready"
+    )

@@ -11,6 +11,16 @@ if [[ ! $marker =~ ^[a-f0-9]{64}$ ]]; then
   exit 64
 fi
 
+runtime_state_dir=/var/lib/gamewake
+if [[ -f $runtime_state_dir/bootstrap-failed ]]; then
+  echo "GameWake runtime bootstrap failed" >&2
+  exit 70
+fi
+if [[ ! -f $runtime_state_dir/bootstrap-ready ]]; then
+  echo "GameWake runtime bootstrap is still running" >&2
+  exit 75
+fi
+
 operation_dir=/var/lib/gamewake-operations
 install -d -o root -g root -m 0700 "$operation_dir"
 

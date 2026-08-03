@@ -39,6 +39,14 @@
         },
         {
           "ErrorEquals": [
+            "RuntimeNotReady"
+          ],
+          "IntervalSeconds": 15,
+          "BackoffRate": 1.5,
+          "MaxAttempts": 8
+        },
+        {
+          "ErrorEquals": [
             "Lambda.ServiceException",
             "Lambda.AWSLambdaException",
             "Lambda.SdkClientException",

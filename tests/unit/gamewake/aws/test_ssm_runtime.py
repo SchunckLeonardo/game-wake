@@ -32,20 +32,33 @@ def world(*, state_id="state-123", checksum="sha256:abc123"):
 
 
 class FakeWaiter:
-    def __init__(self):
+    def __init__(self, error=None):
         self.calls = []
+        self.error = error
 
     def wait(self, **kwargs):
         self.calls.append(kwargs)
+        if self.error is not None:
+            raise self.error
 
 
 class FakeSsmClient:
-    def __init__(self, *, status="Success", output="done"):
+    def __init__(
+        self,
+        *,
+        status="Success",
+        output="done",
+        response_code=0,
+        error_output="failure details",
+        waiter_error=None,
+    ):
         self.status = status
         self.output = output
+        self.response_code = response_code
+        self.error_output = error_output
         self.send_calls = []
         self.invocation_calls = []
-        self.waiter = FakeWaiter()
+        self.waiter = FakeWaiter(waiter_error)
         self.parameters = {}
         self.put_calls = []
 
@@ -61,8 +74,9 @@ class FakeSsmClient:
         self.invocation_calls.append(kwargs)
         return {
             "Status": self.status,
+            "ResponseCode": self.response_code,
             "StandardOutputContent": self.output,
-            "StandardErrorContent": "failure details",
+            "StandardErrorContent": self.error_output,
         }
 
     def get_parameter(self, **kwargs):
@@ -112,6 +126,21 @@ def test_command_runner_raises_with_redacted_failure_details():
 
     with pytest.raises(RuntimeError, match="SSM action start failed"):
         runner.run("i-123", "start", idempotency_key="operation-123:start")
+
+
+def test_command_runner_classifies_an_incomplete_host_bootstrap_as_retryable():
+    client = FakeSsmClient(
+        status="Failed",
+        response_code=75,
+        error_output="GameWake runtime bootstrap is still running",
+        waiter_error=RuntimeError("waiter observed a failed command"),
+    )
+    runner = SsmCommandRunner(client=client)
+
+    with pytest.raises(Exception) as raised:
+        runner.run("i-123", "start", idempotency_key="operation-123:start")
+
+    assert type(raised.value).__name__ == "RuntimeNotReady"
 
 
 class RecordingRunner:

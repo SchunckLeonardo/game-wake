@@ -25,6 +25,10 @@ _HOST_ACTIONS = frozenset(
 )
 
 
+class RuntimeNotReady(RuntimeError):
+    """The managed host is registered in SSM but is still bootstrapping."""
+
+
 class SsmCommandRunner:
     """Runs one allowlisted host action behind a durable remote idempotency guard."""
 
@@ -63,18 +67,38 @@ class SsmCommandRunner:
             TimeoutSeconds=300,
         )
         command_id = response["Command"]["CommandId"]
-        self._client.get_waiter("command_executed").wait(
-            CommandId=command_id,
-            InstanceId=instance_id,
-            WaiterConfig={"Delay": 2, "MaxAttempts": 150},
-        )
+        try:
+            self._client.get_waiter("command_executed").wait(
+                CommandId=command_id,
+                InstanceId=instance_id,
+                WaiterConfig={"Delay": 2, "MaxAttempts": 150},
+            )
+        except Exception as waiter_error:
+            result = self._client.get_command_invocation(
+                CommandId=command_id,
+                InstanceId=instance_id,
+            )
+            self._raise_for_failure(result, action, cause=waiter_error)
+            raise RuntimeError(f"SSM action {action} failed") from waiter_error
         result = self._client.get_command_invocation(
             CommandId=command_id,
             InstanceId=instance_id,
         )
-        if result.get("Status") != "Success":
-            raise RuntimeError(f"SSM action {action} failed")
+        self._raise_for_failure(result, action)
         return str(result.get("StandardOutputContent", "")).strip()
+
+    @staticmethod
+    def _raise_for_failure(
+        result: dict[str, Any],
+        action: str,
+        *,
+        cause: Exception | None = None,
+    ) -> None:
+        if result.get("Status") == "Success":
+            return
+        if str(result.get("ResponseCode")) == "75":
+            raise RuntimeNotReady("GameWake runtime bootstrap is still running") from cause
+        raise RuntimeError(f"SSM action {action} failed") from cause
 
 
 class SsmPalworldTemplate:
