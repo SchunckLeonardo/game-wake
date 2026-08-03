@@ -119,6 +119,19 @@ def test_disposable_runtimes_use_a_launch_template_without_idle_reconciliation_p
     assert 'schedule_expression = "rate(5 minutes)"' not in schedules
 
 
+def test_operation_worker_can_tag_only_managed_resources_during_provisioning():
+    orchestration = source("gamewake-orchestration.tf")
+
+    assert 'sid     = "TagRuntimeDuringProvisioning"' in orchestration
+    assert 'actions = ["ec2:CreateTags"]' in orchestration
+    assert 'variable = "ec2:CreateAction"' in orchestration
+    assert 'values   = ["RunInstances"]' in orchestration
+    assert 'variable = "aws:RequestTag/GameWakeManaged"' in orchestration
+    assert 'values   = ["true"]' in orchestration
+    assert ':instance/*"' in orchestration
+    assert ':volume/*"' in orchestration
+
+
 def test_legacy_single_server_stack_is_removed():
     variables = source("variables.tf")
     runtime = source("gamewake-runtime.tf")

@@ -70,6 +70,28 @@ data "aws_iam_policy_document" "operation_worker" {
   }
 
   statement {
+    sid     = "TagRuntimeDuringProvisioning"
+    effect  = "Allow"
+    actions = ["ec2:CreateTags"]
+    resources = [
+      "arn:${data.aws_partition.current.partition}:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:instance/*",
+      "arn:${data.aws_partition.current.partition}:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:volume/*",
+    ]
+
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:CreateAction"
+      values   = ["RunInstances"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestTag/GameWakeManaged"
+      values   = ["true"]
+    }
+  }
+
+  statement {
     sid       = "DescribeRuntime"
     effect    = "Allow"
     actions   = ["ec2:DescribeInstances"]
