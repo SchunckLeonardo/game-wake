@@ -6,8 +6,16 @@
       "Type": "Choice",
       "Choices": [
         {
-          "Variable": "$.session_monitor",
-          "BooleanEquals": true,
+          "And": [
+            {
+              "Variable": "$.session_monitor",
+              "IsPresent": true
+            },
+            {
+              "Variable": "$.session_monitor",
+              "BooleanEquals": true
+            }
+          ],
           "Next": "WaitBeforeSessionCheck"
         }
       ],

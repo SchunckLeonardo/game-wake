@@ -38,7 +38,11 @@ class StepFunctionsOperationOrchestrator:
                 stateMachineArn=self._state_machine_arn,
                 name=name,
                 input=json.dumps(
-                    {"account_id": account_id, "operation_id": operation_id},
+                    {
+                        "account_id": account_id,
+                        "operation_id": operation_id,
+                        "session_monitor": False,
+                    },
                     separators=(",", ":"),
                     sort_keys=True,
                 ),

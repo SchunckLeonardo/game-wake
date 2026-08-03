@@ -828,8 +828,22 @@ summary:focus-visible {
 .first-session-steps strong { font-size: 12px; }
 .first-session-steps small { color: #8e9aac; font-size: 10px; line-height: 1.45; }
 .first-session-steps li.pending { opacity: 0.68; }
-.first-session-action { align-items: center; display: flex; gap: 13px; justify-content: flex-end; }
+.first-session-routes { border-top: 1px solid #304059; display: grid; grid-template-columns: 0.9fr 1.1fr; }
+.first-session-route { display: flex; flex-direction: column; gap: 15px; padding: 18px 22px 0 0; }
+.first-session-route + .first-session-route { border-left: 1px solid #304059; padding-left: 22px; padding-right: 0; }
+.first-session-route-heading { align-items: flex-start; display: flex; gap: 10px; }
+.first-session-route-heading > span { align-items: center; background: #253149; border-radius: 9px; color: #cad0ff; display: flex; flex: 0 0 auto; height: 32px; justify-content: center; width: 32px; }
+.first-session-route-heading h3 { font-size: 14px; margin: 0 0 4px; }
+.first-session-route-heading p { color: #8e9aac; font-size: 10px; line-height: 1.45; margin: 0; }
+.first-session-action { align-items: flex-start; display: flex; flex-direction: column; gap: 10px; }
 .first-session-action > span { align-items: center; color: #aeb7c6; display: flex; font-size: 11px; gap: 7px; }
+.discord-first-session-steps { display: grid; gap: 8px; list-style: none; margin: 0; padding: 0; }
+.discord-first-session-steps li { align-items: baseline; display: grid; gap: 10px; grid-template-columns: max-content 1fr; }
+.discord-first-session-steps code,
+.discord-friend-flow code { color: #d5d8ff; font-family: var(--font-geist-mono), monospace; font-size: 10px; }
+.discord-first-session-steps span,
+.discord-friend-flow { color: #929dae; font-size: 10px; line-height: 1.5; }
+.discord-friend-flow { margin: 0; }
 .payment-notice { align-items: center; background: #162719; border: 1px solid #39523a; border-radius: 12px; display: flex; gap: 12px; margin-bottom: 16px; padding: 14px 16px; }
 .payment-notice > span { align-items: center; background: var(--wake); border-radius: 50%; color: var(--ink); display: flex; flex: 0 0 auto; height: 24px; justify-content: center; width: 24px; }
 .payment-notice p { color: #d4e8c2; font-size: 12px; line-height: 1.55; margin: 0; }
@@ -1334,6 +1348,9 @@ summary:focus-visible {
   .first-session-steps { grid-template-columns: 1fr; }
   .first-session-steps li,
   .first-session-steps li + li { padding: 12px 0; }
+  .first-session-routes { grid-template-columns: 1fr; }
+  .first-session-route { padding: 16px 0 4px; }
+  .first-session-route + .first-session-route { border-left: 0; border-top: 1px solid #304059; padding: 18px 0 0; }
   .first-session-action { align-items: stretch; flex-direction: column; }
   .first-session-action .button { width: 100%; }
   .balance-panel { min-height: 230px; }

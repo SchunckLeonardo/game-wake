@@ -32,7 +32,7 @@ resource "aws_ssm_parameter" "abacatepay_webhook_secret" {
 
 resource "aws_ssm_parameter" "abacatepay_public_key" {
   name             = "${local.parameter_path}/gamewake/abacatepay-public-key"
-  description      = "AbacatePay public HMAC key used to verify webhook signatures"
+  description      = "AbacatePay documented public HMAC key used to verify webhook signatures"
   type             = "SecureString"
   value_wo         = var.secure_parameter_placeholder
   value_wo_version = 1
