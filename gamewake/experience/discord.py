@@ -55,7 +55,11 @@ class DiscordCommandController:
                 )
                 return DiscordCommandResponse(
                     content=(
-                        "✅ Conta do servidor pronta. Abra a Console para criar o primeiro World."
+                        "✅ **Conta do servidor pronta. Próximos passos:**\n"
+                        "1. Abra a Console e crie o primeiro World.\n"
+                        "2. Use `/gamewake convidar` para chamar os amigos; "
+                        "cada um aceita com `/gamewake aceitar`.\n"
+                        "3. Adicione créditos via Pix e use `/gamewake acordar` quando forem jogar."
                     ),
                     ephemeral=True,
                     links=(
@@ -85,7 +89,10 @@ class DiscordCommandController:
                     ],
                 )
                 return DiscordCommandResponse(
-                    content=f"✅ {len(invitations)} convites enviados separadamente.",
+                    content=(
+                        f"✅ {len(invitations)} convites enviados separadamente. "
+                        "Agora cada amigo precisa usar `/gamewake aceitar` neste servidor."
+                    ),
                     ephemeral=True,
                 )
             if interaction.command in {"status", "acordar"}:
@@ -186,10 +193,13 @@ class DiscordCommandController:
             if interaction.command == "ajuda":
                 return DiscordCommandResponse(
                     content=(
+                        "**COMECE AQUI**\n"
+                        "1. `/gamewake comecar` — cria a conta deste servidor.\n"
+                        "2. Abra a Console e crie o primeiro World.\n"
+                        "3. Adicione créditos e use `/gamewake acordar`.\n\n"
                         "**Comandos GameWake**\n"
-                        "`/gamewake comecar` — cria a conta deste servidor.\n"
                         "`/gamewake convidar` — convida até três amigos de uma vez.\n"
-                        "`/gamewake aceitar` — aceita seu convite pendente.\n"
+                        "`/gamewake aceitar` — cada amigo aceita seu convite pendente.\n"
                         "`/gamewake status` — mostra o estado do World.\n"
                         "`/gamewake acordar` — prepara o World para jogar.\n"
                         "`/gamewake conectar` — entrega conexão e senha em privado.\n"
@@ -246,8 +256,12 @@ class DiscordCommandController:
             return worlds[0]
         if not worlds:
             return DiscordCommandResponse(
-                content="Nenhum World disponível para você nesta conta.",
+                content=(
+                    "Nenhum World foi criado ainda. Abra a GameWake Console, "
+                    "crie o primeiro World e depois use `/gamewake acordar`."
+                ),
                 ephemeral=True,
+                links=(("Criar primeiro World", f"{self._console_url}/accounts/{account_id}"),),
             )
         return DiscordCommandResponse(
             content="Escolha um World para continuar:",

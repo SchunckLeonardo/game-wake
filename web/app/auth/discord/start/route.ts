@@ -35,5 +35,11 @@ export function GET(request: Request) {
     );
   }
 
-  return NextResponse.redirect(new URL("/auth/discord/start", origin), 307);
+  const target = new URL("/auth/discord/start", origin);
+  const source = new URL(request.url);
+  for (const key of ["install", "accountId"]) {
+    const value = source.searchParams.get(key);
+    if (value) target.searchParams.set(key, value);
+  }
+  return NextResponse.redirect(target, 307);
 }

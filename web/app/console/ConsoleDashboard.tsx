@@ -4,7 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Icon, type IconName } from "../Icon";
-import { gameWakeFetch, gameWakeIdempotencyKey } from "../gamewakeApi";
+import {
+  clearGameWakeSession,
+  gameWakeFetch,
+  gameWakeIdempotencyKey,
+} from "../gamewakeApi";
 import { useHydrated } from "../useHydrated";
 
 type Section =
@@ -235,7 +239,10 @@ export function ConsoleDashboard({
   const [accountName, setAccountName] = useState(
     isDemo ? "Sexta com os amigos" : "Seu grupo",
   );
-  const [walletBalance, setWalletBalance] = useState("42.80");
+  const [discordGuildId, setDiscordGuildId] = useState<string | null>(
+    isDemo ? "123456789012345678" : null,
+  );
+  const [walletBalance, setWalletBalance] = useState(isDemo ? "42.80" : "0.00");
   const [walletStatement, setWalletStatement] = useState<WalletEntry[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(!isDemo);
@@ -256,6 +263,7 @@ export function ConsoleDashboard({
   const [exportUrl, setExportUrl] = useState("");
   const [deletionConfirmation, setDeletionConfirmation] = useState("");
   const [contribution, setContribution] = useState(25);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [liveConfigurationFields, setLiveConfigurationFields] = useState<
     ConfigurationField[]
@@ -321,7 +329,7 @@ export function ConsoleDashboard({
         wallet: { availableBalance: string; statement: WalletEntry[] };
       };
       const accountsPayload = (await accountsResponse.json()) as {
-        accounts: Array<{ id: string; name: string }>;
+        accounts: Array<{ id: string; name: string; discordGuildId?: string | null }>;
       };
       setWorlds(worldsPayload.worlds);
       setWorld((current) => {
@@ -331,9 +339,9 @@ export function ConsoleDashboard({
       });
       setWalletBalance(walletPayload.wallet.availableBalance);
       setWalletStatement(walletPayload.wallet.statement ?? []);
-      setAccountName(
-        accountsPayload.accounts.find((account) => account.id === accountId)?.name ?? "Seu grupo",
-      );
+      const account = accountsPayload.accounts.find((item) => item.id === accountId);
+      setAccountName(account?.name ?? "Seu grupo");
+      setDiscordGuildId(account?.discordGuildId ?? null);
       setError("");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Não foi possível carregar a Console.");
@@ -466,7 +474,12 @@ export function ConsoleDashboard({
   }, [accountId, isDemo, section, world]);
 
   async function wakeWorld() {
-    if (worldStatus !== "sleeping" || !world) return;
+    if (!world) {
+      setError("Crie seu primeiro World antes de tentar acordá-lo.");
+      setShowNewWorld(true);
+      return;
+    }
+    if (worldStatus !== "sleeping") return;
     if (isDemo) {
       setWakeEstimate({
         currency: "BRL",
@@ -537,6 +550,7 @@ export function ConsoleDashboard({
       return;
     }
     try {
+      setError("");
       const response = await gameWakeFetch(`/api/v1/accounts/${accountId}/worlds`, {
         method: "POST",
         body: JSON.stringify({
@@ -656,7 +670,9 @@ export function ConsoleDashboard({
   }
 
   async function createCheckout() {
-    if (isDemo) return;
+    if (isDemo || checkoutLoading) return;
+    setCheckoutLoading(true);
+    setError("");
     try {
       const response = await gameWakeFetch(
         `/api/v1/accounts/${accountId}/wallet/contributions`,
@@ -678,7 +694,14 @@ export function ConsoleDashboard({
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Não foi possível abrir o checkout.");
+    } finally {
+      setCheckoutLoading(false);
     }
+  }
+
+  function signOut() {
+    clearGameWakeSession();
+    window.location.assign("/");
   }
 
   async function saveConfiguration() {
@@ -929,10 +952,14 @@ export function ConsoleDashboard({
             </button>
           ))}
         </nav>
+        <div className="sidebar-legal">
+          <Link href="/terms">Termos</Link>
+          <Link href="/privacy">Privacidade</Link>
+        </div>
         <div className="sidebar-foot">
           <span className="avatar avatar-small">L</span>
           <div><strong>{isDemo ? "Leonardo" : "Você"}</strong><small>GameWake</small></div>
-          <button aria-label="Configurações da conta" type="button"><Icon name="menu" size={18} /></button>
+          <button aria-label="Sair" onClick={signOut} type="button"><Icon name="close" size={18} /></button>
         </div>
       </aside>
 
@@ -943,6 +970,15 @@ export function ConsoleDashboard({
             <strong>{sections.find((item) => item.id === section)?.label}</strong>
           </div>
           <div className="topbar-actions">
+            {!isDemo && (
+              <Link
+                aria-label="Trocar servidor do Discord"
+                className="discord-switch-link"
+                href={`/auth/discord/start?accountId=${encodeURIComponent(accountId)}`}
+              >
+                <Icon name="discord" size={17} /><span>Trocar servidor</span>
+              </Link>
+            )}
             <button aria-label="Notificações" className="icon-button" type="button"><Icon name="bell" size={18} /></button>
             <span className="wallet-pill"><small>Saldo</small><strong>{formattedWallet}</strong></span>
           </div>
@@ -962,7 +998,35 @@ export function ConsoleDashboard({
                 <button aria-label="+ Novo World" className="button button-outline" disabled={!hydrated} onClick={() => setShowNewWorld((current) => !current)} type="button"><Icon name="plus" size={17} />Novo World</button>
               </div>
 
-              {showNewWorld && <article className="contribution-panel"><h2>Criar World</h2><p>Palworld em São Paulo, com preço confirmado antes de cada sessão.</p><label>Nome do novo World<input aria-label="Nome do novo World" autoFocus onChange={(event) => setNewWorldName(event.target.value)} value={newWorldName} /></label><button className="button button-primary" disabled={!newWorldName.trim()} onClick={() => void createWorld()} type="button">Criar World</button></article>}
+              {showNewWorld && <article className="contribution-panel"><h2>Criar World</h2><p>Palworld em São Paulo, com preço confirmado antes de cada sessão.</p><div className="inline-action-form"><label>Nome do novo World<input aria-label="Nome do novo World" autoFocus onChange={(event) => setNewWorldName(event.target.value)} placeholder="Ex.: Palpagos" value={newWorldName} /></label><button className="button button-primary" disabled={!newWorldName.trim()} onClick={() => void createWorld()} type="button">Criar World</button></div></article>}
+
+              {!world && !showNewWorld && (
+                <section className="empty-world-state" data-testid="empty-world-state">
+                  <span className="empty-world-icon"><Icon name="globe" size={28} /></span>
+                  <span className="section-index">PRÓXIMO PASSO</span>
+                  <h2>Seu grupo ainda não tem um World</h2>
+                  <p>Crie o World antes de tentar acordá-lo. Ele só existe depois que você escolhe um nome e confirma esta etapa.</p>
+                  <ol className="first-run-path">
+                    <li className="done"><Icon name="check" size={16} /><span><strong>Conta do grupo pronta</strong><small>{discordGuildId ? "Servidor Discord conectado" : "Você pode conectar um servidor agora ou depois"}</small></span></li>
+                    <li className="current"><span>2</span><span><strong>Criar o primeiro World</strong><small>Leva menos de um minuto e ainda não gera custo de runtime</small></span></li>
+                    <li><span>3</span><span><strong>Adicionar créditos via Pix</strong><small>O grupo escolhe R$ 25, R$ 50 ou R$ 100</small></span></li>
+                    <li><span>4</span><span><strong>Acordar e jogar</strong><small>Você verá o preço antes de confirmar</small></span></li>
+                  </ol>
+                  <div className="empty-world-actions">
+                    <button className="button button-primary" disabled={!hydrated} onClick={() => setShowNewWorld(true)} type="button"><Icon name="plus" size={17} />Criar meu primeiro World</button>
+                    {!discordGuildId && <Link className="button button-outline" href={`/auth/discord/start?accountId=${encodeURIComponent(accountId)}`}><Icon name="discord" size={17} />Conectar Discord</Link>}
+                  </div>
+                  <div className="discord-command-guide"><Icon name="discord" size={19} /><p><strong>Prefere começar no Discord?</strong> O Owner usa <code>/gamewake comecar</code> uma vez. Depois do convite, cada amigo usa <code>/gamewake aceitar</code>.</p></div>
+                </section>
+              )}
+
+              {world && !isDemo && Number(walletBalance) <= 0 && (
+                <article className="next-action-banner">
+                  <span><Icon name="wallet" size={20} /></span>
+                  <div><strong>World criado. Agora adicione créditos.</strong><p>Depois do Pix, volte aqui e clique em “Acordar World”. O preço aparece antes da confirmação.</p></div>
+                  <button className="button button-primary" onClick={() => setSection("wallet")} type="button">Adicionar créditos</button>
+                </article>
+              )}
 
               {worlds.length > 1 && (
                 <div className="world-selector" role="tablist" aria-label="Selecionar World">
@@ -985,7 +1049,7 @@ export function ConsoleDashboard({
                 </div>
               )}
 
-              <section className={`console-world-stage world-${worldStatus}`}>
+              {world && <section className={`console-world-stage world-${worldStatus}`}>
                 <div className="console-status-band">
                   <div>
                     <span className={`status-band-icon status-${worldStatus}`}><Icon name={statusCopy.icon} size={19} /></span>
@@ -1074,7 +1138,7 @@ export function ConsoleDashboard({
                     <button className="icon-button" aria-label="Mais ações" type="button"><Icon name="menu" size={18} /></button>
                   </div>
                 </div>
-              </section>
+              </section>}
 
               <div className="overview-grid console-support-strip">
                 <article className="overview-card">
@@ -1111,11 +1175,11 @@ export function ConsoleDashboard({
                 <article className="balance-panel"><small>Saldo disponível</small><strong>{formattedWallet}</strong><span>BRL</span><div className="guard-status"><i /> Balance Guard ativo</div></article>
                 <article className="contribution-panel">
                   <h2>Adicionar créditos</h2>
-                  <p>Escolha um pacote. O checkout Pix ou cartão abre de forma privada.</p>
+                  <p>Escolha um pacote. O checkout Pix abre de forma privada na AbacatePay.</p>
                   <div className="amount-options" role="group" aria-label="Valor da contribuição">
                     {[25, 50, 100].map((amount) => <button className={contribution === amount ? "selected" : ""} key={amount} onClick={() => setContribution(amount)} type="button">R$ {amount}</button>)}
                   </div>
-                  <button className="button button-primary full-button" data-testid="create-checkout" onClick={() => void createCheckout()} type="button">Contribuir R$ {contribution},00</button>
+                  <button className="button button-primary full-button" data-testid="create-checkout" disabled={checkoutLoading} onClick={() => void createCheckout()} type="button">{checkoutLoading ? "Abrindo checkout Pix…" : `Contribuir R$ ${contribution},00`}</button>
                 </article>
               </div>
               {world && (
@@ -1160,9 +1224,8 @@ export function ConsoleDashboard({
               <article className="contribution-panel">
                 <h2>Convidar amigos</h2>
                 <p>No Discord, use <code>/gamewake convidar @amigo1 @amigo2</code>. Aqui, informe os IDs internos separados por vírgula.</p>
-                <label>IDs dos amigos<input aria-label="IDs dos amigos" onChange={(event) => setInviteUserIds(event.target.value)} placeholder="user-1, user-2" value={inviteUserIds} /></label>
-                <button className="button button-primary" data-testid="invite-friends" onClick={() => void inviteFriends()} type="button"><Icon name="plus" size={17} />Criar convites</button>
-                {saved && <small>Convites criados. Cada amigo ainda precisa aceitar.</small>}
+                <div className="inline-action-form"><label>IDs dos amigos<input aria-label="IDs dos amigos" onChange={(event) => setInviteUserIds(event.target.value)} placeholder="user-1, user-2" value={inviteUserIds} /></label><button className="button button-primary" data-testid="invite-friends" onClick={() => void inviteFriends()} type="button"><Icon name="plus" size={17} />Criar convites</button></div>
+                {saved && <small>Convites criados. Cada amigo precisa abrir este servidor no Discord e usar <code>/gamewake aceitar</code>.</small>}
               </article>
               <article className="table-card">
                 <div className="card-heading"><h2>Seu grupo</h2><span>{isDemo ? invites.length + 2 : memberships.length} membros</span></div>
@@ -1231,6 +1294,7 @@ export function ConsoleDashboard({
               </article>
             </div>
           )}
+          <footer className="console-legal-footer"><span>GameWake Closed Beta</span><div><Link href="/terms">Termos de Serviço</Link><Link href="/privacy">Política de Privacidade</Link></div></footer>
         </div>
 
         <nav className="mobile-nav" aria-label="Navegação móvel">

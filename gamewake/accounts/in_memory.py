@@ -58,6 +58,12 @@ class InMemoryAccountRepository:
         current = self._snapshots[snapshot.account.id]
         if current.version != expected_version:
             raise RuntimeError("account was changed concurrently")
+        if snapshot.account.discord_guild_id is not None:
+            linked = self.find_by_discord_guild(snapshot.account.discord_guild_id)
+            if linked is not None and linked.account.id != snapshot.account.id:
+                raise DiscordGuildAlreadyLinkedError(
+                    "the Discord Guild is already linked to a GameWake Account"
+                )
         self._snapshots[snapshot.account.id] = AccountSnapshot(
             account=snapshot.account,
             memberships=snapshot.memberships,

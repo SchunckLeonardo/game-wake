@@ -177,7 +177,7 @@ Um World é criado a partir de um Game Template e não troca de jogo. Palworld �
 - A Storage Allowance cobre o grupo comum. Apenas excedente consome créditos por GB/mês.
 - Excedente sem saldo inicia 30 dias de Storage Grace Period; depois disso, somente Backups automáticos antigos podem ser podados. Estado atual e Backups manuais nunca são removidos automaticamente.
 
-Referências verificadas da integração: [checkout Pix/cartão](https://docs.abacatepay.com/pages/payment/create), [segurança dos webhooks](https://docs.abacatepay.com/pages/webhooks/security), [eventos de Checkout](https://docs.abacatepay.com/pages/webhooks/events/checkout), [reembolso integral](https://docs.abacatepay.com/pages/payment/refund) e [assinaturas cíclicas](https://docs.abacatepay.com/pages/subscriptions/create).
+Referências verificadas da integração: [checkout (configurado em Pix no MVP)](https://docs.abacatepay.com/pages/payment/create), [segurança dos webhooks](https://docs.abacatepay.com/pages/webhooks/security), [eventos de Checkout](https://docs.abacatepay.com/pages/webhooks/events/checkout), [reembolso integral](https://docs.abacatepay.com/pages/payment/refund) e [assinaturas cíclicas](https://docs.abacatepay.com/pages/subscriptions/create).
 
 ## Discord e GameWake Console
 

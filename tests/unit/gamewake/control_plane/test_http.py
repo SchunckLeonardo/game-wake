@@ -3,6 +3,7 @@ import json
 from types import SimpleNamespace
 
 from gamewake.auth import InvalidSession
+from gamewake.billing import PaymentProviderError
 from gamewake.control_plane import ApiResponse, GameWakeHttpHandler
 
 
@@ -17,8 +18,8 @@ class Sessions:
 
 
 class OAuth:
-    def authorization_url(self, *, state, redirect_uri):
-        return f"https://discord.invalid/oauth?state={state}&redirect_uri={redirect_uri}"
+    def authorization_url(self, *, state, redirect_uri, install):
+        return f"https://discord.invalid/oauth?state={state}&redirect_uri={redirect_uri}&install={int(install)}"
 
     def authenticate(self, code, *, redirect_uri):
         assert code == "discord-code"
@@ -80,12 +81,13 @@ def test_discord_oauth_issues_a_kms_session_only_after_code_exchange():
         event(
             "GET",
             "/auth/discord/callback",
-            query={"code": "discord-code", "state": "token:oauth"},
+            query={"code": "discord-code", "state": "token:oauth:login"},
         )
     )
 
     assert started["statusCode"] == 302
     assert started["headers"]["location"].startswith("https://discord.invalid/oauth")
+    assert started["headers"]["location"].endswith("&install=0")
     assert callback["statusCode"] == 302
     assert callback["headers"]["location"] == (
         "https://app.gamewake.example/auth/callback#session=token:user-123"
@@ -100,7 +102,10 @@ def test_discord_oauth_preserves_the_installed_guild_for_onboarding():
             return identity
 
     transport = GameWakeHttpHandler(
-        application=SimpleNamespace(accounts=Accounts()),
+        application=SimpleNamespace(
+            accounts=Accounts(),
+            list_accounts=lambda **kwargs: (),
+        ),
         api=Api(),
         sessions=Sessions(),
         oauth=GuildOAuth(),
@@ -112,7 +117,7 @@ def test_discord_oauth_preserves_the_installed_guild_for_onboarding():
         event(
             "GET",
             "/auth/discord/callback",
-            query={"code": "discord-code", "state": "token:oauth"},
+            query={"code": "discord-code", "state": "token:oauth:install"},
         )
     )
 
@@ -120,6 +125,109 @@ def test_discord_oauth_preserves_the_installed_guild_for_onboarding():
         "https://app.gamewake.example/auth/callback"
         "#session=token:user-123&discordGuildId=123456789012345678"
     )
+
+
+def test_first_install_links_the_selected_server_when_the_user_already_has_one_account():
+    configured = []
+
+    class GuildOAuth(OAuth):
+        def authenticate(self, code, *, redirect_uri):
+            identity = super().authenticate(code, redirect_uri=redirect_uri)
+            identity.installed_guild_id = "123456789012345678"
+            return identity
+
+    application = SimpleNamespace(
+        accounts=Accounts(),
+        list_accounts=lambda **kwargs: (SimpleNamespace(id="account-existing"),),
+        configure_discord_guild=lambda account_id, **kwargs: configured.append(
+            (account_id, kwargs)
+        ),
+    )
+    transport = GameWakeHttpHandler(
+        application=application,
+        api=Api(),
+        sessions=Sessions(),
+        oauth=GuildOAuth(),
+        console_url="https://app.gamewake.example",
+        oauth_redirect_uri="https://api.gamewake.example/auth/discord/callback",
+    )
+
+    response = transport.handle(
+        event(
+            "GET",
+            "/auth/discord/callback",
+            query={"code": "discord-code", "state": "token:oauth:install"},
+        )
+    )
+
+    assert configured == [
+        (
+            "account-existing",
+            {
+                "actor_user_id": "user-123",
+                "discord_guild_id": "123456789012345678",
+            },
+        )
+    ]
+    assert response["headers"]["location"].endswith(
+        "#session=token:user-123&accountId=account-existing"
+    )
+
+
+def test_explicit_install_selects_a_server_and_rebinds_the_requested_account():
+    configured = []
+
+    class GuildOAuth(OAuth):
+        def authenticate(self, code, *, redirect_uri):
+            identity = super().authenticate(code, redirect_uri=redirect_uri)
+            identity.installed_guild_id = "987654321098765432"
+            return identity
+
+    application = SimpleNamespace(
+        accounts=Accounts(),
+        configure_discord_guild=lambda account_id, **kwargs: configured.append(
+            (account_id, kwargs)
+        ),
+        list_accounts=lambda **kwargs: (),
+    )
+    transport = GameWakeHttpHandler(
+        application=application,
+        api=Api(),
+        sessions=Sessions(),
+        oauth=GuildOAuth(),
+        console_url="https://app.gamewake.example",
+        oauth_redirect_uri="https://api.gamewake.example/auth/discord/callback",
+    )
+
+    started = transport.handle(
+        event(
+            "GET",
+            "/auth/discord/start",
+            query={"accountId": "account-1"},
+        )
+    )
+    callback = transport.handle(
+        event(
+            "GET",
+            "/auth/discord/callback",
+            query={
+                "code": "discord-code",
+                "state": "token:oauth:install:account-1",
+            },
+        )
+    )
+
+    assert started["headers"]["location"].endswith("&install=1")
+    assert configured == [
+        (
+            "account-1",
+            {
+                "actor_user_id": "user-123",
+                "discord_guild_id": "987654321098765432",
+            },
+        )
+    ]
+    assert callback["headers"]["location"].endswith("#session=token:user-123&accountId=account-1")
 
 
 def test_oauth_bootstraps_owner_recovery_from_verified_discord_email_once():
@@ -152,7 +260,7 @@ def test_oauth_bootstraps_owner_recovery_from_verified_discord_email_once():
         event(
             "GET",
             "/auth/discord/callback",
-            query={"code": "discord-code", "state": "token:oauth"},
+            query={"code": "discord-code", "state": "token:oauth:login"},
         )
     )
     fragment = callback["headers"]["location"].split("#", 1)[1]
@@ -295,6 +403,34 @@ def test_unexpected_api_failure_is_a_safe_cors_response():
         }
     }
     assert "database secret detail" not in response["body"]
+
+
+def test_payment_provider_failure_returns_a_safe_actionable_checkout_error():
+    class FailingCheckoutApi:
+        def handle(self, request):
+            del request
+            raise PaymentProviderError("private provider diagnostic")
+
+    response = handler(FailingCheckoutApi()).handle(
+        event(
+            "POST",
+            "/api/v1/accounts/account-1/wallet/contributions",
+            headers={
+                "authorization": "Bearer token:user-123",
+                "origin": "https://app.gamewake.example",
+            },
+            body='{"packageId":"credits-25"}',
+        )
+    )
+
+    assert response["statusCode"] == 502
+    assert json.loads(response["body"]) == {
+        "error": {
+            "code": "payment_unavailable",
+            "message": "Não foi possível abrir o checkout Pix. Tente novamente em instantes.",
+        }
+    }
+    assert "private provider diagnostic" not in response["body"]
 
 
 def test_oauth_callback_uri_can_be_derived_from_the_function_url_event():

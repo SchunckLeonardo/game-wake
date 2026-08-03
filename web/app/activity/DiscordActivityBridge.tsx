@@ -2,7 +2,7 @@
 
 import { DiscordSDK } from "@discord/embedded-app-sdk";
 import { useEffect, useState } from "react";
-import { GAMEWAKE_SESSION_KEY, gameWakeApiUrl } from "../gamewakeApi";
+import { gameWakeApiUrl, setGameWakeSession } from "../gamewakeApi";
 
 type ActivityStatus = "waiting" | "authorizing" | "ready" | "standalone" | "error";
 
@@ -63,7 +63,7 @@ export function DiscordActivityBridge({ onAuthenticated }: DiscordActivityBridge
         };
         if (!result.accessToken) throw new Error("activity token is missing");
         if (!result.session) throw new Error("GameWake session is missing");
-        window.sessionStorage.setItem(GAMEWAKE_SESSION_KEY, result.session);
+        setGameWakeSession(result.session);
         await discordSdk.commands.authenticate({ access_token: result.accessToken });
         await onAuthenticated?.();
         if (active) setStatus("ready");

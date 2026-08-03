@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from .model import (
     Account,
+    DiscordGuildAlreadyLinkedError,
     IdentityProvider,
     Invitation,
     InvitationStatus,
@@ -224,6 +225,38 @@ class Accounts:
     def find_account_by_discord_guild(self, discord_guild_id: str) -> Account | None:
         snapshot = self._repository.find_by_discord_guild(discord_guild_id)
         return snapshot.account if snapshot is not None else None
+
+    def configure_discord_guild(
+        self,
+        account_id: str,
+        *,
+        actor_user_id: str,
+        discord_guild_id: str,
+    ) -> Account:
+        if not discord_guild_id or not discord_guild_id.isdigit():
+            raise ValueError("Discord Guild ID must contain only digits")
+        snapshot = self._repository.get(account_id)
+        if not self.authorize(
+            account_id,
+            user_id=actor_user_id,
+            permission=Permission.MANAGE_INTEGRATIONS,
+        ):
+            raise PermissionDeniedError(
+                "configuring Discord requires integration management permission"
+            )
+        linked = self._repository.find_by_discord_guild(discord_guild_id)
+        if linked is not None and linked.account.id != account_id:
+            raise DiscordGuildAlreadyLinkedError(
+                "the Discord Guild is already linked to a GameWake Account"
+            )
+        if snapshot.account.discord_guild_id == discord_guild_id:
+            return snapshot.account
+        account = replace(snapshot.account, discord_guild_id=discord_guild_id)
+        self._repository.save(
+            replace(snapshot, account=account),
+            expected_version=snapshot.version,
+        )
+        return account
 
     def configure_discord_notification_channel(
         self,

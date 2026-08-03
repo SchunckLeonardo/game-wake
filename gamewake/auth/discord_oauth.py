@@ -77,18 +77,23 @@ class DiscordOAuthClient:
         self._client_secret = client_secret
         self._http = http_client or UrllibOAuthHttpClient()
 
-    def authorization_url(self, *, state: str, redirect_uri: str) -> str:
-        query = urlencode(
-            {
-                "client_id": self._client_id,
-                "response_type": "code",
-                "redirect_uri": redirect_uri,
-                "scope": "identify email applications.commands bot",
-                "permissions": str(_DISCORD_INSTALL_PERMISSIONS),
-                "integration_type": "0",
-                "state": state,
-            }
-        )
+    def authorization_url(self, *, state: str, redirect_uri: str, install: bool) -> str:
+        parameters = {
+            "client_id": self._client_id,
+            "response_type": "code",
+            "redirect_uri": redirect_uri,
+            "scope": "identify email",
+            "state": state,
+        }
+        if install:
+            parameters.update(
+                {
+                    "scope": "identify email applications.commands bot",
+                    "permissions": str(_DISCORD_INSTALL_PERMISSIONS),
+                    "integration_type": "0",
+                }
+            )
+        query = urlencode(parameters)
         return f"{_DISCORD_API}/oauth2/authorize?{query}"
 
     def authenticate(self, code: str, *, redirect_uri: str) -> DiscordIdentity:
