@@ -108,35 +108,53 @@ class GameWakeHttpHandler:
                     if str(state_subject).startswith("oauth:install:")
                     else None
                 )
-                if account_id is not None:
+                if state_subject == "oauth:install" or account_id is not None:
                     if not isinstance(installed_guild_id, str) or not installed_guild_id.isdigit():
                         return self._error(
                             400,
                             "discord_install_incomplete",
                             "Selecione um servidor do Discord para continuar.",
                         )
-                    self._application.configure_discord_guild(
-                        account_id,
-                        actor_user_id=user.id,
-                        discord_guild_id=installed_guild_id,
-                    )
-                    fragment += f"&accountId={account_id}"
-                elif (
-                    state_subject == "oauth:install"
-                    and isinstance(installed_guild_id, str)
-                    and installed_guild_id.isdigit()
-                ):
                     existing_accounts = list(
                         self._application.list_accounts(viewer_user_id=user.id)
                     )
-                    if len(existing_accounts) == 1:
-                        existing_account_id = existing_accounts[0].id
+                    selected_account = next(
+                        (
+                            account
+                            for account in existing_accounts
+                            if getattr(account, "discord_guild_id", None) == installed_guild_id
+                        ),
+                        None,
+                    )
+                    requested_account = next(
+                        (
+                            account
+                            for account in existing_accounts
+                            if account_id is not None and account.id == account_id
+                        ),
+                        None,
+                    )
+                    unlinked_account = (
+                        requested_account
+                        if requested_account is not None
+                        and getattr(requested_account, "discord_guild_id", None) is None
+                        else (
+                            existing_accounts[0]
+                            if account_id is None
+                            and len(existing_accounts) == 1
+                            and getattr(existing_accounts[0], "discord_guild_id", None) is None
+                            else None
+                        )
+                    )
+                    if selected_account is not None:
+                        fragment += f"&accountId={selected_account.id}"
+                    elif unlinked_account is not None:
                         self._application.configure_discord_guild(
-                            existing_account_id,
+                            unlinked_account.id,
                             actor_user_id=user.id,
                             discord_guild_id=installed_guild_id,
                         )
-                        fragment += f"&accountId={existing_account_id}"
+                        fragment += f"&accountId={unlinked_account.id}"
                     else:
                         fragment += f"&discordGuildId={installed_guild_id}"
                 if recovery:

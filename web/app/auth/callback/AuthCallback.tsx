@@ -44,8 +44,10 @@ export function AuthCallback() {
       }
       setGameWakeSession(session);
       const discordGuildId = fragment.get("discordGuildId");
-      if (discordGuildId && /^\d+$/.test(discordGuildId)) {
-        setGameWakeDiscordGuildId(discordGuildId);
+      const selectedDiscordGuildId =
+        discordGuildId && /^\d+$/.test(discordGuildId) ? discordGuildId : null;
+      if (selectedDiscordGuildId) {
+        setGameWakeDiscordGuildId(selectedDiscordGuildId);
       } else {
         setGameWakeDiscordGuildId(null);
       }
@@ -54,9 +56,12 @@ export function AuthCallback() {
         const response = await gameWakeFetch("/api/v1/me/accounts");
         const { accounts } = (await response.json()) as AccountList;
         const requestedAccountId = fragment.get("accountId");
-        const next = requestedAccountId
-          ? `/accounts/${requestedAccountId}`
-          : accounts.length === 0 ? "/onboarding" : `/accounts/${accounts[0].id}`;
+        const selectedAccount = accounts.find((account) => account.id === requestedAccountId);
+        const next = selectedAccount
+          ? `/accounts/${selectedAccount.id}`
+          : selectedDiscordGuildId || accounts.length === 0
+            ? "/onboarding"
+            : `/accounts/${accounts[0].id}`;
         if (recovery.length > 0) {
           setOwnerRecovery(recovery);
           setDestination(next);
