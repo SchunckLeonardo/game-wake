@@ -974,7 +974,7 @@ export function ConsoleDashboard({
               <Link
                 aria-label="Trocar servidor do Discord"
                 className="discord-switch-link"
-                href={`/auth/discord/start?accountId=${encodeURIComponent(accountId)}`}
+                href="/auth/discord/start?install=1"
               >
                 <Icon name="discord" size={17} /><span>Trocar servidor</span>
               </Link>

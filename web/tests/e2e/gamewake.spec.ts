@@ -127,7 +127,7 @@ test("OAuth callback persists the session and selected Discord server", async ({
   });
 
   await page.goto(
-    "/auth/callback#session=signed-session&discordGuildId=123456789012345678",
+    "/auth/callback#session=signed-session&discordGuildId=123456789012345678&accountId=account-live",
   );
 
   await expect(page).toHaveURL(/\/accounts\/account-live$/);
@@ -138,6 +138,66 @@ test("OAuth callback persists the session and selected Discord server", async ({
     await page.evaluate(() => localStorage.getItem("gamewake_discord_guild_id")),
   ).toBe("123456789012345678");
   expect(await page.evaluate(() => localStorage.getItem("gamewake_known_user"))).toBe("true");
+});
+
+test("selecting another Discord server loads only that server account", async ({ page }) => {
+  let oldAccountWorldsRequested = false;
+  await page.addInitScript(() => {
+    localStorage.setItem("gamewake_session", "old-session");
+    localStorage.setItem("gamewake_discord_guild_id", "123456789012345678");
+  });
+  await page.route("**/api/v1/me/accounts", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({
+      accounts: [
+        { id: "account-old", name: "Servidor antigo", discordGuildId: "123456789012345678" },
+        { id: "account-new", name: "Servidor novo", discordGuildId: "987654321098765432" },
+      ],
+    }),
+  }));
+  await page.route("**/api/v1/accounts/account-old/worlds", (route) => {
+    oldAccountWorldsRequested = true;
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ worlds: [{ id: "world-old", name: "World antigo" }] }),
+    });
+  });
+  await page.route("**/api/v1/accounts/account-new/worlds", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ worlds: [] }),
+  }));
+  await page.route("**/api/v1/accounts/account-new/wallet", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ wallet: { availableBalance: "0.00", statement: [] } }),
+  }));
+
+  await page.goto(
+    "/auth/callback#session=new-session&discordGuildId=987654321098765432&accountId=account-new",
+  );
+
+  await expect(page).toHaveURL(/\/accounts\/account-new$/);
+  await expect(page.getByTestId("empty-world-state")).toBeVisible();
+  await expect(page.getByText("World antigo")).toHaveCount(0);
+  expect(oldAccountWorldsRequested).toBe(false);
+});
+
+test("selecting a new Discord server starts a separate group instead of showing old Worlds", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/me/accounts", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({
+      accounts: [
+        { id: "account-old", name: "Servidor antigo", discordGuildId: "123456789012345678" },
+      ],
+    }),
+  }));
+
+  await page.goto(
+    "/auth/callback#session=new-session&discordGuildId=987654321098765432",
+  );
+
+  await expect(page).toHaveURL(/\/onboarding$/);
 });
 
 test("OAuth callback makes one-time Owner recovery codes impossible to miss", async ({
@@ -285,7 +345,7 @@ test("authenticated Console loads and mutates the real World through bearer API"
   await page.goto("/accounts/account-live");
   await expect(page.getByRole("link", { name: "Trocar servidor do Discord" })).toHaveAttribute(
     "href",
-    "/auth/discord/start?accountId=account-live",
+    "/auth/discord/start?install=1",
   );
   await expect(page.getByText("Mundo real")).toBeVisible();
   await expect(page.getByText("R$ 18,50").first()).toBeVisible();

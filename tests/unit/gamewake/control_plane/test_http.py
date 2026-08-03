@@ -138,7 +138,9 @@ def test_first_install_links_the_selected_server_when_the_user_already_has_one_a
 
     application = SimpleNamespace(
         accounts=Accounts(),
-        list_accounts=lambda **kwargs: (SimpleNamespace(id="account-existing"),),
+        list_accounts=lambda **kwargs: (
+            SimpleNamespace(id="account-existing", discord_guild_id=None),
+        ),
         configure_discord_guild=lambda account_id, **kwargs: configured.append(
             (account_id, kwargs)
         ),
@@ -174,7 +176,7 @@ def test_first_install_links_the_selected_server_when_the_user_already_has_one_a
     )
 
 
-def test_explicit_install_selects_a_server_and_rebinds_the_requested_account():
+def test_switching_to_an_unlinked_server_starts_a_separate_account_onboarding():
     configured = []
 
     class GuildOAuth(OAuth):
@@ -188,7 +190,63 @@ def test_explicit_install_selects_a_server_and_rebinds_the_requested_account():
         configure_discord_guild=lambda account_id, **kwargs: configured.append(
             (account_id, kwargs)
         ),
-        list_accounts=lambda **kwargs: (),
+        list_accounts=lambda **kwargs: (
+            SimpleNamespace(
+                id="account-1",
+                discord_guild_id="123456789012345678",
+            ),
+        ),
+    )
+    transport = GameWakeHttpHandler(
+        application=application,
+        api=Api(),
+        sessions=Sessions(),
+        oauth=GuildOAuth(),
+        console_url="https://app.gamewake.example",
+        oauth_redirect_uri="https://api.gamewake.example/auth/discord/callback",
+    )
+
+    callback = transport.handle(
+        event(
+            "GET",
+            "/auth/discord/callback",
+            query={
+                "code": "discord-code",
+                "state": "token:oauth:install:account-1",
+            },
+        )
+    )
+
+    assert configured == []
+    assert callback["headers"]["location"].endswith(
+        "#session=token:user-123&discordGuildId=987654321098765432"
+    )
+
+
+def test_switching_discord_server_routes_to_its_account_without_rebinding_worlds():
+    configured = []
+
+    class GuildOAuth(OAuth):
+        def authenticate(self, code, *, redirect_uri):
+            identity = super().authenticate(code, redirect_uri=redirect_uri)
+            identity.installed_guild_id = "987654321098765432"
+            return identity
+
+    application = SimpleNamespace(
+        accounts=Accounts(),
+        configure_discord_guild=lambda account_id, **kwargs: configured.append(
+            (account_id, kwargs)
+        ),
+        list_accounts=lambda **kwargs: (
+            SimpleNamespace(
+                id="account-1",
+                discord_guild_id="123456789012345678",
+            ),
+            SimpleNamespace(
+                id="account-2",
+                discord_guild_id="987654321098765432",
+            ),
+        ),
     )
     transport = GameWakeHttpHandler(
         application=application,
@@ -218,16 +276,54 @@ def test_explicit_install_selects_a_server_and_rebinds_the_requested_account():
     )
 
     assert started["headers"]["location"].endswith("&install=1")
-    assert configured == [
-        (
-            "account-1",
-            {
-                "actor_user_id": "user-123",
-                "discord_guild_id": "987654321098765432",
-            },
+    assert configured == []
+    assert callback["headers"]["location"].endswith("#session=token:user-123&accountId=account-2")
+
+
+def test_server_picker_routes_to_the_account_already_linked_to_the_selected_guild():
+    configured = []
+
+    class GuildOAuth(OAuth):
+        def authenticate(self, code, *, redirect_uri):
+            identity = super().authenticate(code, redirect_uri=redirect_uri)
+            identity.installed_guild_id = "987654321098765432"
+            return identity
+
+    application = SimpleNamespace(
+        accounts=Accounts(),
+        configure_discord_guild=lambda account_id, **kwargs: configured.append(
+            (account_id, kwargs)
+        ),
+        list_accounts=lambda **kwargs: (
+            SimpleNamespace(
+                id="account-1",
+                discord_guild_id="123456789012345678",
+            ),
+            SimpleNamespace(
+                id="account-2",
+                discord_guild_id="987654321098765432",
+            ),
+        ),
+    )
+    transport = GameWakeHttpHandler(
+        application=application,
+        api=Api(),
+        sessions=Sessions(),
+        oauth=GuildOAuth(),
+        console_url="https://app.gamewake.example",
+        oauth_redirect_uri="https://api.gamewake.example/auth/discord/callback",
+    )
+
+    callback = transport.handle(
+        event(
+            "GET",
+            "/auth/discord/callback",
+            query={"code": "discord-code", "state": "token:oauth:install"},
         )
-    ]
-    assert callback["headers"]["location"].endswith("#session=token:user-123&accountId=account-1")
+    )
+
+    assert configured == []
+    assert callback["headers"]["location"].endswith("#session=token:user-123&accountId=account-2")
 
 
 def test_oauth_bootstraps_owner_recovery_from_verified_discord_email_once():
