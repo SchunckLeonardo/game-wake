@@ -56,6 +56,8 @@ class ContributionCheckoutRequest:
     expected_amount: Decimal
     return_url: str
     completion_url: str
+    payer_name: str | None = None
+    payer_email: str | None = None
 
 
 @dataclass(frozen=True)

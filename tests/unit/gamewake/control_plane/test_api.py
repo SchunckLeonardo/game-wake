@@ -455,6 +455,131 @@ def test_any_account_member_can_create_only_an_allowlisted_credit_package():
     assert response.body["contribution"]["checkoutUrl"].startswith("https://pay.")
 
 
+def test_checkout_receives_the_verified_discord_payer_information():
+    class RecordingCheckoutProvider(CheckoutProvider):
+        def __init__(self):
+            self.request = None
+
+        def create_checkout(self, request):
+            self.request = request
+            return super().create_checkout(request)
+
+    repository = InMemoryAccountRepository()
+    accounts = Accounts(
+        repository,
+        recovery_secret_store=InMemoryRecoverySecretStore(),
+    )
+    user = accounts.sign_in_with_discord(
+        discord_user_id="discord-owner",
+        display_name="Leonardo",
+    )
+    account = accounts.create_account(name="Grupo", owner_user_id=user.id)
+    accounts.enable_owner_recovery(
+        account.id,
+        owner_user_id=user.id,
+        verified_email="leo@example.com",
+    )
+    provider = RecordingCheckoutProvider()
+    catalog = GameCatalog.with_palworld()
+    api = GameWakeApi(
+        GameWakeApplication(
+            accounts=accounts,
+            worlds=Worlds(InMemoryWorldRepository(), access=accounts, game_catalog=catalog),
+            billing=Billing(
+                InMemoryBillingRepository(),
+                payment_provider=provider,
+                contribution_packages=(
+                    ContributionPackage("credits-25", Decimal("25.00"), "prod_25"),
+                ),
+            ),
+            game_catalog=catalog,
+        )
+    )
+
+    response = api.handle(
+        ApiRequest(
+            "POST",
+            f"/api/v1/accounts/{account.id}/wallet/contributions",
+            user.id,
+            {
+                "packageId": "credits-25",
+                "returnUrl": "https://app.gamewake.example/wallet",
+                "completionUrl": "https://app.gamewake.example/wallet?payment=complete",
+                "idempotencyKey": "web:contribution:payer",
+            },
+            verified_email="leo@example.com",
+        )
+    )
+
+    assert response.status == 201
+    assert provider.request.payer_name == "Leonardo"
+    assert provider.request.payer_email == "leo@example.com"
+
+
+def test_paid_checkout_can_be_reconciled_when_the_webhook_did_not_credit_the_wallet():
+    class PaidCheckoutProvider(CheckoutProvider):
+        def find_checkout(self, external_id):
+            return PaymentCheckout(
+                id="bill_123",
+                external_id=external_id,
+                url="https://pay.abacatepay.com/bill_123",
+                amount=Decimal("25.00"),
+                status="PAID",
+                paid_amount=Decimal("25.00"),
+            )
+
+    accounts = Accounts(
+        InMemoryAccountRepository(),
+        recovery_secret_store=InMemoryRecoverySecretStore(),
+    )
+    account = accounts.create_account(name="Grupo", owner_user_id="owner")
+    accounts.enable_owner_recovery(
+        account.id,
+        owner_user_id="owner",
+        verified_email="owner@example.com",
+    )
+    billing = Billing(
+        InMemoryBillingRepository(),
+        payment_provider=PaidCheckoutProvider(),
+        contribution_packages=(ContributionPackage("credits-25", Decimal("25.00"), "prod_25"),),
+    )
+    catalog = GameCatalog.with_palworld()
+    api = GameWakeApi(
+        GameWakeApplication(
+            accounts=accounts,
+            worlds=Worlds(InMemoryWorldRepository(), access=accounts, game_catalog=catalog),
+            billing=billing,
+            game_catalog=catalog,
+        )
+    )
+    created = api.handle(
+        ApiRequest(
+            "POST",
+            f"/api/v1/accounts/{account.id}/wallet/contributions",
+            "owner",
+            {
+                "packageId": "credits-25",
+                "returnUrl": "https://app.gamewake.example/wallet",
+                "completionUrl": "https://app.gamewake.example/wallet?payment=complete",
+                "idempotencyKey": "web:contribution:reconcile",
+            },
+        )
+    )
+    contribution_id = created.body["contribution"]["id"]
+
+    reconciled = api.handle(
+        ApiRequest(
+            "POST",
+            f"/api/v1/accounts/{account.id}/wallet/contributions/{contribution_id}/reconcile",
+            "owner",
+        )
+    )
+
+    assert reconciled.status == 200
+    assert reconciled.body["contribution"]["status"] == "completed"
+    assert billing.get_wallet(account.id).available_balance == Decimal("25.00")
+
+
 def test_first_payment_is_blocked_until_a_sole_owner_has_recovery_ready():
     accounts = Accounts(InMemoryAccountRepository())
     account = accounts.create_account(name="Grupo", owner_user_id="owner")

@@ -29,6 +29,8 @@ class AccountRepository(Protocol):
 
 
 class IdentityRepository(Protocol):
+    def get_user(self, user_id: str) -> User | None: ...
+
     def find_user_by_identity(
         self,
         provider: IdentityProvider,

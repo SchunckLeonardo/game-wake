@@ -7,7 +7,11 @@ from datetime import timedelta
 from typing import Any
 
 from gamewake.auth import InvalidSession
-from gamewake.billing import PaymentProviderError
+from gamewake.billing import (
+    InvalidWebhookPayload,
+    InvalidWebhookSignature,
+    PaymentProviderError,
+)
 
 from .api import ApiRequest
 
@@ -217,6 +221,22 @@ class GameWakeHttpHandler:
             return self._error(404, "not_found", "Not found", cors)
         except InvalidSession:
             return self._error(401, "invalid_session", "Session is invalid or expired", cors)
+        except InvalidWebhookSignature:
+            _LOGGER.warning("Rejected unauthenticated AbacatePay webhook")
+            return self._error(
+                401,
+                "invalid_webhook_auth",
+                "Webhook authentication failed",
+                cors,
+            )
+        except InvalidWebhookPayload:
+            _LOGGER.warning("Rejected invalid AbacatePay webhook payload", exc_info=True)
+            return self._error(
+                422,
+                "invalid_webhook_payload",
+                "Webhook payload could not be processed",
+                cors,
+            )
         except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
             code = "invalid_json" if raw_body else "invalid_request"
             return self._error(400, code, "Invalid request", cors)

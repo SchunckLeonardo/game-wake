@@ -80,6 +80,9 @@ def test_membership_starts_an_idempotent_wallet_contribution_checkout():
     assert len(provider.requests) == 1
     assert provider.requests[0].external_id == contribution.id
     assert provider.requests[0].provider_product_id == "prod_50_brl"
+    assert provider.requests[0].completion_url == (
+        f"https://gamewake.example/wallet/success?contributionId={contribution.id}"
+    )
 
 
 def test_completed_webhook_credits_the_wallet_exactly_once_when_replayed():

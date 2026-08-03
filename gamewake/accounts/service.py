@@ -70,6 +70,9 @@ class Accounts:
         self._identities.create_user(user, identity)
         return user
 
+    def get_user(self, user_id: str) -> User | None:
+        return self._identities.get_user(user_id)
+
     def list_linked_identities(
         self,
         user_id: str,

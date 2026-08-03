@@ -81,6 +81,9 @@ class InMemoryAccountRepository:
         identity = self._identities.get((provider, provider_user_id))
         return self._users.get(identity.user_id) if identity is not None else None
 
+    def get_user(self, user_id: str) -> User | None:
+        return self._users.get(user_id)
+
     def create_user(self, user: User, identity: LinkedIdentity) -> None:
         self._users[user.id] = user
         self._identities[(identity.provider, identity.provider_user_id)] = identity

@@ -137,6 +137,7 @@ def test_accounts_identities_activity_and_concurrency_are_transactional(database
     user = User("user-1", "Leonardo")
     discord = LinkedIdentity("identity-1", user.id, IdentityProvider.DISCORD, "discord-1")
     repository.create_user(user, discord)
+    assert repository.get_user(user.id) == user
     assert repository.find_user_by_identity(IdentityProvider.DISCORD, "discord-1") == user
     assert repository.list_linked_identities(user.id) == (discord,)
 
