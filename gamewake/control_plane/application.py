@@ -397,12 +397,14 @@ class GameWakeApplication:
         return_url: str,
         completion_url: str,
         idempotency_key: str,
+        payer_email: str | None = None,
     ) -> WalletContribution:
         self.accounts.list_memberships(account_id, viewer_user_id=payer_user_id)
         if not self.accounts.owner_recovery_ready(account_id):
             raise PermissionError(
                 "Owner Recovery must be ready before the account can accept payments"
             )
+        payer = self.accounts.get_user(payer_user_id)
         return self.billing.create_contribution(
             account_id,
             payer_user_id=payer_user_id,
@@ -410,7 +412,26 @@ class GameWakeApplication:
             return_url=return_url,
             completion_url=completion_url,
             idempotency_key=idempotency_key,
+            payer_name=payer.display_name if payer is not None else None,
+            payer_email=payer_email,
         )
+
+    def reconcile_contribution(
+        self,
+        account_id: str,
+        contribution_id: str,
+        *,
+        payer_user_id: str,
+    ) -> WalletContribution:
+        self.accounts.list_memberships(account_id, viewer_user_id=payer_user_id)
+        contribution = self.billing.get_contribution(
+            account_id,
+            contribution_id,
+            requesting_user_id=payer_user_id,
+        )
+        if contribution.payer_user_id != payer_user_id:
+            raise PermissionError("only the payer can reconcile this contribution")
+        return self.billing.reconcile_contribution(account_id, contribution_id)
 
     def request_wake(
         self,

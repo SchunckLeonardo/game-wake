@@ -207,6 +207,14 @@ class PostgresAccountRepository:
             )
             return decode_domain(_payload(row, "aggregate"), User) if row is not None else None
 
+    def get_user(self, user_id: str) -> User | None:
+        with self._database.transaction() as transaction:
+            row = transaction.fetch_one(
+                "SELECT aggregate FROM users WHERE id = :user_id",
+                {"user_id": user_id},
+            )
+            return decode_domain(_payload(row, "aggregate"), User) if row is not None else None
+
     def create_user(self, user: User, identity: LinkedIdentity) -> None:
         with self._database.transaction() as transaction:
             transaction.execute(

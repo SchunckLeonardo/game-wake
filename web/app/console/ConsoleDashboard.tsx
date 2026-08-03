@@ -245,6 +245,7 @@ export function ConsoleDashboard({
   const [walletBalance, setWalletBalance] = useState(isDemo ? "42.80" : "0.00");
   const [walletStatement, setWalletStatement] = useState<WalletEntry[]>([]);
   const [error, setError] = useState("");
+  const [paymentNotice, setPaymentNotice] = useState("");
   const [loading, setLoading] = useState(!isDemo);
   const [invites, setInvites] = useState(["Ana", "Bia"]);
   const [inviteUserIds, setInviteUserIds] = useState("");
@@ -273,6 +274,7 @@ export function ConsoleDashboard({
   >(() => Object.fromEntries(configurationFields.map((field) => [field.key, field.default])));
   const [connectionDetails, setConnectionDetails] =
     useState<ConnectionDetails | null>(null);
+  const [hasConnected, setHasConnected] = useState(isDemo);
   const [connectionCopied, setConnectionCopied] = useState(false);
   const [wakeEstimate, setWakeEstimate] = useState<WakeEstimate | null>(null);
   const [worldBudget, setWorldBudget] = useState<WorldBudget | null>(
@@ -353,6 +355,94 @@ export function ConsoleDashboard({
   useEffect(() => {
     void Promise.resolve().then(loadLiveState);
   }, [loadLiveState]);
+
+  useEffect(() => {
+    let active = true;
+    void Promise.resolve().then(() => {
+      if (!active) return;
+      setHasConnected(
+        isDemo ||
+          (world !== null &&
+            window.localStorage.getItem(
+              `gamewake:first-session-complete:${accountId}:${world.id}`,
+            ) === "1"),
+      );
+    });
+    return () => {
+      active = false;
+    };
+  }, [accountId, isDemo, world]);
+
+  useEffect(() => {
+    if (isDemo) return;
+    const parameters = new URLSearchParams(window.location.search);
+    if (parameters.get("payment") !== "complete") return;
+    const storageKey = `gamewake:pending-contribution:${accountId}`;
+    const contributionId =
+      parameters.get("contributionId") ?? window.localStorage.getItem(storageKey);
+
+    let active = true;
+    let retryTimer: number | undefined;
+    async function reconcile(attempt: number) {
+      try {
+        const response = await gameWakeFetch(
+          `/api/v1/accounts/${accountId}/wallet/contributions/${contributionId}/reconcile`,
+          { method: "POST" },
+        );
+        const payload = (await response.json()) as {
+          contribution: { status: string };
+        };
+        if (!active) return;
+        if (payload.contribution.status === "completed") {
+          await loadLiveState();
+          if (!active) return;
+          setPaymentNotice("Pagamento confirmado. Seus créditos já estão disponíveis.");
+          window.localStorage.removeItem(storageKey);
+          parameters.delete("payment");
+          parameters.delete("contributionId");
+          const query = parameters.toString();
+          window.history.replaceState(
+            null,
+            "",
+            `${window.location.pathname}${query ? `?${query}` : ""}`,
+          );
+          return;
+        }
+        if (attempt < 4) {
+          retryTimer = window.setTimeout(() => void reconcile(attempt + 1), 1500);
+          return;
+        }
+        setPaymentNotice(
+          "Pagamento em confirmação. Seus créditos aparecerão automaticamente na Wallet.",
+        );
+      } catch (caught) {
+        if (!active) return;
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : "Não foi possível confirmar o pagamento agora.",
+        );
+      }
+    }
+    async function handlePaymentReturn() {
+      await Promise.resolve();
+      if (!active) return;
+      setSection("wallet");
+      if (!contributionId) {
+        setPaymentNotice(
+          "Pagamento recebido. Atualize a Wallet em alguns instantes para confirmar o saldo.",
+        );
+        await loadLiveState();
+        return;
+      }
+      await reconcile(0);
+    }
+    void handlePaymentReturn();
+    return () => {
+      active = false;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+    };
+  }, [accountId, isDemo, loadLiveState]);
 
   useEffect(() => {
     if (isDemo || !["waking", "going_to_sleep"].includes(worldStatus)) return;
@@ -640,6 +730,11 @@ export function ConsoleDashboard({
       );
       const payload = (await response.json()) as { connection: ConnectionDetails };
       setConnectionDetails(payload.connection);
+      window.localStorage.setItem(
+        `gamewake:first-session-complete:${accountId}:${world.id}`,
+        "1",
+      );
+      setHasConnected(true);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Não foi possível obter a conexão.");
     }
@@ -687,9 +782,13 @@ export function ConsoleDashboard({
         },
       );
       const payload = (await response.json()) as {
-        contribution: { checkoutUrl?: string };
+        contribution: { id: string; checkoutUrl?: string };
       };
       if (payload.contribution.checkoutUrl) {
+        window.localStorage.setItem(
+          `gamewake:pending-contribution:${accountId}`,
+          payload.contribution.id,
+        );
         window.location.assign(payload.contribution.checkoutUrl);
       }
     } catch (caught) {
@@ -986,6 +1085,7 @@ export function ConsoleDashboard({
 
         <div className="console-content">
           {error && <div className="config-notice" role="alert"><span><Icon name="warning" size={15} /></span><p>{error}</p></div>}
+          {paymentNotice && <div className="payment-notice" role="status"><span><Icon name="check" size={15} /></span><p>{paymentNotice}</p></div>}
           {loading && <p role="status">Carregando sua GameWake Console…</p>}
           {section === "worlds" && (
             <>
@@ -1020,11 +1120,24 @@ export function ConsoleDashboard({
                 </section>
               )}
 
-              {world && !isDemo && Number(walletBalance) <= 0 && (
-                <article className="next-action-banner">
-                  <span><Icon name="wallet" size={20} /></span>
-                  <div><strong>World criado. Agora adicione créditos.</strong><p>Depois do Pix, volte aqui e clique em “Acordar World”. O preço aparece antes da confirmação.</p></div>
-                  <button className="button button-primary" onClick={() => setSection("wallet")} type="button">Adicionar créditos</button>
+              {world && !isDemo && !hasConnected && (
+                <article className="first-session-guide" data-testid="first-session-guide">
+                  <div className="first-session-heading">
+                    <span><Icon name="power" size={20} /></span>
+                    <div><span className="section-index">PRIMEIRA PARTIDA</span><h2>Falta pouco para jogar</h2><p>Siga estes passos uma vez. A GameWake cuida do servidor e do save para o grupo.</p></div>
+                  </div>
+                  <ol className="first-session-steps">
+                    <li className="done"><Icon name="check" size={15} /><span><strong>World criado</strong><small>{world.name} está salvo e não gera custo enquanto dorme.</small></span></li>
+                    <li className={Number(walletBalance) > 0 ? "done" : "current"}>{Number(walletBalance) > 0 ? <Icon name="check" size={15} /> : <span>2</span>}<span><strong>Adicionar créditos</strong><small>{Number(walletBalance) > 0 ? `${formattedWallet} disponíveis para o grupo.` : "Escolha R$ 25, R$ 50 ou R$ 100 e pague por Pix."}</small></span></li>
+                    <li className={worldStatus === "online" ? "done" : Number(walletBalance) > 0 ? "current" : "pending"}>{worldStatus === "online" ? <Icon name="check" size={15} /> : <span>3</span>}<span><strong>Acordar o World</strong><small>{worldStatus === "waking" ? "A GameWake está preparando a partida agora." : worldStatus === "online" ? "O servidor está online e pronto." : "Você confere o preço antes de confirmar."}</small></span></li>
+                    <li className={worldStatus === "online" ? "current" : "pending"}><span>4</span><span><strong>Conectar e jogar</strong><small>Abra o endereço e a senha quando o World estiver online.</small></span></li>
+                  </ol>
+                  <div className="first-session-action">
+                    {Number(walletBalance) <= 0 && <button className="button button-primary" onClick={() => setSection("wallet")} type="button"><Icon name="wallet" size={17} />Adicionar créditos</button>}
+                    {Number(walletBalance) > 0 && worldStatus === "sleeping" && <button className="button button-primary" onClick={() => void wakeWorld()} type="button"><Icon name="power" size={17} />Acordar o World</button>}
+                    {worldStatus === "online" && <button className="button button-primary" onClick={() => void connectWorld()} type="button"><Icon name="globe" size={17} />Ver como conectar</button>}
+                    {["waking", "going_to_sleep"].includes(worldStatus) && <span><Icon name="clock" size={16} /> Continue nesta tela ou volte depois; a operação segue protegida.</span>}
+                  </div>
                 </article>
               )}
 

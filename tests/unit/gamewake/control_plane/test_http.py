@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from gamewake.auth import InvalidSession
 from gamewake.billing import PaymentProviderError
+from gamewake.billing.abacatepay import InvalidWebhookSignature
 from gamewake.control_plane import ApiResponse, GameWakeHttpHandler
 
 
@@ -427,6 +428,32 @@ def test_discord_and_abacatepay_receive_the_unmodified_raw_body():
         raw,
         {"webhook_secret": "url-secret", "signature": "signature"},
     )
+
+
+def test_webhook_authentication_failure_is_not_misreported_as_invalid_json():
+    webhook = SimpleNamespace(
+        handle=lambda raw, **auth: (_ for _ in ()).throw(
+            InvalidWebhookSignature("secret or signature mismatch")
+        )
+    )
+
+    response = handler(abacatepay_webhook=webhook).handle(
+        event(
+            "POST",
+            "/webhooks/abacatepay",
+            headers={"x-webhook-signature": "signature"},
+            query={"webhookSecret": "wrong-secret"},
+            body='{"event":"checkout.completed"}',
+        )
+    )
+
+    assert response["statusCode"] == 401
+    assert json.loads(response["body"]) == {
+        "error": {
+            "code": "invalid_webhook_auth",
+            "message": "Webhook authentication failed",
+        }
+    }
 
 
 def test_discord_activity_exchange_returns_discord_and_gamewake_sessions():

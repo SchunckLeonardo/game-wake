@@ -23,6 +23,10 @@ class InvalidWebhookSignature(ValueError):
     """Raised before parsing a webhook that fails either authentication layer."""
 
 
+class InvalidWebhookPayload(ValueError):
+    """Raised after authentication when an AbacatePay event cannot be processed."""
+
+
 class JsonHttpClient(Protocol):
     def request(
         self,
@@ -90,6 +94,17 @@ class AbacatePayPaymentProvider:
         self._base_url = base_url.rstrip("/")
 
     def create_checkout(self, request: ContributionCheckoutRequest) -> PaymentCheckout:
+        customer_id = self._create_customer(request)
+        checkout_body: dict[str, Any] = {
+            "items": [{"id": request.provider_product_id, "quantity": 1}],
+            "methods": ["PIX"],
+            "externalId": request.external_id,
+            "returnUrl": request.return_url,
+            "completionUrl": request.completion_url,
+            "metadata": {"gamewakeContributionId": request.external_id},
+        }
+        if customer_id is not None:
+            checkout_body["customerId"] = customer_id
         response = self._http_client.request(
             "POST",
             f"{self._base_url}/checkouts/create",
@@ -97,14 +112,7 @@ class AbacatePayPaymentProvider:
                 "Authorization": f"Bearer {self._api_key}",
                 "Content-Type": "application/json",
             },
-            json_body={
-                "items": [{"id": request.provider_product_id, "quantity": 1}],
-                "methods": ["PIX"],
-                "externalId": request.external_id,
-                "returnUrl": request.return_url,
-                "completionUrl": request.completion_url,
-                "metadata": {"gamewakeContributionId": request.external_id},
-            },
+            json_body=checkout_body,
         )
         if response.get("success") is not True or not isinstance(response.get("data"), dict):
             raise PaymentProviderError(str(response.get("error") or "checkout creation failed"))
@@ -114,6 +122,33 @@ class AbacatePayPaymentProvider:
         if checkout.amount != request.expected_amount:
             raise PaymentProviderError("AbacatePay checkout amount does not match credit package")
         return checkout
+
+    def _create_customer(self, request: ContributionCheckoutRequest) -> str | None:
+        email = request.payer_email.strip() if request.payer_email else ""
+        if not email:
+            return None
+        customer_body: dict[str, Any] = {
+            "email": email,
+            "metadata": {"gamewakeContributionId": request.external_id},
+        }
+        if request.payer_name and request.payer_name.strip():
+            customer_body["name"] = request.payer_name.strip()
+        response = self._http_client.request(
+            "POST",
+            f"{self._base_url}/customers/create",
+            headers={
+                "Authorization": f"Bearer {self._api_key}",
+                "Content-Type": "application/json",
+            },
+            json_body=customer_body,
+        )
+        data = response.get("data")
+        if response.get("success") is not True or not isinstance(data, dict):
+            raise PaymentProviderError(str(response.get("error") or "customer creation failed"))
+        customer_id = data.get("id")
+        if not isinstance(customer_id, str) or not customer_id.startswith("cust_"):
+            raise PaymentProviderError("AbacatePay returned an invalid customer")
+        return customer_id
 
     def find_checkout(self, external_id: str) -> PaymentCheckout | None:
         query = urlencode({"externalId": external_id, "limit": 1})
@@ -209,7 +244,10 @@ class AbacatePayWebhookHandler:
         try:
             payload = json.loads(raw_body)
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise ValueError("invalid AbacatePay webhook JSON") from error
+            raise InvalidWebhookPayload("invalid AbacatePay webhook JSON") from error
         if not isinstance(payload, dict):
-            raise ValueError("invalid AbacatePay webhook payload")
-        return self._event_processor(payload)
+            raise InvalidWebhookPayload("invalid AbacatePay webhook payload")
+        try:
+            return self._event_processor(payload)
+        except (KeyError, TypeError, ValueError) as error:
+            raise InvalidWebhookPayload("invalid AbacatePay webhook event") from error

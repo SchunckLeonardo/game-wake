@@ -347,7 +347,7 @@ test("authenticated Console loads and mutates the real World through bearer API"
     "href",
     "/auth/discord/start?install=1",
   );
-  await expect(page.getByText("Mundo real")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Mundo real" })).toBeVisible();
   await expect(page.getByText("R$ 18,50").first()).toBeVisible();
   await page.getByTestId("wake-world").click();
   await expect(page.getByRole("dialog", { name: "Confirmar despertar de Mundo real" })).toContainText("R$ 5,50/h");
@@ -444,12 +444,59 @@ test("Discord-bootstrapped account creates its first World from the Console", as
   await page.getByRole("button", { name: "Criar World" }).click();
 
   await expect(page.getByRole("heading", { name: "Primeiro World" })).toBeVisible();
+  const guide = page.getByTestId("first-session-guide");
+  await expect(guide).toBeVisible();
+  await expect(guide).toContainText("World criado");
+  await expect(guide).toContainText("Adicionar créditos");
+  await expect(guide).toContainText("Acordar o World");
+  await expect(guide).toContainText("Conectar e jogar");
   expect(createdWorldBody).toMatchObject({
     name: "Primeiro World",
     gameTemplateId: "palworld:1",
     region: "sa-east-1",
     runtimeProfileId: "palworld-small",
   });
+});
+
+test("returning from a paid Pix reconciles and refreshes the Wallet", async ({ page }) => {
+  let reconciled = false;
+  await page.addInitScript(() => localStorage.setItem("gamewake_session", "signed-session"));
+  await page.route("**/api/v1/me/accounts", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ accounts: [{ id: "account-paid", name: "Grupo pago" }] }),
+  }));
+  await page.route("**/api/v1/accounts/account-paid/worlds", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ worlds: [] }),
+  }));
+  await page.route("**/api/v1/accounts/account-paid/wallet", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({
+      wallet: { availableBalance: reconciled ? "25.00" : "0.00", statement: [] },
+    }),
+  }));
+  await page.route(
+    "**/api/v1/accounts/account-paid/wallet/contributions/contribution-paid/reconcile",
+    (route) => {
+      expect(route.request().method()).toBe("POST");
+      reconciled = true;
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ contribution: { id: "contribution-paid", status: "completed" } }),
+      });
+    },
+  );
+
+  await page.goto(
+    "/accounts/account-paid?payment=complete&contributionId=contribution-paid",
+  );
+
+  await expect(page.getByTestId("wallet-panel")).toBeVisible();
+  await expect(page.getByRole("status")).toContainText(
+    "Pagamento confirmado. Seus créditos já estão disponíveis.",
+  );
+  await expect(page.getByText("R$ 25,00").first()).toBeVisible();
+  await expect(page).toHaveURL(/\/accounts\/account-paid$/);
 });
 
 test("live Console reads members, custom roles, backups and redacted activity", async ({

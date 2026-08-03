@@ -114,6 +114,58 @@ def test_checkout_uses_the_configured_credit_product_and_only_the_available_pix_
     ]
 
 
+def test_checkout_prefills_the_verified_customer_information_that_gamewake_already_has():
+    class SequencedHttpClient:
+        def __init__(self):
+            self.requests = []
+
+        def request(self, method, url, *, headers, json_body=None):
+            self.requests.append((method, url, headers, json_body))
+            if url.endswith("/customers/create"):
+                return {
+                    "success": True,
+                    "error": None,
+                    "data": {"id": "cust_leonardo"},
+                }
+            return {
+                "success": True,
+                "error": None,
+                "data": {
+                    "id": "bill_123",
+                    "externalId": "contribution-1",
+                    "url": "https://app.abacatepay.com/pay/bill_123",
+                    "amount": 5000,
+                    "status": "PENDING",
+                },
+            }
+
+    http = SequencedHttpClient()
+    provider = AbacatePayPaymentProvider(api_key="test-key", http_client=http)
+
+    provider.create_checkout(
+        ContributionCheckoutRequest(
+            external_id="contribution-1",
+            provider_product_id="prod_50_brl",
+            expected_amount=Decimal("50.00"),
+            return_url="https://gamewake.example/wallet",
+            completion_url="https://gamewake.example/wallet/success",
+            payer_name="Leonardo",
+            payer_email="leo@example.com",
+        )
+    )
+
+    assert http.requests[0][0:2] == (
+        "POST",
+        "https://api.abacatepay.com/v2/customers/create",
+    )
+    assert http.requests[0][3] == {
+        "email": "leo@example.com",
+        "name": "Leonardo",
+        "metadata": {"gamewakeContributionId": "contribution-1"},
+    }
+    assert http.requests[1][3]["customerId"] == "cust_leonardo"
+
+
 def test_urllib_client_preserves_the_safe_abacatepay_error_for_diagnostics():
     error = HTTPError(
         "https://api.abacatepay.com/v2/checkouts/create",

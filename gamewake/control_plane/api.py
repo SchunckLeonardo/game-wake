@@ -208,8 +208,21 @@ class GameWakeApi:
                 return_url=self._required_string(request.body, "returnUrl"),
                 completion_url=self._required_string(request.body, "completionUrl"),
                 idempotency_key=self._required_string(request.body, "idempotencyKey"),
+                payer_email=request.verified_email,
             )
             return ApiResponse(201, {"contribution": self._contribution(contribution)})
+        if (
+            request.method == "POST"
+            and len(parts) == 8
+            and parts[4:6] == ("wallet", "contributions")
+            and parts[7] == "reconcile"
+        ):
+            contribution = self._application.reconcile_contribution(
+                account_id,
+                parts[6],
+                payer_user_id=request.user_id,
+            )
+            return ApiResponse(200, {"contribution": self._contribution(contribution)})
         if request.method == "POST" and parts[4:] == ("invitations",):
             invited_user_ids = request.body.get("invitedUserIds")
             if (

@@ -3,6 +3,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, ROUND_UP, Decimal
 from math import ceil
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import uuid4
 
 from .contracts import BillingRepository, PaymentProvider
@@ -57,6 +58,8 @@ class Billing:
         return_url: str,
         completion_url: str,
         idempotency_key: str,
+        payer_name: str | None = None,
+        payer_email: str | None = None,
     ) -> WalletContribution:
         if self._payment_provider is None:
             raise RuntimeError("Payment Provider is not configured")
@@ -111,7 +114,9 @@ class Billing:
                 provider_product_id=contribution.provider_product_id,
                 expected_amount=contribution.amount,
                 return_url=return_url,
-                completion_url=completion_url,
+                completion_url=self._completion_url(completion_url, contribution.id),
+                payer_name=payer_name,
+                payer_email=payer_email,
             )
         )
         pending = replace(
@@ -134,6 +139,15 @@ class Billing:
             ):
                 return pending
         raise ConcurrentBillingUpdate("could not attach contribution checkout after retries")
+
+    @staticmethod
+    def _completion_url(completion_url: str, contribution_id: str) -> str:
+        parsed = urlsplit(completion_url)
+        query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+        query["contributionId"] = contribution_id
+        return urlunsplit(
+            (parsed.scheme, parsed.netloc, parsed.path, urlencode(query), parsed.fragment)
+        )
 
     def get_contribution(
         self,

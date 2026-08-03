@@ -3,6 +3,8 @@
 from .abacatepay import (
     AbacatePayPaymentProvider,
     AbacatePayWebhookHandler,
+    InvalidWebhookPayload,
+    InvalidWebhookSignature,
     PaymentProviderError,
 )
 from .in_memory import InMemoryBillingRepository
@@ -44,6 +46,8 @@ __all__ = [
     "ContributionStatus",
     "InMemoryBillingRepository",
     "InsufficientFundsError",
+    "InvalidWebhookPayload",
+    "InvalidWebhookSignature",
     "LedgerEntry",
     "LedgerEntryType",
     "PaymentCheckout",
