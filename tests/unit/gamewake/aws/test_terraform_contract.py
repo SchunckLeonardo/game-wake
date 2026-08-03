@@ -87,6 +87,13 @@ def test_standard_workflow_invokes_the_worker_with_structured_logs():
     assert "ReadDiscordNotificationToken" in orchestration
 
 
+def test_api_policy_uses_the_stable_world_operation_arn():
+    api = source("gamewake-api.tf")
+
+    assert "resources = [local.world_operation_state_machine_arn]" in api
+    assert "resources = [aws_sfn_state_machine.world_operation.arn]" not in api
+
+
 def test_world_data_is_kms_encrypted_versioned_bounded_and_never_public():
     storage = source("gamewake-storage.tf")
     orchestration = source("gamewake-orchestration.tf")

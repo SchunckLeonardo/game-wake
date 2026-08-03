@@ -31,6 +31,14 @@
       "Retry": [
         {
           "ErrorEquals": [
+            "InvalidInstanceId"
+          ],
+          "IntervalSeconds": 10,
+          "BackoffRate": 2,
+          "MaxAttempts": 5
+        },
+        {
+          "ErrorEquals": [
             "Lambda.ServiceException",
             "Lambda.AWSLambdaException",
             "Lambda.SdkClientException",

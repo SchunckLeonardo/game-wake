@@ -119,7 +119,7 @@ data "aws_iam_policy_document" "gamewake_api" {
     sid       = "StartWorldOperations"
     effect    = "Allow"
     actions   = ["states:StartExecution"]
-    resources = [aws_sfn_state_machine.world_operation.arn]
+    resources = [local.world_operation_state_machine_arn]
   }
 
   statement {

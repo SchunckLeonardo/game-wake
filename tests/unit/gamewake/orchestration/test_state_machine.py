@@ -103,3 +103,18 @@ def test_world_operation_state_machine_retries_loops_and_records_failure():
     assert failure["Type"] == "Task"
     assert failure["Parameters"]["action"] == "record_failure"
     assert failure["End"] is True
+
+
+def test_world_operation_retries_while_a_new_runtime_registers_with_ssm():
+    definition = json.loads(STATE_MACHINE.read_text())
+    retries = definition["States"]["AdvanceOperation"]["Retry"]
+
+    [registration_retry] = [
+        retry for retry in retries if "InvalidInstanceId" in retry["ErrorEquals"]
+    ]
+    assert registration_retry == {
+        "ErrorEquals": ["InvalidInstanceId"],
+        "IntervalSeconds": 10,
+        "BackoffRate": 2,
+        "MaxAttempts": 5,
+    }
