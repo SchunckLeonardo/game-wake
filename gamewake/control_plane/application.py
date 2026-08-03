@@ -128,6 +128,19 @@ class GameWakeApplication:
             discord_guild_id=discord_guild_id,
         )
 
+    def configure_discord_guild(
+        self,
+        account_id: str,
+        *,
+        actor_user_id: str,
+        discord_guild_id: str,
+    ) -> Account:
+        return self.accounts.configure_discord_guild(
+            account_id,
+            actor_user_id=actor_user_id,
+            discord_guild_id=discord_guild_id,
+        )
+
     def enable_owner_recovery(
         self,
         account_id: str,

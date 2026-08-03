@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import { DiscordEntryLink } from "./DiscordEntryLink";
 import { Icon } from "./Icon";
 
 export const metadata: Metadata = {
@@ -7,8 +8,6 @@ export const metadata: Metadata = {
   description:
     "Mundos persistentes para jogar com seus amigos. A infraestrutura acorda quando vocês jogam e dorme quando terminam.",
 };
-
-const discordSignIn = "/auth/discord/start";
 
 const friendInitials = ["L", "A", "B"];
 
@@ -63,10 +62,10 @@ export default function Home() {
         <nav aria-label="Navegação principal">
           <a href="#como-funciona">Como funciona</a>
           <a href="#seguranca">Seu World</a>
-          <a className="nav-login" href={discordSignIn}>
+          <DiscordEntryLink className="nav-login">
             <Icon name="discord" size={18} />
             Entrar
-          </a>
+          </DiscordEntryLink>
         </nav>
       </header>
 
@@ -154,10 +153,10 @@ export default function Home() {
             <div className="world-stage-card">
               <span><Icon name="moon" size={16} /> Dormindo com segurança</span>
               <strong>Palpagos</strong>
-              <a className="button button-primary" href={discordSignIn}>
+              <DiscordEntryLink className="button button-primary">
                 <Icon name="discord" size={19} />
                 Entrar com Discord
-              </a>
+              </DiscordEntryLink>
             </div>
           </div>
         </div>
@@ -177,8 +176,8 @@ export default function Home() {
             <span className="step-number">1</span>
             <h3>Reúna o grupo</h3>
             <p>
-              Conecte o servidor do Discord e convide vários amigos de uma vez.
-              Player, Manager e Owner deixam os limites fáceis de entender.
+              No Discord, o Owner usa <code>/gamewake comecar</code> uma vez e
+              convida os amigos. Cada pessoa entra com <code>/gamewake aceitar</code>.
             </p>
             <StepDiagram step={1} />
           </article>
@@ -186,8 +185,8 @@ export default function Home() {
             <span className="step-number">2</span>
             <h3>Acorde o World</h3>
             <p>
-              O GameWake restaura o save, aplica a configuração e só anuncia
-              Online quando o jogo realmente aceita conexão.
+              Crie o primeiro World no Console, adicione créditos e acorde pela
+              Web ou com <code>/gamewake acordar</code>. O preço aparece antes.
             </p>
             <StepDiagram step={2} />
           </article>
@@ -215,7 +214,7 @@ export default function Home() {
             <li><Icon name="check" size={17} />Preço da sessão travado antes de iniciar</li>
             <li><Icon name="check" size={17} />Cobrança por segundo, com mínimo de 60 segundos</li>
             <li><Icon name="check" size={17} />Sono automático quando o World fica vazio</li>
-            <li><Icon name="check" size={17} />Contribuições avulsas via Pix ou cartão</li>
+            <li><Icon name="check" size={17} />Contribuições avulsas via Pix</li>
           </ul>
         </div>
         <div className="wallet-card">
@@ -267,10 +266,10 @@ export default function Home() {
       <section className="closing-cta">
         <Icon name="power" size={32} />
         <h2>Menos tempo configurando.<br />Mais tempo jogando juntos.</h2>
-        <a className="button button-primary" href={discordSignIn}>
+        <DiscordEntryLink className="button button-primary">
           <Icon name="discord" size={19} />
           Entrar com Discord
-        </a>
+        </DiscordEntryLink>
         <p>Closed beta para grupos de Palworld no Brasil.</p>
       </section>
 
@@ -281,9 +280,8 @@ export default function Home() {
         </a>
         <p>Seu mundo continua. A infraestrutura só acorda para jogar.</p>
         <div>
-          <a href="/termos">Termos</a>
-          <a href="/privacidade">Privacidade</a>
-          <a href="mailto:oi@gamewake.com.br">Contato</a>
+          <a href="/terms">Termos de Serviço</a>
+          <a href="/privacy">Política de Privacidade</a>
         </div>
       </footer>
     </main>

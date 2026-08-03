@@ -1,6 +1,10 @@
 """Public interface for prepaid Wallets and usage billing."""
 
-from .abacatepay import AbacatePayPaymentProvider, AbacatePayWebhookHandler
+from .abacatepay import (
+    AbacatePayPaymentProvider,
+    AbacatePayWebhookHandler,
+    PaymentProviderError,
+)
 from .in_memory import InMemoryBillingRepository
 from .model import (
     BalanceGuardDecision,
@@ -44,6 +48,7 @@ __all__ = [
     "LedgerEntryType",
     "PaymentCheckout",
     "PaymentMethodSummary",
+    "PaymentProviderError",
     "ProcessedPaymentEvent",
     "ReservationStatus",
     "RuntimeUsage",

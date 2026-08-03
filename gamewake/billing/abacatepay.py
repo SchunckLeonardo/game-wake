@@ -52,11 +52,27 @@ class UrllibJsonHttpClient:
         try:
             with urlopen(request, timeout=15) as response:
                 result = json.loads(response.read().decode("utf-8"))
-        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as error:
+        except HTTPError as error:
+            provider_message = self._http_error_message(error)
+            raise PaymentProviderError(
+                f"AbacatePay request failed ({error.code}): {provider_message}"
+            ) from error
+        except (URLError, TimeoutError, json.JSONDecodeError) as error:
             raise PaymentProviderError("AbacatePay request failed") from error
         if not isinstance(result, dict):
             raise PaymentProviderError("AbacatePay returned an invalid response")
         return result
+
+    @staticmethod
+    def _http_error_message(error: HTTPError) -> str:
+        try:
+            payload = json.loads(error.read().decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return "provider rejected the request"
+        message = payload.get("error") if isinstance(payload, dict) else None
+        if not isinstance(message, str) or not message.strip():
+            return "provider rejected the request"
+        return message.strip()[:300]
 
 
 class AbacatePayPaymentProvider:
@@ -83,7 +99,7 @@ class AbacatePayPaymentProvider:
             },
             json_body={
                 "items": [{"id": request.provider_product_id, "quantity": 1}],
-                "methods": ["PIX", "CARD"],
+                "methods": ["PIX"],
                 "externalId": request.external_id,
                 "returnUrl": request.return_url,
                 "completionUrl": request.completion_url,

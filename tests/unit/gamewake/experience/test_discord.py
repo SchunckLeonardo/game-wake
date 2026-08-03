@@ -57,6 +57,9 @@ def test_start_command_bootstraps_the_guild_account_with_the_caller_as_owner():
     [membership] = accounts.list_memberships(account.id, viewer_user_id=owner.id)
     assert {role.value for role in membership.roles} == {"owner"}
     assert response.ephemeral is True
+    assert "1." in response.content
+    assert "/gamewake convidar" in response.content
+    assert "/gamewake acordar" in response.content
     assert response.links[0][1].endswith(f"/accounts/{account.id}")
 
 
@@ -154,6 +157,7 @@ def test_invite_command_creates_one_private_invitation_for_each_selected_friend(
     }
     assert response.ephemeral is True
     assert "3 convites" in response.content
+    assert "/gamewake aceitar" in response.content
     assert len(invitations) == 3
     assert {invitation.invited_user_id for invitation in invitations} == invited_users
 
@@ -542,6 +546,8 @@ def test_open_console_is_private_and_links_to_the_discord_account():
         )
     )
     assert help_response.ephemeral is True
+    assert "COMECE AQUI" in help_response.content
+    assert "crie o primeiro World" in help_response.content
     assert "/gamewake convidar" in help_response.content
     assert "/gamewake conectar" in help_response.content
 

@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import {
-  GAMEWAKE_DISCORD_GUILD_ID_KEY,
-  GAMEWAKE_SESSION_KEY,
+  clearGameWakeSession,
   gameWakeFetch,
+  setGameWakeDiscordGuildId,
+  setGameWakeSession,
 } from "../../gamewakeApi";
 import { Icon } from "../../Icon";
 
@@ -41,21 +42,21 @@ export function AuthCallback() {
         setMessage("O Discord não retornou uma sessão válida. Tente entrar novamente.");
         return;
       }
-      window.sessionStorage.setItem(GAMEWAKE_SESSION_KEY, session);
+      setGameWakeSession(session);
       const discordGuildId = fragment.get("discordGuildId");
       if (discordGuildId && /^\d+$/.test(discordGuildId)) {
-        window.sessionStorage.setItem(
-          GAMEWAKE_DISCORD_GUILD_ID_KEY,
-          discordGuildId,
-        );
+        setGameWakeDiscordGuildId(discordGuildId);
       } else {
-        window.sessionStorage.removeItem(GAMEWAKE_DISCORD_GUILD_ID_KEY);
+        setGameWakeDiscordGuildId(null);
       }
       window.history.replaceState(null, "", window.location.pathname);
       try {
         const response = await gameWakeFetch("/api/v1/me/accounts");
         const { accounts } = (await response.json()) as AccountList;
-        const next = accounts.length === 0 ? "/onboarding" : `/accounts/${accounts[0].id}`;
+        const requestedAccountId = fragment.get("accountId");
+        const next = requestedAccountId
+          ? `/accounts/${requestedAccountId}`
+          : accounts.length === 0 ? "/onboarding" : `/accounts/${accounts[0].id}`;
         if (recovery.length > 0) {
           setOwnerRecovery(recovery);
           setDestination(next);
@@ -64,7 +65,7 @@ export function AuthCallback() {
         }
         window.location.replace(next);
       } catch (error) {
-        window.sessionStorage.removeItem(GAMEWAKE_SESSION_KEY);
+        clearGameWakeSession();
         setMessage(error instanceof Error ? error.message : "Não foi possível entrar.");
       }
     }

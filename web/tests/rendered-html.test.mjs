@@ -27,11 +27,11 @@ test("redirects the site Discord login route to the GameWake API", async () => {
   const previousApiUrl = process.env.GAMEWAKE_API_URL;
   process.env.GAMEWAKE_API_URL = "https://api.gamewake.example/";
   try {
-    const response = await render("/auth/discord/start");
+    const response = await render("/auth/discord/start?install=1&accountId=account-1");
     assert.equal(response.status, 307);
     assert.equal(
       response.headers.get("location"),
-      "https://api.gamewake.example/auth/discord/start",
+      "https://api.gamewake.example/auth/discord/start?install=1&accountId=account-1",
     );
   } finally {
     if (previousApiUrl === undefined) delete process.env.GAMEWAKE_API_URL;
@@ -50,12 +50,26 @@ test("renders the public GameWake landing page without starter artifacts", async
   assert.match(html, /Seu mundo fica\./);
   assert.match(html, /A infraestrutura só acorda quando vocês vão jogar\./);
   assert.match(html, /Entrar com Discord/);
+  assert.match(html, /href="\/terms"[^>]*>Termos de Serviço/);
+  assert.match(html, /href="\/privacy"[^>]*>Política de Privacidade/);
   assert.match(html, /Pague pelo tempo de jogo, não por uma máquina parada\./);
   assert.match(
     html,
     /<meta property="og:image" content="https:\/\/gamewake\.com\.br\/og\.png"/i,
   );
   assert.doesNotMatch(html, /codex-preview|SkeletonPreview|react-loading-skeleton/i);
+});
+
+test("renders Terms and Privacy as public, navigable documents", async () => {
+  const terms = await render("/terms");
+  const privacy = await render("/privacy");
+
+  assert.equal(terms.status, 200);
+  assert.match(await terms.text(), /Termos de Serviço/);
+  assert.equal(privacy.status, 200);
+  const privacyHtml = await privacy.text();
+  assert.match(privacyHtml, /Política de Privacidade/);
+  assert.match(privacyHtml, /Lei nº 13\.709\/2018/);
 });
 
 test("renders the responsive Console with every MVP management surface", async () => {

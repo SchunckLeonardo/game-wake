@@ -70,7 +70,9 @@ def test_oauth_url_and_code_exchange_use_verified_discord_email_for_owner_recove
     )
 
     url = client.authorization_url(
-        state="signed-state", redirect_uri="https://api.example/auth/discord/callback"
+        state="signed-state",
+        redirect_uri="https://api.example/auth/discord/callback",
+        install=True,
     )
     identity = client.authenticate(
         "one-time-code", redirect_uri="https://api.example/auth/discord/callback"
@@ -92,6 +94,25 @@ def test_oauth_url_and_code_exchange_use_verified_discord_email_for_owner_recove
     assert identity.installed_guild_id == "123456789012345678"
     assert http.calls[0][3]["grant_type"] == "authorization_code"
     assert http.calls[1][2] == {"Authorization": "Bearer discord-access"}
+
+
+def test_returning_login_does_not_request_bot_installation_or_server_selection():
+    client = DiscordOAuthClient(
+        client_id="app-123",
+        client_secret="secret",
+        http_client=FakeHttpClient(),
+    )
+
+    url = client.authorization_url(
+        state="signed-state",
+        redirect_uri="https://api.example/auth/discord/callback",
+        install=False,
+    )
+
+    query = parse_qs(urlsplit(url).query)
+    assert set(query["scope"][0].split()) == {"identify", "email"}
+    assert "permissions" not in query
+    assert "integration_type" not in query
 
 
 def test_activity_code_exchange_returns_the_discord_token_without_a_redirect_uri():

@@ -1,6 +1,8 @@
 import json
 from decimal import Decimal
+from io import BytesIO
 from unittest.mock import patch
+from urllib.error import HTTPError
 
 import pytest
 
@@ -63,7 +65,7 @@ class RecordingHttpClient:
         return self.response
 
 
-def test_checkout_uses_the_configured_credit_product_and_pix_and_card():
+def test_checkout_uses_the_configured_credit_product_and_only_the_available_pix_method():
     http = RecordingHttpClient(
         {
             "success": True,
@@ -102,7 +104,7 @@ def test_checkout_uses_the_configured_credit_product_and_pix_and_card():
             },
             {
                 "items": [{"id": "prod_50_brl", "quantity": 1}],
-                "methods": ["PIX", "CARD"],
+                "methods": ["PIX"],
                 "externalId": "contribution-1",
                 "returnUrl": "https://gamewake.example/wallet",
                 "completionUrl": "https://gamewake.example/wallet/success",
@@ -110,6 +112,30 @@ def test_checkout_uses_the_configured_credit_product_and_pix_and_card():
             },
         )
     ]
+
+
+def test_urllib_client_preserves_the_safe_abacatepay_error_for_diagnostics():
+    error = HTTPError(
+        "https://api.abacatepay.com/v2/checkouts/create",
+        400,
+        "Bad Request",
+        {},
+        BytesIO(b'{"success":false,"error":"CARD is not available for this store","data":null}'),
+    )
+
+    with (
+        patch("gamewake.billing.abacatepay.urlopen", side_effect=error),
+        pytest.raises(
+            RuntimeError,
+            match=r"AbacatePay request failed \(400\): CARD is not available for this store",
+        ),
+    ):
+        UrllibJsonHttpClient().request(
+            "POST",
+            "https://api.abacatepay.com/v2/checkouts/create",
+            headers={"Authorization": "Bearer test-key"},
+            json_body={"items": [{"id": "prod_25_brl", "quantity": 1}]},
+        )
 
 
 def test_webhook_rejects_an_invalid_signature_before_processing_the_event():

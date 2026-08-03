@@ -4,6 +4,27 @@ function navigation(page: import("@playwright/test").Page, section: string) {
   return page.locator(`[data-testid="nav-${section}"]:visible`);
 }
 
+async function expectControlsSeparated(
+  first: import("@playwright/test").Locator,
+  second: import("@playwright/test").Locator,
+) {
+  const firstBox = await first.boundingBox();
+  const secondBox = await second.boundingBox();
+  expect(firstBox).not.toBeNull();
+  expect(secondBox).not.toBeNull();
+  const horizontalGap = Math.max(
+    (secondBox?.x ?? 0) - ((firstBox?.x ?? 0) + (firstBox?.width ?? 0)),
+    (firstBox?.x ?? 0) - ((secondBox?.x ?? 0) + (secondBox?.width ?? 0)),
+    0,
+  );
+  const verticalGap = Math.max(
+    (secondBox?.y ?? 0) - ((firstBox?.y ?? 0) + (firstBox?.height ?? 0)),
+    (firstBox?.y ?? 0) - ((secondBox?.y ?? 0) + (secondBox?.height ?? 0)),
+    0,
+  );
+  expect(Math.max(horizontalGap, verticalGap)).toBeGreaterThanOrEqual(8);
+}
+
 test("landing communicates the product and starts Discord onboarding", async ({
   page,
 }) => {
@@ -13,9 +34,24 @@ test("landing communicates the product and starts Discord onboarding", async ({
   const signIn = page.getByRole("link", { name: "Entrar com Discord" }).first();
   await expect(signIn).toHaveAttribute(
     "href",
-    "/auth/discord/start",
+    "/auth/enter",
   );
   await expect(page.getByText("Pague pelo tempo de jogo")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Termos de Serviço" })).toHaveAttribute("href", "/terms");
+  await expect(page.getByRole("link", { name: "Política de Privacidade" })).toHaveAttribute("href", "/privacy");
+});
+
+test("returning visitor enters the Console with the persisted session without reopening OAuth", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("gamewake_session", "persisted-session"));
+  await page.route("**/api/v1/me/accounts", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ accounts: [{ id: "account-returning", name: "Grupo salvo" }] }),
+  }));
+
+  await page.goto("/");
+  await page.getByRole("link", { name: "Entrar com Discord" }).first().click();
+
+  await expect(page).toHaveURL(/\/accounts\/account-returning$/);
 });
 
 test("group completes onboarding without infrastructure vocabulary", async ({ page }) => {
@@ -77,7 +113,7 @@ test("Discord Activity uses the same safe Console", async ({ page }) => {
   await expect(page.getByText("segredo-do-grupo")).toHaveCount(0);
 });
 
-test("OAuth callback stores the short-lived session and selected Discord server", async ({
+test("OAuth callback persists the session and selected Discord server", async ({
   page,
 }) => {
   await page.route("**/api/v1/me/accounts", async (route) => {
@@ -95,12 +131,13 @@ test("OAuth callback stores the short-lived session and selected Discord server"
   );
 
   await expect(page).toHaveURL(/\/accounts\/account-live$/);
-  expect(await page.evaluate(() => sessionStorage.getItem("gamewake_session"))).toBe(
+  expect(await page.evaluate(() => localStorage.getItem("gamewake_session"))).toBe(
     "signed-session",
   );
   expect(
-    await page.evaluate(() => sessionStorage.getItem("gamewake_discord_guild_id")),
+    await page.evaluate(() => localStorage.getItem("gamewake_discord_guild_id")),
   ).toBe("123456789012345678");
+  expect(await page.evaluate(() => localStorage.getItem("gamewake_known_user"))).toBe("true");
 });
 
 test("OAuth callback makes one-time Owner recovery codes impossible to miss", async ({
@@ -132,8 +169,8 @@ test("authenticated onboarding creates a real account and Palworld through the A
   let accountBody: unknown;
   let worldBody: unknown;
   await page.addInitScript(() => {
-    sessionStorage.setItem("gamewake_session", "signed-session");
-    sessionStorage.setItem("gamewake_discord_guild_id", "123456789012345678");
+    localStorage.setItem("gamewake_session", "signed-session");
+    localStorage.setItem("gamewake_discord_guild_id", "123456789012345678");
   });
   await page.route("**/api/v1/accounts", async (route) => {
     accountBody = route.request().postDataJSON();
@@ -168,7 +205,7 @@ test("authenticated onboarding creates a real account and Palworld through the A
     discordGuildId: "123456789012345678",
   });
   expect(
-    await page.evaluate(() => sessionStorage.getItem("gamewake_discord_guild_id")),
+    await page.evaluate(() => localStorage.getItem("gamewake_discord_guild_id")),
   ).toBeNull();
   expect(worldBody).toMatchObject({
     name: "Novo mundo",
@@ -183,7 +220,7 @@ test("authenticated Console loads and mutates the real World through bearer API"
 }) => {
   let worldStatus = "sleeping";
   let wakeBody: unknown;
-  await page.addInitScript(() => sessionStorage.setItem("gamewake_session", "signed-session"));
+  await page.addInitScript(() => localStorage.setItem("gamewake_session", "signed-session"));
   await page.route("**/api/v1/me/accounts", async (route) => {
     await route.fulfill({
       contentType: "application/json",
@@ -246,6 +283,10 @@ test("authenticated Console loads and mutates the real World through bearer API"
   });
 
   await page.goto("/accounts/account-live");
+  await expect(page.getByRole("link", { name: "Trocar servidor do Discord" })).toHaveAttribute(
+    "href",
+    "/auth/discord/start?accountId=account-live",
+  );
   await expect(page.getByText("Mundo real")).toBeVisible();
   await expect(page.getByText("R$ 18,50").first()).toBeVisible();
   await page.getByTestId("wake-world").click();
@@ -259,7 +300,7 @@ test("authenticated Console loads and mutates the real World through bearer API"
 test("live Console switches Worlds and persists Auto Sleep and World Budget", async ({ page }) => {
   let settingsBody: unknown;
   let budgetBody: unknown;
-  await page.addInitScript(() => sessionStorage.setItem("gamewake_session", "signed-session"));
+  await page.addInitScript(() => localStorage.setItem("gamewake_session", "signed-session"));
   await page.route("**/api/v1/me/accounts", (route) => route.fulfill({
     contentType: "application/json",
     body: JSON.stringify({ accounts: [{ id: "account-live", name: "Grupo real" }] }),
@@ -306,7 +347,7 @@ test("Discord-bootstrapped account creates its first World from the Console", as
   page,
 }) => {
   let createdWorldBody: unknown;
-  await page.addInitScript(() => sessionStorage.setItem("gamewake_session", "signed-session"));
+  await page.addInitScript(() => localStorage.setItem("gamewake_session", "signed-session"));
   await page.route("**/api/v1/me/accounts", (route) => route.fulfill({
     contentType: "application/json",
     body: JSON.stringify({ accounts: [{ id: "account-empty", name: "Grupo do Discord" }] }),
@@ -331,8 +372,15 @@ test("Discord-bootstrapped account creates its first World from the Console", as
   });
 
   await page.goto("/accounts/account-empty");
-  await page.getByRole("button", { name: "+ Novo World" }).click();
+  await expect(page.getByRole("heading", { name: "Seu grupo ainda não tem um World" })).toBeVisible();
+  await expect(page.getByText("Crie o World antes de tentar acordá-lo")).toBeVisible();
+  await expect(page.getByTestId("wake-world")).toHaveCount(0);
+  await page.getByRole("button", { name: "Criar meu primeiro World" }).click();
   await page.getByLabel("Nome do novo World").fill("Primeiro World");
+  await expectControlsSeparated(
+    page.getByLabel("Nome do novo World"),
+    page.getByRole("button", { name: "Criar World" }),
+  );
   await page.getByRole("button", { name: "Criar World" }).click();
 
   await expect(page.getByRole("heading", { name: "Primeiro World" })).toBeVisible();
@@ -354,7 +402,7 @@ test("live Console reads members, custom roles, backups and redacted activity", 
   let removedMembershipBody: unknown;
   let backupBody: unknown;
   let deletionBody: unknown;
-  await page.addInitScript(() => sessionStorage.setItem("gamewake_session", "signed-session"));
+  await page.addInitScript(() => localStorage.setItem("gamewake_session", "signed-session"));
   await page.route("**/api/v1/me/accounts", (route) =>
     route.fulfill({
       contentType: "application/json",
@@ -485,8 +533,12 @@ test("live Console reads members, custom roles, backups and redacted activity", 
   await expect(page.getByText("user-friend")).toBeVisible();
   await expect(page.locator(".advanced-roles strong", { hasText: "Guardião dos saves" })).toBeVisible();
   await page.getByLabel("IDs dos amigos").fill("user-a, user-b");
+  await expectControlsSeparated(
+    page.getByLabel("IDs dos amigos"),
+    page.getByTestId("invite-friends"),
+  );
   await page.getByTestId("invite-friends").click();
-  expect(invitationBody).toEqual({ invitedUserIds: ["user-a", "user-b"] });
+  await expect.poll(() => invitationBody).toEqual({ invitedUserIds: ["user-a", "user-b"] });
   await page.getByLabel("Nome da Role personalizada").fill("Operador");
   await page.getByLabel("Criar backups").check();
   await page.getByLabel("Confirme o nome da conta").fill("Grupo real");
@@ -500,7 +552,7 @@ test("live Console reads members, custom roles, backups and redacted activity", 
   await page.getByLabel("Nova Role para user-friend").selectOption("custom:role-saves");
   await page.getByLabel("Confirme o nome da conta").fill("Grupo real");
   await page.locator(".member-row", { hasText: "user-friend" }).getByRole("button", { name: "Atribuir" }).click();
-  expect(assignmentBody).toEqual({
+  await expect.poll(() => assignmentBody).toEqual({
     customRoleId: "role-saves",
     confirmedResourceName: "Grupo real",
   });

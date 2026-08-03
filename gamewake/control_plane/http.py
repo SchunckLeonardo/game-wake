@@ -7,6 +7,7 @@ from datetime import timedelta
 from typing import Any
 
 from gamewake.auth import InvalidSession
+from gamewake.billing import PaymentProviderError
 
 from .api import ApiRequest
 
@@ -54,16 +55,37 @@ class GameWakeHttpHandler:
             raw_body = self._raw_body(event)
             oauth_redirect_uri = self._oauth_redirect_uri or self._callback_uri(event)
             if method == "GET" and path == "/auth/discord/start":
-                state = self._sessions.issue("oauth", ttl=timedelta(minutes=10))
+                account_id = query.get("accountId")
+                if account_id is not None and (
+                    not isinstance(account_id, str)
+                    or not account_id
+                    or len(account_id) > 128
+                    or ":" in account_id
+                ):
+                    return self._error(400, "invalid_oauth", "Account ID is invalid")
+                install = query.get("install") == "1" or account_id is not None
+                state_subject = (
+                    f"oauth:install:{account_id}"
+                    if account_id is not None
+                    else ("oauth:install" if install else "oauth:login")
+                )
+                state = self._sessions.issue(state_subject, ttl=timedelta(minutes=10))
                 return self._redirect(
-                    self._oauth.authorization_url(state=state, redirect_uri=oauth_redirect_uri)
+                    self._oauth.authorization_url(
+                        state=state,
+                        redirect_uri=oauth_redirect_uri,
+                        install=install,
+                    )
                 )
             if method == "GET" and path == "/auth/discord/callback":
                 code = query.get("code")
                 state = query.get("state")
                 if not isinstance(code, str) or not isinstance(state, str):
                     return self._error(400, "invalid_oauth", "OAuth callback is incomplete")
-                if self._sessions.verify(state).subject != "oauth":
+                state_subject = self._sessions.verify(state).subject
+                if state_subject not in {"oauth:login", "oauth:install"} and not str(
+                    state_subject
+                ).startswith("oauth:install:"):
                     return self._error(401, "invalid_oauth", "OAuth state is invalid")
                 identity = self._oauth.authenticate(code, redirect_uri=oauth_redirect_uri)
                 user = self._application.accounts.sign_in_with_discord(
@@ -76,12 +98,47 @@ class GameWakeHttpHandler:
                 )
                 session = self._sessions.issue(
                     user.id,
+                    ttl=timedelta(days=30),
                     verified_email=getattr(identity, "verified_email", None),
                 )
                 fragment = f"session={session}"
                 installed_guild_id = getattr(identity, "installed_guild_id", None)
-                if isinstance(installed_guild_id, str) and installed_guild_id.isdigit():
-                    fragment += f"&discordGuildId={installed_guild_id}"
+                account_id = (
+                    str(state_subject).removeprefix("oauth:install:")
+                    if str(state_subject).startswith("oauth:install:")
+                    else None
+                )
+                if account_id is not None:
+                    if not isinstance(installed_guild_id, str) or not installed_guild_id.isdigit():
+                        return self._error(
+                            400,
+                            "discord_install_incomplete",
+                            "Selecione um servidor do Discord para continuar.",
+                        )
+                    self._application.configure_discord_guild(
+                        account_id,
+                        actor_user_id=user.id,
+                        discord_guild_id=installed_guild_id,
+                    )
+                    fragment += f"&accountId={account_id}"
+                elif (
+                    state_subject == "oauth:install"
+                    and isinstance(installed_guild_id, str)
+                    and installed_guild_id.isdigit()
+                ):
+                    existing_accounts = list(
+                        self._application.list_accounts(viewer_user_id=user.id)
+                    )
+                    if len(existing_accounts) == 1:
+                        existing_account_id = existing_accounts[0].id
+                        self._application.configure_discord_guild(
+                            existing_account_id,
+                            actor_user_id=user.id,
+                            discord_guild_id=installed_guild_id,
+                        )
+                        fragment += f"&accountId={existing_account_id}"
+                    else:
+                        fragment += f"&discordGuildId={installed_guild_id}"
                 if recovery:
                     encoded_recovery = (
                         base64.urlsafe_b64encode(json.dumps(recovery, ensure_ascii=False).encode())
@@ -145,6 +202,14 @@ class GameWakeHttpHandler:
         except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
             code = "invalid_json" if raw_body else "invalid_request"
             return self._error(400, code, "Invalid request", cors)
+        except PaymentProviderError:
+            _LOGGER.exception("Payment Provider request failure")
+            return self._error(
+                502,
+                "payment_unavailable",
+                "Não foi possível abrir o checkout Pix. Tente novamente em instantes.",
+                cors,
+            )
         except Exception:
             _LOGGER.exception("Unhandled GameWake HTTP request failure")
             return self._error(
