@@ -22,6 +22,10 @@ class PaymentProviderError(RuntimeError):
 class InvalidWebhookSignature(ValueError):
     """Raised before parsing a webhook that fails either authentication layer."""
 
+    def __init__(self, message: str, *, layer: str = "unknown") -> None:
+        super().__init__(message)
+        self.layer = layer
+
 
 class InvalidWebhookPayload(ValueError):
     """Raised after authentication when an AbacatePay event cannot be processed."""
@@ -236,11 +240,16 @@ class AbacatePayWebhookHandler:
                 hashlib.sha256,
             ).digest()
         ).decode("ascii")
-        if not hmac.compare_digest(self._webhook_secret, webhook_secret) or not hmac.compare_digest(
-            expected_signature,
-            signature,
-        ):
-            raise InvalidWebhookSignature("invalid AbacatePay webhook authentication")
+        if not hmac.compare_digest(self._webhook_secret, webhook_secret):
+            raise InvalidWebhookSignature(
+                "invalid AbacatePay webhook authentication",
+                layer="url_secret",
+            )
+        if not hmac.compare_digest(expected_signature, signature):
+            raise InvalidWebhookSignature(
+                "invalid AbacatePay webhook authentication",
+                layer="hmac_signature",
+            )
         try:
             payload = json.loads(raw_body)
         except (UnicodeDecodeError, json.JSONDecodeError) as error:

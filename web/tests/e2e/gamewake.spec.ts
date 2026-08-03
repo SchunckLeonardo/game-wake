@@ -355,6 +355,12 @@ test("authenticated Console loads and mutates the real World through bearer API"
 
   expect(wakeBody).toMatchObject({ idempotencyKey: expect.any(String) });
   await expect(page.getByRole("status")).toContainText("Restaurando World");
+
+  worldStatus = "needs_attention";
+  await expect(page.getByTestId("wake-world")).toContainText("Tentar novamente", {
+    timeout: 6_000,
+  });
+  await expect(page.getByTestId("wake-world")).toBeEnabled();
 });
 
 test("live Console switches Worlds and persists Auto Sleep and World Budget", async ({ page }) => {
@@ -450,6 +456,12 @@ test("Discord-bootstrapped account creates its first World from the Console", as
   await expect(guide).toContainText("Adicionar créditos");
   await expect(guide).toContainText("Acordar o World");
   await expect(guide).toContainText("Conectar e jogar");
+  await expect(guide).toContainText("Pelo Console");
+  await expect(guide).toContainText("Pelo Discord");
+  await expect(guide).toContainText("/gamewake acordar");
+  await expect(guide).toContainText("/gamewake conectar");
+  await expect(guide).toContainText("/gamewake convidar @amigo1 @amigo2");
+  await expect(guide).toContainText("/gamewake aceitar");
   expect(createdWorldBody).toMatchObject({
     name: "Primeiro World",
     gameTemplateId: "palworld:1",

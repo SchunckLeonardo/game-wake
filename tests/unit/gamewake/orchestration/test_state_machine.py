@@ -12,8 +12,10 @@ def test_world_operation_state_machine_retries_loops_and_records_failure():
 
     assert definition["StartAt"] == "RouteExecution"
     assert states["RouteExecution"]["Choices"][0] == {
-        "Variable": "$.session_monitor",
-        "BooleanEquals": True,
+        "And": [
+            {"Variable": "$.session_monitor", "IsPresent": True},
+            {"Variable": "$.session_monitor", "BooleanEquals": True},
+        ],
         "Next": "WaitBeforeSessionCheck",
     }
     assert states["RouteExecution"]["Default"] == "AdvanceOperation"

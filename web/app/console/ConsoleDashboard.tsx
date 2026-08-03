@@ -569,7 +569,7 @@ export function ConsoleDashboard({
       setShowNewWorld(true);
       return;
     }
-    if (worldStatus !== "sleeping") return;
+    if (!["sleeping", "needs_attention"].includes(worldStatus)) return;
     if (isDemo) {
       setWakeEstimate({
         currency: "BRL",
@@ -1129,14 +1129,34 @@ export function ConsoleDashboard({
                   <ol className="first-session-steps">
                     <li className="done"><Icon name="check" size={15} /><span><strong>World criado</strong><small>{world.name} está salvo e não gera custo enquanto dorme.</small></span></li>
                     <li className={Number(walletBalance) > 0 ? "done" : "current"}>{Number(walletBalance) > 0 ? <Icon name="check" size={15} /> : <span>2</span>}<span><strong>Adicionar créditos</strong><small>{Number(walletBalance) > 0 ? `${formattedWallet} disponíveis para o grupo.` : "Escolha R$ 25, R$ 50 ou R$ 100 e pague por Pix."}</small></span></li>
-                    <li className={worldStatus === "online" ? "done" : Number(walletBalance) > 0 ? "current" : "pending"}>{worldStatus === "online" ? <Icon name="check" size={15} /> : <span>3</span>}<span><strong>Acordar o World</strong><small>{worldStatus === "waking" ? "A GameWake está preparando a partida agora." : worldStatus === "online" ? "O servidor está online e pronto." : "Você confere o preço antes de confirmar."}</small></span></li>
+                    <li className={worldStatus === "online" ? "done" : Number(walletBalance) > 0 ? "current" : "pending"}>{worldStatus === "online" ? <Icon name="check" size={15} /> : <span>3</span>}<span><strong>Acordar o World</strong><small>{worldStatus === "waking" ? "A GameWake está preparando a partida agora." : worldStatus === "online" ? "O servidor está online e pronto." : worldStatus === "needs_attention" ? "A tentativa anterior foi encerrada com segurança. Você pode tentar novamente." : "Você confere o preço antes de confirmar."}</small></span></li>
                     <li className={worldStatus === "online" ? "current" : "pending"}><span>4</span><span><strong>Conectar e jogar</strong><small>Abra o endereço e a senha quando o World estiver online.</small></span></li>
                   </ol>
-                  <div className="first-session-action">
-                    {Number(walletBalance) <= 0 && <button className="button button-primary" onClick={() => setSection("wallet")} type="button"><Icon name="wallet" size={17} />Adicionar créditos</button>}
-                    {Number(walletBalance) > 0 && worldStatus === "sleeping" && <button className="button button-primary" onClick={() => void wakeWorld()} type="button"><Icon name="power" size={17} />Acordar o World</button>}
-                    {worldStatus === "online" && <button className="button button-primary" onClick={() => void connectWorld()} type="button"><Icon name="globe" size={17} />Ver como conectar</button>}
-                    {["waking", "going_to_sleep"].includes(worldStatus) && <span><Icon name="clock" size={16} /> Continue nesta tela ou volte depois; a operação segue protegida.</span>}
+                  <div className="first-session-routes">
+                    <section className="first-session-route" aria-labelledby="console-first-session">
+                      <div className="first-session-route-heading">
+                        <span><Icon name="globe" size={17} /></span>
+                        <div><h3 id="console-first-session">Pelo Console</h3><p>Faça tudo nesta tela, com preço e progresso visíveis.</p></div>
+                      </div>
+                      <div className="first-session-action">
+                        {Number(walletBalance) <= 0 && <button className="button button-primary" onClick={() => setSection("wallet")} type="button"><Icon name="wallet" size={17} />Adicionar créditos</button>}
+                        {Number(walletBalance) > 0 && ["sleeping", "needs_attention"].includes(worldStatus) && <button className="button button-primary" onClick={() => void wakeWorld()} type="button"><Icon name="power" size={17} />{worldStatus === "needs_attention" ? "Tentar novamente" : "Acordar o World"}</button>}
+                        {worldStatus === "online" && <button className="button button-primary" onClick={() => void connectWorld()} type="button"><Icon name="globe" size={17} />Ver como conectar</button>}
+                        {["waking", "going_to_sleep"].includes(worldStatus) && <span><Icon name="clock" size={16} /> Pode sair desta tela; a operação continua protegida.</span>}
+                      </div>
+                    </section>
+                    <section className="first-session-route discord-first-session" aria-labelledby="discord-first-session">
+                      <div className="first-session-route-heading">
+                        <span><Icon name="discord" size={17} /></span>
+                        <div><h3 id="discord-first-session">Pelo Discord</h3><p>Use o mesmo World no servidor Discord conectado.</p></div>
+                      </div>
+                      <ol className="discord-first-session-steps">
+                        <li><code>/gamewake acordar</code><span>inicia a partida</span></li>
+                        <li><code>/gamewake status</code><span>acompanha o preparo</span></li>
+                        <li><code>/gamewake conectar</code><span>entrega IP e senha em privado</span></li>
+                      </ol>
+                      <p className="discord-friend-flow">Para chamar o grupo: <code>/gamewake convidar @amigo1 @amigo2</code>. Cada amigo entra usando <code>/gamewake aceitar</code>.</p>
+                    </section>
                   </div>
                 </article>
               )}
@@ -1237,9 +1257,9 @@ export function ConsoleDashboard({
                     <div><small>Preço</small><strong>Confirmado ao acordar</strong></div>
                   </div>
                   <div className="world-actions">
-                    <button className="button button-primary wake-button" data-testid="wake-world" disabled={worldStatus !== "sleeping"} onClick={wakeWorld} type="button">
+                    <button className="button button-primary wake-button" data-testid="wake-world" disabled={!["sleeping", "needs_attention"].includes(worldStatus)} onClick={wakeWorld} type="button">
                       <Icon name="power" size={18} />
-                      {worldStatus === "sleeping" ? "Acordar World" : statusCopy.label}
+                      {worldStatus === "sleeping" ? "Acordar World" : worldStatus === "needs_attention" ? "Tentar novamente" : statusCopy.label}
                     </button>
                     {worldStatus === "online" && (
                       <>

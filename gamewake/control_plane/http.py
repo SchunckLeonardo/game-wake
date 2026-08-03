@@ -221,8 +221,11 @@ class GameWakeHttpHandler:
             return self._error(404, "not_found", "Not found", cors)
         except InvalidSession:
             return self._error(401, "invalid_session", "Session is invalid or expired", cors)
-        except InvalidWebhookSignature:
-            _LOGGER.warning("Rejected unauthenticated AbacatePay webhook")
+        except InvalidWebhookSignature as error:
+            _LOGGER.warning(
+                "Rejected unauthenticated AbacatePay webhook",
+                extra={"authentication_layer": error.layer},
+            )
             return self._error(
                 401,
                 "invalid_webhook_auth",

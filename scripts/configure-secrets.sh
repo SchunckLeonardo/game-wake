@@ -18,6 +18,12 @@ region=${AWS_REGION:-us-east-1}
 : "${ABACATEPAY_WEBHOOK_SECRET:?Defina ABACATEPAY_WEBHOOK_SECRET no ambiente ou .env}"
 : "${ABACATEPAY_PUBLIC_KEY:?Defina ABACATEPAY_PUBLIC_KEY no ambiente ou .env}"
 
+if (( ${#ABACATEPAY_PUBLIC_KEY} < 200 )); then
+  printf '%s\n' \
+    "ABACATEPAY_PUBLIC_KEY invalida: use a chave HMAC publica longa da documentacao de webhooks, nao a chave publica curta da loja." >&2
+  exit 1
+fi
+
 put_secret() {
   local name=$1
   local value=$2
