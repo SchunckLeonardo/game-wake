@@ -65,13 +65,31 @@ install_dependencies() {
 }
 
 update_palworld() {
+  local attempt exit_code
   local steamcmd=/usr/games/steamcmd
+  local steamcmd_max_attempts=3
+  local steamcmd_retry_delay_seconds=10
   [[ -x "$steamcmd" ]] || steamcmd=$(command -v steamcmd)
-  runuser -u palworld -- "$steamcmd" \
-    +force_install_dir /opt/palworld \
-    +login anonymous \
-    +app_update 2394010 validate \
-    +quit
+
+  for ((attempt = 1; attempt <= steamcmd_max_attempts; attempt++)); do
+    if runuser -u palworld -- "$steamcmd" \
+      +force_install_dir /opt/palworld \
+      +login anonymous \
+      +app_update 2394010 validate \
+      +quit; then
+      return 0
+    else
+      exit_code=$?
+    fi
+
+    if ((attempt == steamcmd_max_attempts)); then
+      echo "SteamCMD failed after $steamcmd_max_attempts attempts (exit $exit_code)" >&2
+      return "$exit_code"
+    fi
+
+    echo "SteamCMD attempt $attempt/$steamcmd_max_attempts failed; retrying" >&2
+    sleep "$((attempt * steamcmd_retry_delay_seconds))"
+  done
 }
 
 migrate_saved_directory() {

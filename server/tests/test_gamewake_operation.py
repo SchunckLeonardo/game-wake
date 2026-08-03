@@ -31,6 +31,14 @@ def test_installer_creates_the_private_operation_directory():
     assert "/var/lib/gamewake-operations" in source
 
 
+def test_installer_retries_transient_steamcmd_failures():
+    source = INSTALLER.read_text()
+
+    assert "steamcmd_max_attempts=3" in source
+    assert "SteamCMD attempt $attempt/$steamcmd_max_attempts failed" in source
+    assert 'sleep "$((attempt * steamcmd_retry_delay_seconds))"' in source
+
+
 def test_configuration_action_uses_only_per_world_parameter_names():
     source = SCRIPT.read_text()
 
@@ -50,3 +58,14 @@ def test_host_operations_wait_for_the_completed_runtime_bootstrap():
     assert user_data.index("/usr/local/sbin/install-palworld.sh") < user_data.rindex(
         "bootstrap-ready"
     )
+
+
+def test_bootstrap_failure_reports_a_bounded_diagnostic_tail():
+    operation = SCRIPT.read_text()
+    user_data = USER_DATA.read_text()
+
+    assert "bootstrap-error" in user_data
+    assert "bootstrap-error" in operation
+    assert "tail -n 80 /var/log/palworld-user-data.log" in operation
+    assert "tail -c 12000" in operation
+    assert operation.index("bootstrap-error") < operation.index("exit 70")

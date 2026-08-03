@@ -5,13 +5,21 @@ exec > >(tee -a /var/log/palworld-user-data.log | systemd-cat -t palworld-user-d
 
 runtime_state_dir=/var/lib/gamewake
 install -d -o root -g root -m 0755 "$runtime_state_dir"
-rm -f "$runtime_state_dir/bootstrap-ready" "$runtime_state_dir/bootstrap-failed"
+rm -f \
+  "$runtime_state_dir/bootstrap-ready" \
+  "$runtime_state_dir/bootstrap-failed" \
+  "$runtime_state_dir/bootstrap-error"
 
 bootstrap_failed() {
   local exit_code=$?
+  local line=$1
   trap - ERR
+  printf 'Bootstrap failed at user-data line %s (exit %s)\n' \
+    "$line" "$exit_code" >"$runtime_state_dir/bootstrap-error.tmp"
+  chmod 0644 "$runtime_state_dir/bootstrap-error.tmp"
+  mv "$runtime_state_dir/bootstrap-error.tmp" "$runtime_state_dir/bootstrap-error"
   touch "$runtime_state_dir/bootstrap-failed"
-  echo "Bootstrap falhou na linha $1"
+  echo "Bootstrap falhou na linha $line"
   exit "$exit_code"
 }
 trap 'bootstrap_failed "$LINENO"' ERR
@@ -58,5 +66,5 @@ systemctl enable palworld.service
 
 touch "$runtime_state_dir/bootstrap-ready.tmp"
 mv "$runtime_state_dir/bootstrap-ready.tmp" "$runtime_state_dir/bootstrap-ready"
-rm -f "$runtime_state_dir/bootstrap-failed"
+rm -f "$runtime_state_dir/bootstrap-failed" "$runtime_state_dir/bootstrap-error"
 echo "Bootstrap Palworld concluido"

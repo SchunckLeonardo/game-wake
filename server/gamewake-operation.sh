@@ -14,6 +14,13 @@ fi
 runtime_state_dir=/var/lib/gamewake
 if [[ -f $runtime_state_dir/bootstrap-failed ]]; then
   echo "GameWake runtime bootstrap failed" >&2
+  if [[ -r $runtime_state_dir/bootstrap-error ]]; then
+    tail -c 1000 "$runtime_state_dir/bootstrap-error" >&2
+  fi
+  if [[ -r /var/log/palworld-user-data.log ]]; then
+    echo "Last bootstrap log lines:" >&2
+    tail -n 80 /var/log/palworld-user-data.log | tail -c 12000 >&2
+  fi
   exit 70
 fi
 if [[ ! -f $runtime_state_dir/bootstrap-ready ]]; then
