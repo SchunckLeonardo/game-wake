@@ -46,13 +46,22 @@ terraform-validate: lambda-package
 validate:
 	./scripts/validate.sh
 
-.PHONY: web-test web-e2e
+.PHONY: web-test web-e2e localstack-up localstack-down test-localstack
 
 web-test:
 	npm --prefix web run test
 
 web-e2e:
 	npm --prefix web run test:e2e
+
+localstack-up:
+	docker compose -f docker-compose.localstack.yml up -d --wait
+
+localstack-down:
+	docker compose -f docker-compose.localstack.yml down
+
+test-localstack: localstack-up
+	$(PYTHON) -m pytest -v -m localstack
 
 clean:
 	rm -rf build .pytest_cache .ruff_cache lambda/__pycache__ lambda/tests/__pycache__
