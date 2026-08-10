@@ -54,6 +54,7 @@ output "gamewake_control_plane" {
     operation_worker_name      = aws_lambda_function.operation_worker.function_name
     state_machine_arn          = aws_sfn_state_machine.world_operation.arn
     runtime_launch_template_id = aws_launch_template.gamewake_runtime.id
+    runtime_image_id           = local.gamewake_runtime_image_id
     world_data_bucket          = aws_s3_bucket.world_data.id
     data_maintenance_schedule  = aws_scheduler_schedule.data_maintenance.arn
     operations_dead_letter_url = aws_sqs_queue.operations_dead_letter.url

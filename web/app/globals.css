@@ -941,11 +941,27 @@ summary:focus-visible {
 .console-world-identity h2 { font-size: 38px; letter-spacing: -0.04em; margin: 6px 0 9px; }
 .console-world-identity .world-status { margin: 0; }
 .console-world-identity > p { color: #9ba6b6; font-size: 12px; margin: 9px 0 0; }
-.operation-progress { background: #111d2f; border: 1px solid #2c3b52; border-radius: 12px; margin-top: 18px; padding: 14px; width: min(440px, 100%); }
-.operation-progress > div:first-child { display: flex; font-size: 12px; justify-content: space-between; margin-bottom: 9px; }
-.operation-progress .meter { background: #2b3547; }
-.operation-progress .meter span { background: var(--amber); }
-.operation-progress small { color: #8d98aa; display: block; font-size: 11px; margin-top: 9px; }
+.operation-progress { background: #111d2f; border: 1px solid #2c3b52; border-radius: 14px; margin-top: 18px; padding: 18px; text-align: left; width: min(510px, 100%); }
+.operation-progress header > div { align-items: baseline; display: flex; gap: 18px; justify-content: space-between; }
+.operation-progress header strong { color: #fff1d7; font-size: 14px; }
+.operation-progress header span { color: #d5a55f; flex: 0 0 auto; font-family: var(--font-geist-mono), monospace; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+.operation-progress header p { color: #aeb8c7; font-size: 12px; line-height: 1.5; margin: 6px 0 16px; }
+.operation-progress ol { display: grid; gap: 0; list-style: none; margin: 0; padding: 0; }
+.operation-step { align-items: flex-start; display: grid; gap: 10px; grid-template-columns: 22px 1fr; min-height: 30px; position: relative; }
+.operation-step:not(:last-child)::after { background: #354158; content: ""; height: calc(100% - 18px); left: 10px; position: absolute; top: 20px; width: 1px; }
+.operation-step-marker { align-items: center; background: #17243a; border: 1px solid #45526a; border-radius: 50%; color: #93a0b3; display: flex; height: 21px; justify-content: center; position: relative; width: 21px; z-index: 1; }
+.operation-step-marker i { background: currentColor; border-radius: 50%; height: 5px; width: 5px; }
+.operation-step > span:last-child { display: flex; flex-direction: column; gap: 3px; padding: 2px 0 9px; }
+.operation-step strong { color: #8591a3; font-size: 11px; font-weight: 630; }
+.operation-step small { color: #aeb8c7; font-size: 10px; line-height: 1.45; margin: 0; }
+.operation-step.step-complete .operation-step-marker { background: #293a1f; border-color: #617e37; color: #c9f37d; }
+.operation-step.step-complete strong { color: #aab49b; }
+.operation-step.step-current .operation-step-marker { background: var(--amber); border-color: #ffd18f; color: var(--ink); box-shadow: 0 0 0 4px rgba(255, 180, 74, 0.12); }
+.operation-step.step-current strong { color: #fff1d7; font-size: 12px; }
+.operation-progress footer { align-items: flex-start; border-top: 1px solid #2c3b52; color: #8d98aa; display: flex; font-size: 10px; gap: 7px; line-height: 1.45; margin-top: 8px; padding-top: 12px; }
+.operation-progress footer svg { flex: 0 0 auto; margin-top: 1px; }
+.world-waking .console-world-visual,
+.world-going_to_sleep .console-world-visual { height: 300px; width: 300px; }
 .operation-attention { border-color: #6d5532; }
 .operation-attention > div:first-child { color: #ffe0a8; }
 .operation-attention p { color: #b9c2d0; font-size: 12px; line-height: 1.55; margin: 8px 0 0; }

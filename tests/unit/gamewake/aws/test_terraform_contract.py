@@ -124,9 +124,15 @@ def test_world_data_is_kms_encrypted_versioned_bounded_and_never_public():
 
 def test_disposable_runtimes_use_a_launch_template_without_idle_reconciliation_polling():
     runtime = source("gamewake-runtime.tf")
+    runtime_image = source("gamewake-runtime-image.tf")
     schedules = source("gamewake-schedules.tf")
 
     assert 'resource "aws_launch_template" "gamewake_runtime"' in runtime
+    assert 'resource "aws_imagebuilder_image" "gamewake_runtime"' in runtime_image
+    assert 'resource "aws_imagebuilder_component" "gamewake_runtime"' in runtime_image
+    assert "image_id      = local.gamewake_runtime_image_id" in runtime
+    assert '"/tmp/install-palworld.sh"' in runtime_image
+    assert "/opt/gamewake/image-ready" in runtime_image
     assert 'instance_initiated_shutdown_behavior = "terminate"' in runtime
     assert "metadata_options" in runtime
     assert 'http_tokens                 = "required"' in runtime
@@ -137,6 +143,11 @@ def test_disposable_runtimes_use_a_launch_template_without_idle_reconciliation_p
 def test_operation_worker_can_tag_only_managed_resources_during_provisioning():
     orchestration = source("gamewake-orchestration.tf")
 
+    assert "local.gamewake_runtime_image_id" in orchestration
+    assert (
+        "ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:image/${local.gamewake_runtime_image_id}"
+        in orchestration
+    )
     assert 'sid     = "TagRuntimeDuringProvisioning"' in orchestration
     assert 'actions = ["ec2:CreateTags"]' in orchestration
     assert 'variable = "ec2:CreateAction"' in orchestration

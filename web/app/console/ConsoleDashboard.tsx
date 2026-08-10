@@ -189,26 +189,38 @@ const backupLabels: Record<ApiBackup["kind"], string> = {
   final: "Backup final",
 };
 
-const operationPhases: Record<string, string[]> = {
-  wake: ["requested", "provisioning_runtime", "restoring_world", "applying_configuration", "starting_game", "checking_game_health", "complete"],
-  sleep: ["requested", "checking_players", "saving_game", "stopping_game", "persisting_world", "creating_backup", "releasing_runtime", "complete"],
-  recover: ["requested", "starting_game", "checking_game_health", "complete"],
+type OperationStep = {
+  phase: string;
+  label: string;
+  detail: string;
 };
 
-const operationPhaseLabels: Record<string, string> = {
-  requested: "Preparando operação",
-  provisioning_runtime: "Criando runtime",
-  restoring_world: "Restaurando World",
-  applying_configuration: "Aplicando configuração",
-  starting_game: "Iniciando Palworld",
-  checking_game_health: "Verificando conexão",
-  checking_players: "Verificando jogadores",
-  saving_game: "Salvando progresso",
-  stopping_game: "Encerrando Palworld",
-  persisting_world: "Protegendo o World",
-  creating_backup: "Criando Backup",
-  releasing_runtime: "Liberando infraestrutura",
-  complete: "Operação concluída",
+const operationSteps: Record<string, OperationStep[]> = {
+  wake: [
+    { phase: "requested", label: "Pedido recebido", detail: "Validando o despertar e protegendo a reserva." },
+    { phase: "provisioning_runtime", label: "Reservando a máquina do jogo", detail: "Separando uma máquina temporária só para este World." },
+    { phase: "restoring_world", label: "Preparando a máquina do jogo", detail: "Iniciando o ambiente e restaurando seu World protegido." },
+    { phase: "applying_configuration", label: "Aplicando suas configurações", detail: "Carregando as regras salvas para esta sessão." },
+    { phase: "starting_game", label: "Iniciando Palworld", detail: "Abrindo o servidor do jogo com o progresso restaurado." },
+    { phase: "checking_game_health", label: "Confirmando que está pronto", detail: "Testando a conexão real antes de liberar o endereço." },
+    { phase: "complete", label: "World online", detail: "Tudo pronto para o grupo conectar e jogar." },
+  ],
+  sleep: [
+    { phase: "requested", label: "Sono seguro solicitado", detail: "Organizando a proteção do progresso." },
+    { phase: "checking_players", label: "Verificando jogadores", detail: "Confirmando que ninguém será desconectado sem aviso." },
+    { phase: "saving_game", label: "Salvando o progresso", detail: "Pedindo ao Palworld o save mais recente." },
+    { phase: "stopping_game", label: "Encerrando Palworld", detail: "Fechando o jogo depois do save." },
+    { phase: "persisting_world", label: "Protegendo o World", detail: "Enviando o progresso para o armazenamento durável." },
+    { phase: "creating_backup", label: "Validando o Backup", detail: "Conferindo a cópia recuperável antes de liberar a máquina." },
+    { phase: "releasing_runtime", label: "Liberando a máquina", detail: "Encerrando a cobrança da infraestrutura temporária." },
+    { phase: "complete", label: "World dormindo", detail: "Progresso protegido e custo de Runtime encerrado." },
+  ],
+  recover: [
+    { phase: "requested", label: "Recuperação solicitada", detail: "Preparando uma tentativa segura." },
+    { phase: "starting_game", label: "Reiniciando Palworld", detail: "Retomando o processo do jogo." },
+    { phase: "checking_game_health", label: "Confirmando que está pronto", detail: "Testando a conexão real antes de liberar o endereço." },
+    { phase: "complete", label: "World recuperado", detail: "Tudo pronto para conectar novamente." },
+  ],
 };
 
 function formatBytes(bytes: number) {
@@ -364,13 +376,26 @@ export function ConsoleDashboard({
   );
   const operationProgress = useMemo(() => {
     if (!activeOperation) return null;
-    const phases = operationPhases[activeOperation.type] ?? [activeOperation.phase, "complete"];
-    const index = Math.max(0, phases.indexOf(activeOperation.phase));
+    const steps = operationSteps[activeOperation.type] ?? [{
+      phase: activeOperation.phase,
+      label: activeOperation.phase.replaceAll("_", " "),
+      detail: "Acompanhando a etapa atual da operação.",
+    }];
+    const foundIndex = steps.findIndex((step) => step.phase === activeOperation.phase);
+    const index = Math.max(0, foundIndex);
     return {
       current: index + 1,
-      total: phases.length,
-      percentage: Math.max(8, Math.round(((index + 1) / phases.length) * 100)),
-      label: operationPhaseLabels[activeOperation.phase] ?? activeOperation.phase.replaceAll("_", " "),
+      total: steps.length,
+      label: steps[index]?.label ?? activeOperation.phase.replaceAll("_", " "),
+      detail: steps[index]?.detail ?? "Acompanhando a etapa atual da operação.",
+      steps: steps.map((step, stepIndex) => ({
+        ...step,
+        state: stepIndex < index ? "complete" : stepIndex === index ? "current" : "pending",
+      })),
+      startedAt: new Date(activeOperation.createdAt).toLocaleTimeString("pt-BR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
     };
   }, [activeOperation]);
   const latestOperation = useMemo(
@@ -1381,11 +1406,26 @@ export function ConsoleDashboard({
                       <p>{statusCopy.detail}</p>
                     </div>
                     {["waking", "going_to_sleep"].includes(worldStatus) && (
-                      <div className="operation-progress" role="status">
-                        <div><span>{operationProgress?.label ?? (worldStatus === "waking" ? "Preparando despertar" : "Preparando sono seguro")}</span><strong>{operationProgress ? `${operationProgress.current} de ${operationProgress.total}` : "Aguardando fase"}</strong></div>
-                        <div className="meter"><span style={{ width: `${operationProgress?.percentage ?? 8}%` }} /></div>
-                        <small>A Console acompanha cada fase automaticamente. Você pode sair desta tela sem interromper a operação.</small>
-                      </div>
+                      <section aria-live="polite" className="operation-progress" role="status">
+                        {operationProgress ? <>
+                          <header>
+                            <div><strong>{operationProgress.label}</strong><span>Etapa {operationProgress.current} de {operationProgress.total}</span></div>
+                            <p>{operationProgress.detail}</p>
+                          </header>
+                          <ol aria-label={worldStatus === "waking" ? "Etapas do despertar" : "Etapas do sono seguro"}>
+                            {operationProgress.steps.map((step) => (
+                              <li className={`operation-step step-${step.state}`} key={step.phase}>
+                                <span className="operation-step-marker">{step.state === "complete" ? <Icon name="check" size={13} /> : <i aria-hidden="true" />}</span>
+                                <span><strong>{step.label}</strong>{step.state === "current" && <small>{step.detail}</small>}</span>
+                              </li>
+                            ))}
+                          </ol>
+                          <footer><Icon name="clock" size={14} /><span>Iniciado às {operationProgress.startedAt}. Você pode sair desta tela sem interromper o preparo.</span></footer>
+                        </> : <>
+                          <header><div><strong>Sincronizando o preparo</strong><span>Operação persistida</span></div><p>Buscando a etapa mais recente do World.</p></header>
+                          <footer><Icon name="clock" size={14} /><span>A Console continuará acompanhando automaticamente.</span></footer>
+                        </>}
+                      </section>
                     )}
                     {worldStatus === "needs_attention" && (
                       <div className="operation-progress operation-attention" role="status">

@@ -55,7 +55,7 @@ resource "aws_launch_template" "gamewake_runtime" {
   name_prefix = "${local.name_prefix}-runtime-"
   description = "Disposable GameWake game server runtime"
 
-  image_id      = data.aws_ssm_parameter.ubuntu_ami.value
+  image_id      = local.gamewake_runtime_image_id
   instance_type = var.instance_type
   key_name      = var.enable_ssh ? var.ssh_key_name : null
 

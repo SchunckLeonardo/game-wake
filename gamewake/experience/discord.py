@@ -8,7 +8,69 @@ from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 from gamewake.control_plane import GameWakeApplication
-from gamewake.worlds import World
+from gamewake.worlds import World, WorldOperation
+
+_OPERATION_PHASES = {
+    "wake": (
+        "requested",
+        "provisioning_runtime",
+        "restoring_world",
+        "applying_configuration",
+        "starting_game",
+        "checking_game_health",
+        "complete",
+    ),
+    "sleep": (
+        "requested",
+        "checking_players",
+        "saving_game",
+        "stopping_game",
+        "persisting_world",
+        "creating_backup",
+        "releasing_runtime",
+        "complete",
+    ),
+}
+
+_OPERATION_PHASE_COPY = {
+    "requested": (
+        "Pedido recebido",
+        "A GameWake está validando o despertar e protegendo a reserva.",
+    ),
+    "provisioning_runtime": (
+        "Reservando a máquina do jogo",
+        "Separando uma máquina temporária só para este World.",
+    ),
+    "restoring_world": (
+        "Preparando a máquina do jogo",
+        "Iniciando o ambiente e restaurando seu World protegido.",
+    ),
+    "applying_configuration": (
+        "Aplicando suas configurações",
+        "Carregando as regras salvas para esta sessão.",
+    ),
+    "starting_game": ("Iniciando Palworld", "Abrindo o servidor com o progresso restaurado."),
+    "checking_game_health": (
+        "Confirmando que está pronto",
+        "Testando a conexão real antes de liberar o endereço.",
+    ),
+    "checking_players": (
+        "Verificando jogadores",
+        "Confirmando que ninguém será desconectado sem aviso.",
+    ),
+    "saving_game": ("Salvando o progresso", "Pedindo ao Palworld o save mais recente."),
+    "stopping_game": ("Encerrando Palworld", "Fechando o jogo depois do save."),
+    "persisting_world": (
+        "Protegendo o World",
+        "Enviando o progresso para o armazenamento durável.",
+    ),
+    "creating_backup": ("Validando o Backup", "Conferindo a cópia recuperável."),
+    "releasing_runtime": (
+        "Liberando a máquina",
+        "Encerrando a cobrança da infraestrutura temporária.",
+    ),
+    "complete": ("Operação concluída", "A etapa final foi concluída com segurança."),
+}
 
 
 @dataclass(frozen=True)
@@ -112,10 +174,29 @@ class DiscordCommandController:
                     return world_or_response
                 world = world_or_response
                 if interaction.command == "status":
+                    operations = self._application.worlds.list_operations(
+                        account.id,
+                        world.id,
+                        viewer_user_id=actor.id,
+                    )
+                    active_operation = next(
+                        (
+                            operation
+                            for operation in reversed(operations)
+                            if operation.status.value in {"pending", "running"}
+                        ),
+                        None,
+                    )
+                    progress = (
+                        f"\n{self._operation_progress(active_operation)}"
+                        if active_operation is not None
+                        else ""
+                    )
                     return DiscordCommandResponse(
                         content=(
                             f"{self._status_icon(world.status.value)} **{world.name}**\n"
                             f"Estado: **{self._status_label(world.status.value)}**"
+                            f"{progress}"
                         ),
                         ephemeral=False,
                     )
@@ -128,7 +209,9 @@ class DiscordCommandController:
                 return DiscordCommandResponse(
                     content=(
                         f"🟡 **{world.name}** está acordando. "
-                        f"Operação `{operation.id[:8]}` iniciada."
+                        f"Operação `{operation.id[:8]}` iniciada.\n"
+                        f"{self._operation_progress(operation)}\n"
+                        "Acompanhe a etapa atual com `/gamewake status`."
                     ),
                     ephemeral=False,
                 )
@@ -304,6 +387,18 @@ class DiscordCommandController:
             "needs_attention": "🔴",
             "pending_deletion": "⚪",
         }.get(status, "⚪")
+
+    @staticmethod
+    def _operation_progress(operation: WorldOperation) -> str:
+        operation_type = operation.operation_type.value
+        phase = operation.phase.value
+        phases = _OPERATION_PHASES.get(operation_type, (phase,))
+        current = phases.index(phase) + 1 if phase in phases else 1
+        label, detail = _OPERATION_PHASE_COPY.get(
+            phase,
+            (phase.replace("_", " ").capitalize(), "Acompanhando a operação persistida."),
+        )
+        return f"Etapa {current} de {len(phases)}: **{label}**\n{detail}"
 
 
 class DiscordInteractionAdapter:

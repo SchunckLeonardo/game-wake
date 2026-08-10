@@ -4,6 +4,7 @@ set -Eeuo pipefail
 exec > >(tee -a /var/log/palworld-user-data.log | systemd-cat -t palworld-user-data) 2>&1
 
 runtime_state_dir=/var/lib/gamewake
+runtime_image_marker=/opt/gamewake/image-ready
 install -d -o root -g root -m 0755 "$runtime_state_dir"
 rm -f \
   "$runtime_state_dir/bootstrap-ready" \
@@ -25,6 +26,11 @@ bootstrap_failed() {
 trap 'bootstrap_failed "$LINENO"' ERR
 
 export DEBIAN_FRONTEND=noninteractive
+
+if [[ ! -s "$runtime_image_marker" ]]; then
+  echo "Runtime image is not prepared: $runtime_image_marker is missing" >&2
+  exit 78
+fi
 
 install_payload() {
   local payload=$1
@@ -52,12 +58,7 @@ AWS_REGION=${aws_region}
 ENVIRONMENT
 chmod 0640 /etc/palworld/palworld.env
 
-/usr/local/sbin/install-palworld.sh
-
 chown root:palworld /etc/palworld/palworld.env
-if ! snap list amazon-ssm-agent >/dev/null 2>&1; then
-  snap install amazon-ssm-agent --classic
-fi
 systemctl enable --now snap.amazon-ssm-agent.amazon-ssm-agent.service || \
   systemctl enable --now amazon-ssm-agent.service
 

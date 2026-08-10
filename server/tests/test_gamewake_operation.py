@@ -48,16 +48,16 @@ def test_configuration_action_uses_only_per_world_parameter_names():
     assert "/etc/palworld/world.env" in source
 
 
-def test_host_operations_wait_for_the_completed_runtime_bootstrap():
+def test_runtime_bootstrap_requires_the_prepared_image_without_reinstalling_palworld():
     operation = SCRIPT.read_text()
     user_data = USER_DATA.read_text()
 
     assert "bootstrap-ready" in operation
     assert "exit 75" in operation
     assert "bootstrap-ready" in user_data
-    assert user_data.index("/usr/local/sbin/install-palworld.sh") < user_data.rindex(
-        "bootstrap-ready"
-    )
+    assert "/opt/gamewake/image-ready" in user_data
+    assert "Runtime image is not prepared" in user_data
+    assert "\n/usr/local/sbin/install-palworld.sh\n" not in user_data
 
 
 def test_health_distinguishes_a_starting_game_process_from_a_failed_service():

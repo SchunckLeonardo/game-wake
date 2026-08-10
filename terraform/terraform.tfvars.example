@@ -2,6 +2,8 @@ project_name  = "gamewake"
 environment   = "prod"
 aws_region    = "us-east-1"
 instance_type = "m6a.xlarge"
+# Usada somente durante o bake versionado da AMI; nao fica ligada entre deploys.
+runtime_image_builder_instance_type = "t3.large"
 
 # Aurora PostgreSQL Serverless v2 (Data API). A versao fixada deve estar disponivel na regiao.
 aurora_engine_version       = "16.14"

@@ -62,7 +62,7 @@ data "aws_iam_policy_document" "operation_worker" {
       aws_subnet.public.arn,
       aws_security_group.palworld.arn,
       aws_iam_instance_profile.palworld.arn,
-      "arn:${data.aws_partition.current.partition}:ec2:${var.aws_region}::image/*",
+      "arn:${data.aws_partition.current.partition}:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:image/${local.gamewake_runtime_image_id}",
       "arn:${data.aws_partition.current.partition}:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:instance/*",
       "arn:${data.aws_partition.current.partition}:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:network-interface/*",
       "arn:${data.aws_partition.current.partition}:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:volume/*",

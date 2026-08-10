@@ -343,7 +343,24 @@ def test_repeated_wake_command_observes_the_same_world_operation():
     assert first.ephemeral is False
     assert first.content == repeated.content
     assert "acordando" in first.content
+    assert "Pedido recebido" in first.content
+    assert "1 de 7" in first.content
+    assert "/gamewake status" in first.content
     assert len(operations) == 1
+
+    status = controller.handle(
+        DiscordInteraction(
+            id="interaction-status-waking",
+            guild_id="guild-1",
+            discord_user_id="discord-owner",
+            display_name="Leonardo",
+            command="status",
+        )
+    )
+
+    assert "Estado: **acordando**" in status.content
+    assert "Etapa 1 de 7: **Pedido recebido**" in status.content
+    assert "validando o despertar" in status.content
 
 
 def test_forged_world_selection_is_rejected_without_disclosing_the_resource():

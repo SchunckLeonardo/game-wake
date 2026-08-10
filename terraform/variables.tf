@@ -86,6 +86,12 @@ variable "root_volume_size_gib" {
   }
 }
 
+variable "runtime_image_builder_instance_type" {
+  description = "EC2 temporaria usada somente para preparar e validar a AMI do Runtime fora do wake."
+  type        = string
+  default     = "t3.large"
+}
+
 variable "palworld_port" {
   description = "Porta UDP real passada ao PalServer.sh; PublicPort sozinho nao muda o listener."
   type        = number

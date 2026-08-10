@@ -13,6 +13,7 @@ O MVP suporta Palworld e foi desenhado para ampliar o catálogo por meio de Game
 - Permissões aditivas e com escopo, revogação imediata, proteção do último Owner e recuperação com e-mail verificado pelo Discord.
 - Wallet pré-paga em BRL, checkout avulso pela AbacatePay API v2, reserva antes do wake, cobrança por uso e orçamento por World.
 - Worlds Palworld com wake, progresso persistido, conexão privada, sono seguro, recuperação, auto-sleep configurável, backup, restore e export.
+- Runtime Palworld pré-preparado em AMI privada e versionada; o wake restaura o World e inicia o jogo sem baixar SteamCMD ou reinstalar o servidor.
 - Editor guiado e versionado de `PalWorldSettings.ini`, incluindo valores válidos e documentação de cada campo.
 - Landing page, onboarding, Console Web e Discord Activity com a mesma API e autorização.
 - Aurora PostgreSQL Serverless v2 via Data API, Step Functions Standard, runtimes EC2 descartáveis, S3/KMS, SSM, CloudWatch e alertas SNS.

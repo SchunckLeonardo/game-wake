@@ -83,6 +83,7 @@ project_name  = "gamewake"
 environment   = "prod"
 aws_region    = "us-east-1"
 instance_type = "m6a.xlarge"
+runtime_image_builder_instance_type = "t3.large"
 
 discord_application_id = "..."
 discord_public_key     = "..."
@@ -97,6 +98,14 @@ aurora_skip_final_snapshot = false
 
 operations_alarm_email = "operacoes@seu-dominio.com"
 ```
+
+O Runtime não instala Palworld durante o wake. O Terraform prepara uma AMI GameWake
+versionada com EC2 Image Builder e o Launch Template usa exatamente a imagem validada.
+O primeiro apply deste recurso pode levar dezenas de minutos enquanto uma `t3.large`
+temporária instala e testa SteamCMD e Palworld; a instância de build é encerrada ao fim.
+Applies seguintes só refazem a imagem quando o instalador ou a AMI Ubuntu base mudar.
+O custo permanente adicional é apenas o snapshot privado da AMI; não existe instância
+de jogo ou de build parada entre sessões.
 
 Também defina os produtos AbacatePay, preço final por hora, allowance, preço de armazenamento e CIDR UDP. A autorização de pessoas e grupos é administrada pelas Accounts, Memberships e Roles do GameWake. Os valores de preço no exemplo são ilustrativos e não devem ser publicados sem custos, impostos e margem validados.
 

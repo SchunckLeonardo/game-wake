@@ -101,7 +101,14 @@ test("group contributes, invites friends, wakes, connects, configures and sleeps
   await page.getByTestId("wake-world").click();
   await expect(page.getByRole("dialog", { name: "Confirmar despertar de Palpagos" })).toContainText("R$ 5,50 por hora");
   await page.getByRole("button", { name: "Reservar R$ 2,30 e acordar" }).click();
-  await expect(page.getByRole("status")).toContainText("Restaurando World");
+  const preparation = page.getByRole("status");
+  await expect(preparation).toContainText("Preparando a máquina do jogo");
+  await expect(preparation).toContainText("restaurando seu World protegido");
+  await expect(preparation).toContainText("Etapa 3 de 7");
+  await expect(preparation.getByRole("list", { name: "Etapas do despertar" })).toContainText(
+    "Confirmando que está pronto",
+  );
+  await expect(preparation.locator(".meter")).toHaveCount(0);
   await expect(page.getByTestId("connect-world")).toBeVisible();
   await page.getByTestId("connect-world").click();
   await expect(page.getByRole("dialog", { name: "Conectar ao Palpagos" })).toBeVisible();
@@ -371,7 +378,14 @@ test("authenticated Console loads and mutates the real World through bearer API"
   await page.getByRole("button", { name: "Reservar R$ 2,30 e acordar" }).click();
 
   expect(wakeBody).toMatchObject({ idempotencyKey: expect.any(String) });
-  await expect(page.getByRole("status")).toContainText("Restaurando World");
+  const preparation = page.getByRole("status");
+  await expect(preparation).toContainText("Preparando a máquina do jogo");
+  await expect(preparation).toContainText("restaurando seu World protegido");
+  await expect(preparation).toContainText("Etapa 3 de 7");
+  await expect(preparation.getByRole("list", { name: "Etapas do despertar" })).toContainText(
+    "Confirmando que está pronto",
+  );
+  await expect(preparation.locator(".meter")).toHaveCount(0);
 
   worldStatus = "needs_attention";
   await expect(page.getByTestId("wake-world")).toContainText("Tentar novamente", {
@@ -433,7 +447,7 @@ test("Console keeps following a World startup when an auxiliary request fails", 
 
   await page.goto("/accounts/account-starting");
 
-  await expect(page.getByRole("status")).toContainText("Restaurando World");
+  await expect(page.getByRole("status")).toContainText("Preparando a máquina do jogo");
   await expect(page.getByTestId("connect-world")).toBeVisible({ timeout: 7_000 });
   await expect(page.getByText(/progresso do World está atualizado.*dados auxiliares/i)).toBeVisible();
 });
