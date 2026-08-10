@@ -60,6 +60,16 @@ def test_host_operations_wait_for_the_completed_runtime_bootstrap():
     )
 
 
+def test_health_distinguishes_a_starting_game_process_from_a_failed_service():
+    operation = SCRIPT.read_text()
+
+    assert "echo starting" in operation
+    assert operation.index("systemctl is-active --quiet palworld.service") < operation.index(
+        "echo starting"
+    )
+    assert operation.index("echo starting") < operation.index("echo unhealthy")
+
+
 def test_bootstrap_failure_reports_a_bounded_diagnostic_tail():
     operation = SCRIPT.read_text()
     user_data = USER_DATA.read_text()

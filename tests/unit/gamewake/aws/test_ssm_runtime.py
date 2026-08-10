@@ -5,6 +5,7 @@ import pytest
 
 from gamewake.aws import (
     Ec2SsmConnectionDetailsProvider,
+    RuntimeNotReady,
     S3WorldStateStore,
     SsmCommandRunner,
     SsmPalworldTemplate,
@@ -194,6 +195,14 @@ def test_palworld_template_maps_domain_actions_to_idempotent_host_actions():
         ("i-123", "save", "op:save", ()),
         ("i-123", "stop", "op:stop", ()),
     ]
+
+
+def test_palworld_template_keeps_wake_retryable_while_game_process_is_starting():
+    runner = RecordingRunner(outputs={"health": "starting\n"})
+    template = SsmPalworldTemplate(runner)
+
+    with pytest.raises(RuntimeNotReady, match="game process is still starting"):
+        template.is_healthy(world(), Runtime(id="runtime-123", provider_reference="i-123"))
 
 
 class ConfigurationRepository:

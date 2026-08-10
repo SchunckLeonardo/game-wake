@@ -41,7 +41,7 @@ observe() {
         if palworld_api GET info >/dev/null 2>&1; then
           echo healthy
         else
-          echo unhealthy
+          echo starting
         fi
       else
         echo unhealthy

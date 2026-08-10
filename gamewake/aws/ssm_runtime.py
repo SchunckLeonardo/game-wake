@@ -215,7 +215,10 @@ class SsmPalworldTemplate:
             "health",
             idempotency_key=f"health:{world.id}",
         )
-        return result.strip().casefold() == "healthy"
+        health = result.strip().casefold()
+        if health == "starting":
+            raise RuntimeNotReady("Palworld game process is still starting")
+        return health == "healthy"
 
     def player_count(self, world: World, runtime: Runtime) -> int:
         result = self._runner.run(
