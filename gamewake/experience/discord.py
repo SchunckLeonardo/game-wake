@@ -1,5 +1,11 @@
+from __future__ import annotations
+
+import json
 from dataclasses import dataclass
 from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote
+from urllib.request import Request, urlopen
 
 from gamewake.control_plane import GameWakeApplication
 from gamewake.worlds import World
@@ -351,6 +357,19 @@ class DiscordInteractionAdapter:
         )
         return self._render(response)
 
+    @classmethod
+    def lightweight_response(cls, payload: dict[str, Any]) -> dict[str, Any] | None:
+        """Returns responses that must not wait for control-plane dependencies."""
+        interaction_type = payload.get("type")
+        if interaction_type == 1:
+            return {"type": 1}
+        if interaction_type not in {2, 3}:
+            return None
+        command, _ = cls._command(payload.get("data") or {}, interaction_type)
+        if command != "acordar":
+            return None
+        return {"type": 6} if interaction_type == 3 else {"type": 5}
+
     @staticmethod
     def _command(
         data: dict[str, Any],
@@ -429,3 +448,41 @@ class DiscordInteractionAdapter:
         if components:
             data["components"] = components
         return {"type": 4, "data": data}
+
+
+class DiscordInteractionWebhookClient:
+    """Edits a deferred Discord interaction without requiring the Bot token."""
+
+    def __init__(self, *, opener: Any = urlopen) -> None:
+        self._opener = opener
+
+    def update_original(self, payload: dict[str, Any], response: dict[str, Any]) -> None:
+        application_id = str(payload.get("application_id") or "")
+        interaction_token = str(payload.get("token") or "")
+        data = response.get("data")
+        if not application_id or not interaction_token or not isinstance(data, dict):
+            raise ValueError("deferred Discord interaction is incomplete")
+        message = {key: value for key, value in data.items() if key != "flags"}
+        encoded = json.dumps(
+            message,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode()
+        request = Request(
+            (
+                "https://discord.com/api/v10/webhooks/"
+                f"{quote(application_id, safe='')}/{quote(interaction_token, safe='')}"
+                "/messages/@original"
+            ),
+            data=encoded,
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "GameWake (https://gamewake.example, 1.0)",
+            },
+            method="PATCH",
+        )
+        try:
+            with self._opener(request, timeout=15):
+                return
+        except (HTTPError, URLError, TimeoutError):
+            raise RuntimeError("Discord interaction response failed") from None

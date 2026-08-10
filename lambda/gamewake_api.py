@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import base64
 import json
+import logging
 import os
 from decimal import Decimal
 from typing import Any
 
 import boto3
-from discord_signature import verify_discord_signature
+from discord_signature import SignatureValidationError, verify_discord_signature
 
 from gamewake.accounts import Accounts
 from gamewake.auth import DiscordOAuthClient, KmsSessionCodec
@@ -22,7 +24,11 @@ from gamewake.control_plane import (
     GameWakeApplication,
     GameWakeHttpHandler,
 )
-from gamewake.experience import DiscordCommandController, DiscordInteractionAdapter
+from gamewake.experience import (
+    DiscordCommandController,
+    DiscordInteractionAdapter,
+    DiscordInteractionWebhookClient,
+)
 from gamewake.game_catalog import GameCatalog
 from gamewake.orchestration import StepFunctionsOperationOrchestrator
 from gamewake.persistence import (
@@ -34,6 +40,9 @@ from gamewake.persistence import (
     PostgresWorldRepository,
 )
 from gamewake.worlds import StoragePolicy, StoragePolicyService, WorldData, Worlds
+
+_LOGGER = logging.getLogger(__name__)
+_DEFERRED_DISCORD_EVENT_TYPE = "gamewake.discord.interaction.v1"
 
 
 def _required(name: str) -> str:
@@ -171,11 +180,139 @@ def build_handler(*, client_factory: Any = boto3.client) -> GameWakeHttpHandler:
 
 
 _handler: GameWakeHttpHandler | None = None
+_async_lambda_client: Any | None = None
+_discord_interaction_responder: DiscordInteractionWebhookClient | None = None
+
+
+def _http_response(status: int, payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "statusCode": status,
+        "headers": {"content-type": "application/json"},
+        "body": json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+        "isBase64Encoded": False,
+    }
+
+
+def _raw_body(event: dict[str, Any]) -> bytes:
+    body = event.get("body") or ""
+    if event.get("isBase64Encoded") is True:
+        return base64.b64decode(body, validate=True)
+    return str(body).encode()
+
+
+def _is_discord_http_event(event: dict[str, Any]) -> bool:
+    return (
+        event.get("rawPath") == "/discord/interactions"
+        and event.get("requestContext", {}).get("http", {}).get("method") == "POST"
+    )
+
+
+def _dispatch_deferred_discord(payload: dict[str, Any], context: Any) -> None:
+    global _async_lambda_client
+    if _async_lambda_client is None:
+        _async_lambda_client = boto3.client("lambda")
+    function_name = getattr(context, "invoked_function_arn", None) or _required(
+        "AWS_LAMBDA_FUNCTION_NAME"
+    )
+    _async_lambda_client.invoke(
+        FunctionName=function_name,
+        InvocationType="Event",
+        Payload=json.dumps(
+            {"eventType": _DEFERRED_DISCORD_EVENT_TYPE, "payload": payload},
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode(),
+    )
+
+
+def _lightweight_discord_response(
+    event: dict[str, Any],
+    context: Any,
+) -> dict[str, Any] | None:
+    raw = _raw_body(event)
+    headers = {
+        str(key).casefold(): str(value) for key, value in (event.get("headers") or {}).items()
+    }
+    try:
+        verify_discord_signature(headers, raw, _required("DISCORD_PUBLIC_KEY"))
+        payload = json.loads(raw)
+        if not isinstance(payload, dict):
+            raise ValueError("Discord payload must be an object")
+    except SignatureValidationError:
+        return _http_response(
+            401,
+            {"error": {"code": "invalid_discord_signature", "message": "Invalid signature"}},
+        )
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+        return _http_response(
+            400,
+            {"error": {"code": "invalid_request", "message": "Invalid request"}},
+        )
+    response = DiscordInteractionAdapter.lightweight_response(payload)
+    if response is None:
+        return None
+    if payload.get("type") != 1:
+        if not payload.get("application_id") or not payload.get("token"):
+            return _http_response(
+                400,
+                {"error": {"code": "invalid_request", "message": "Invalid request"}},
+            )
+        try:
+            _dispatch_deferred_discord(payload, context)
+        except Exception:
+            _LOGGER.exception(
+                "Could not dispatch deferred Discord interaction",
+                extra={"interaction_id": str(payload.get("id") or "unknown")},
+            )
+            return _http_response(
+                200,
+                {
+                    "type": 4,
+                    "data": {
+                        "content": "Não foi possível iniciar a ação. Tente novamente em instantes.",
+                        "flags": 64,
+                        "allowed_mentions": {"parse": []},
+                    },
+                },
+            )
+    return _http_response(200, response)
+
+
+def _process_deferred_discord(event: dict[str, Any]) -> dict[str, Any]:
+    global _handler, _discord_interaction_responder
+    payload = event.get("payload")
+    if not isinstance(payload, dict):
+        raise ValueError("deferred Discord payload must be an object")
+    if _handler is None:
+        _handler = build_handler()
+    try:
+        response = _handler.handle_discord(payload)
+    except Exception:
+        _LOGGER.exception(
+            "Deferred Discord interaction failed",
+            extra={"interaction_id": str(payload.get("id") or "unknown")},
+        )
+        response = {
+            "type": 4,
+            "data": {
+                "content": "Não foi possível concluir a ação. Tente novamente em instantes.",
+                "allowed_mentions": {"parse": []},
+            },
+        }
+    if _discord_interaction_responder is None:
+        _discord_interaction_responder = DiscordInteractionWebhookClient()
+    _discord_interaction_responder.update_original(payload, response)
+    return {"processed": True}
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
-    del context
     global _handler
+    if event.get("eventType") == _DEFERRED_DISCORD_EVENT_TYPE:
+        return _process_deferred_discord(event)
+    if _is_discord_http_event(event):
+        lightweight = _lightweight_discord_response(event, context)
+        if lightweight is not None:
+            return lightweight
     if _handler is None:
         _handler = build_handler()
     return _handler.handle(event)

@@ -94,6 +94,14 @@ def test_api_policy_uses_the_stable_world_operation_arn():
     assert "resources = [aws_sfn_state_machine.world_operation.arn]" not in api
 
 
+def test_api_can_dispatch_only_its_own_deferred_discord_interactions():
+    api = source("gamewake-api.tf")
+
+    assert 'sid       = "DispatchDeferredDiscordInteraction"' in api
+    assert 'actions   = ["lambda:InvokeFunction"]' in api
+    assert "resources = [local.gamewake_api_function_arn]" in api
+
+
 def test_world_data_is_kms_encrypted_versioned_bounded_and_never_public():
     storage = source("gamewake-storage.tf")
     orchestration = source("gamewake-orchestration.tf")

@@ -5,6 +5,7 @@ from .discord import (
     DiscordCommandResponse,
     DiscordInteraction,
     DiscordInteractionAdapter,
+    DiscordInteractionWebhookClient,
     DiscordUser,
     DiscordWorldOption,
 )
@@ -16,6 +17,7 @@ __all__ = [
     "DiscordCommandResponse",
     "DiscordInteraction",
     "DiscordInteractionAdapter",
+    "DiscordInteractionWebhookClient",
     "DiscordRestMessageClient",
     "DiscordUser",
     "DiscordWorldOption",

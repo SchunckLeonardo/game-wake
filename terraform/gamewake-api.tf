@@ -1,5 +1,6 @@
 locals {
-  gamewake_api_name = "${local.name_prefix}-api"
+  gamewake_api_name         = "${local.name_prefix}-api"
+  gamewake_api_function_arn = "arn:${data.aws_partition.current.partition}:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:${local.gamewake_api_name}"
 }
 
 resource "aws_kms_key" "sessions" {
@@ -120,6 +121,13 @@ data "aws_iam_policy_document" "gamewake_api" {
     effect    = "Allow"
     actions   = ["states:StartExecution"]
     resources = [local.world_operation_state_machine_arn]
+  }
+
+  statement {
+    sid       = "DispatchDeferredDiscordInteraction"
+    effect    = "Allow"
+    actions   = ["lambda:InvokeFunction"]
+    resources = [local.gamewake_api_function_arn]
   }
 
   statement {

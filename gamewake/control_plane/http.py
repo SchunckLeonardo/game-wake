@@ -44,6 +44,11 @@ class GameWakeHttpHandler:
         self._verify_discord = verify_discord
         self._abacatepay_webhook = abacatepay_webhook
 
+    def handle_discord(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if self._discord is None:
+            raise RuntimeError("Discord is not configured")
+        return self._discord.handle(payload)
+
     def handle(self, event: dict[str, Any]) -> dict[str, Any]:
         method = str(event.get("requestContext", {}).get("http", {}).get("method", ""))
         path = str(event.get("rawPath") or "/")
