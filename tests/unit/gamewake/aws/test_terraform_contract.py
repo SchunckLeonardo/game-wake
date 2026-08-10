@@ -144,9 +144,10 @@ def test_operation_worker_can_tag_only_managed_resources_during_provisioning():
     orchestration = source("gamewake-orchestration.tf")
 
     assert "local.gamewake_runtime_image_id" in orchestration
+    assert "ec2:${var.aws_region}::image/${local.gamewake_runtime_image_id}" in orchestration
     assert (
         "ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:image/${local.gamewake_runtime_image_id}"
-        in orchestration
+        not in orchestration
     )
     assert 'sid     = "TagRuntimeDuringProvisioning"' in orchestration
     assert 'actions = ["ec2:CreateTags"]' in orchestration
