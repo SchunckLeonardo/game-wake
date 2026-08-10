@@ -143,6 +143,26 @@ def test_command_runner_classifies_an_incomplete_host_bootstrap_as_retryable():
     assert type(raised.value).__name__ == "RuntimeNotReady"
 
 
+def test_command_runner_retries_when_the_host_never_received_the_command():
+    client = FakeSsmClient(
+        status="Failed",
+        response_code=-1,
+        output="",
+        error_output="",
+        waiter_error=RuntimeError("waiter observed a failed command"),
+    )
+    runner = SsmCommandRunner(client=client)
+
+    with pytest.raises(Exception) as raised:
+        runner.run(
+            "i-123",
+            "initialize-state",
+            idempotency_key="operation-123:restore",
+        )
+
+    assert type(raised.value).__name__ == "RuntimeNotReady"
+
+
 class RecordingRunner:
     def __init__(self, outputs=None):
         self.outputs = dict(outputs or {})

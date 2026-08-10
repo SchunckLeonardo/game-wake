@@ -96,8 +96,11 @@ class SsmCommandRunner:
     ) -> None:
         if result.get("Status") == "Success":
             return
-        if str(result.get("ResponseCode")) == "75":
+        response_code = str(result.get("ResponseCode"))
+        if response_code == "75":
             raise RuntimeNotReady("GameWake runtime bootstrap is still running") from cause
+        if response_code == "-1":
+            raise RuntimeNotReady("GameWake runtime has not received the command yet") from cause
         raise RuntimeError(f"SSM action {action} failed") from cause
 
 

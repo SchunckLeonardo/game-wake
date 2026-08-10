@@ -649,6 +649,8 @@ summary:focus-visible {
 .console-topbar > div:first-child,
 .topbar-actions { align-items: center; display: flex; gap: 10px; }
 .console-topbar > div:first-child strong { font-size: 13px; }
+.topbar-section-title { display: flex; }
+.topbar-section-title small { display: none; }
 .mobile-brand { display: none; }
 .icon-button {
   align-items: center;
@@ -944,6 +946,9 @@ summary:focus-visible {
 .operation-progress .meter { background: #2b3547; }
 .operation-progress .meter span { background: var(--amber); }
 .operation-progress small { color: #8d98aa; display: block; font-size: 11px; margin-top: 9px; }
+.operation-attention { border-color: #6d5532; }
+.operation-attention > div:first-child { color: #ffe0a8; }
+.operation-attention p { color: #b9c2d0; font-size: 12px; line-height: 1.55; margin: 8px 0 0; }
 .auto-sleep-setting { align-items: center; border-top: 1px solid var(--night-line); display: flex; justify-content: space-between; padding: 16px 20px; }
 .auto-sleep-setting > span { display: flex; flex-direction: column; gap: 3px; }
 .auto-sleep-setting strong { font-size: 12px; }
@@ -1046,7 +1051,36 @@ summary:focus-visible {
 .table-card td { border-top: 1px solid var(--night-line); font-size: 12px; padding: 15px 11px; }
 .negative { color: #ffaaa2; }
 .positive { color: #c7f177; }
-.member-row { align-items: center; border-top: 1px solid var(--night-line); display: grid; gap: 12px; grid-template-columns: auto minmax(150px, 1fr) auto auto auto; padding: 16px 4px; }
+.viewer-role-badge { background: #263149; border-radius: 999px; color: #dce2ef; font-size: 11px; font-weight: 700; padding: 8px 12px; }
+.invitation-builder { margin-bottom: 16px; }
+.invitation-access-picker { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; margin-bottom: 18px; }
+.invitation-access-picker > button {
+  align-items: flex-start;
+  background: #0b1525;
+  border: 1px solid #35435a;
+  border-radius: 12px;
+  color: #b8c3d2;
+  cursor: pointer;
+  display: flex;
+  gap: 11px;
+  min-height: 84px;
+  padding: 16px;
+  text-align: left;
+}
+.invitation-access-picker > button:hover { border-color: #65728a; }
+.invitation-access-picker > button.selected { background: #172438; border-color: var(--wake); color: var(--white); }
+.invitation-access-picker > button > span { display: flex; flex-direction: column; gap: 5px; }
+.invitation-access-picker strong { font-size: 13px; }
+.invitation-access-picker small { color: #91a0b4; font-size: 11px; line-height: 1.4; }
+.invitation-create-row { align-items: end; display: flex; flex-wrap: wrap; gap: 12px; }
+.invitation-create-row label { min-width: min(260px, 100%); }
+.invitation-create-row select { width: 100%; }
+.invitation-link-result { align-items: end; background: #0a1423; border: 1px solid #35435a; border-radius: 12px; display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr) auto; margin-top: 18px; padding: 16px; }
+.invitation-link-result label { min-width: 0; }
+.invitation-link-result input { width: 100%; }
+.invitation-link-result > small { color: #91a0b4; grid-column: 1 / -1; }
+.invitation-builder .discord-command-guide { margin-top: 18px; }
+.member-row { align-items: center; border-top: 1px solid var(--night-line); display: grid; gap: 12px; grid-template-columns: auto minmax(160px, 1fr) minmax(120px, auto) minmax(250px, auto); padding: 16px 4px; }
 .member-row:nth-child(2) { margin-top: 16px; }
 .member-row > div { display: flex; flex-direction: column; gap: 3px; }
 .member-row strong { font-size: 12px; }
@@ -1066,13 +1100,37 @@ summary:focus-visible {
   width: fit-content;
 }
 .role-owner { background: #3b3f20; color: #dcf794; }
+.role-manager { background: #253853; color: #c8dfff; }
 .role button { background: transparent; border: 0; color: inherit; cursor: pointer; padding: 0 2px; }
 .danger-link { background: transparent; border: 0; color: #ff9f97; cursor: pointer; }
+.role-controls { align-items: stretch; display: flex; flex-direction: row !important; gap: 8px !important; }
+.role-controls select { flex: 1 1 160px; }
+.role-controls > div { align-items: center; display: flex; gap: 8px; }
+.role-controls button:not(.danger-link) { background: #29364a; border: 1px solid #46546a; border-radius: 9px; color: var(--white); cursor: pointer; min-height: 39px; padding: 0 12px; }
+.role-controls button:disabled { cursor: not-allowed; opacity: 0.45; }
+.role-confirmation-panel { align-items: end; background: #172238; border: 1px solid #3a4860; border-radius: 12px; display: grid !important; gap: 12px !important; grid-column: 2 / -1; grid-template-columns: minmax(180px, 1fr) minmax(220px, 1fr); margin-top: 6px; padding: 16px; }
+.role-confirmation-panel p { color: #aab5c5; font-size: 11px; line-height: 1.5; margin: 4px 0 0; }
+.role-confirmation-panel label { color: #c5ceda; display: flex; flex-direction: column; font-size: 11px; font-weight: 650; gap: 7px; }
+.role-confirmation-panel .field-error { color: #ffb0aa; grid-column: 1 / -1; margin: 0; }
+.role-confirmation-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 9px; grid-column: 1 / -1; }
+.role-confirmation-actions a { color: #bfc6ff; font-size: 11px; margin-left: auto; }
 .confirmation-field { margin-top: 18px; max-width: 380px; }
 .advanced-roles { background: #101a2b; border: 1px solid var(--night-line); border-radius: 14px; margin-top: 16px; padding: 18px; }
 .advanced-roles summary { cursor: pointer; font-size: 13px; font-weight: 700; }
 .advanced-roles > p { color: var(--night-muted); font-size: 12px; line-height: 1.6; }
 .advanced-roles .contribution-panel { margin-top: 16px; }
+
+.invitation-shell { align-items: center; background: var(--night); color: var(--white); display: flex; min-height: 100vh; padding: 32px 18px; }
+.invitation-card { background: #101a2b; border: 1px solid var(--night-line); border-radius: 16px; margin: 0 auto; max-width: 560px; padding: clamp(24px, 5vw, 44px); width: 100%; }
+.invitation-card > .brand { color: var(--white); display: inline-flex; margin-bottom: 42px; }
+.invitation-symbol { align-items: center; background: var(--wake); border-radius: 50%; color: var(--ink); display: flex; height: 52px; justify-content: center; margin-bottom: 20px; width: 52px; }
+.invitation-card h1 { font-size: clamp(32px, 7vw, 48px); letter-spacing: -0.04em; line-height: 1; margin: 0 0 14px; }
+.invitation-card > p { color: #aab5c5; line-height: 1.65; margin: 0 0 24px; }
+.invitation-card > small { color: #8f9bad; display: block; font-size: 11px; margin-top: 14px; }
+.invitation-permissions { border-bottom: 1px solid #2b374d; border-top: 1px solid #2b374d; display: grid; gap: 12px; list-style: none; margin: 24px 0; padding: 18px 0; }
+.invitation-permissions li { align-items: center; color: #d9e0ea; display: flex; font-size: 12px; gap: 9px; }
+.invitation-permissions svg { color: var(--wake); }
+.invitation-card .config-notice { margin: 18px 0 0; }
 
 .config-notice { align-items: center; background: #19213c; border: 1px solid #343f70; border-radius: 12px; display: flex; gap: 12px; margin-bottom: 16px; padding: 14px 16px; }
 .config-notice > span { align-items: center; background: var(--blue); border-radius: 50%; display: flex; flex: 0 0 auto; height: 24px; justify-content: center; width: 24px; }
@@ -1303,6 +1361,8 @@ summary:focus-visible {
   .console-shell { display: block; padding-bottom: 72px; }
   .console-sidebar { display: none; }
   .console-topbar { height: 62px; padding: 0 17px; }
+  .topbar-section-title { align-items: flex-start; flex-direction: column; line-height: 1.15; }
+  .topbar-section-title small { color: #8f9aac; display: block; font-size: 9px; margin-top: 3px; }
   .mobile-brand { align-items: center; background: var(--wake); border-radius: 8px 8px 8px 3px; color: var(--ink); display: flex; height: 31px; justify-content: center; width: 31px; }
   .wallet-pill small { display: none; }
   .discord-switch-link span { display: none; }
@@ -1360,6 +1420,15 @@ summary:focus-visible {
   .table-card { overflow-x: auto; }
   .member-row { align-items: start; grid-template-columns: auto 1fr; }
   .member-row > :nth-child(n + 3) { grid-column: 2; }
+  .role-controls { align-items: stretch; flex-direction: column !important; width: 100%; }
+  .role-controls > div { justify-content: space-between; }
+  .role-confirmation-panel { grid-column: 1 / -1 !important; grid-template-columns: 1fr; }
+  .role-confirmation-panel > * { grid-column: 1 !important; }
+  .invitation-access-picker { grid-template-columns: 1fr; }
+  .invitation-create-row { align-items: stretch; flex-direction: column; }
+  .invitation-create-row .button { width: 100%; }
+  .invitation-link-result { align-items: stretch; grid-template-columns: 1fr; }
+  .invitation-link-result > small { grid-column: 1; }
   .config-card { grid-template-columns: 1fr; }
   .config-card > small { grid-column: auto; }
   .sticky-save { align-items: stretch; flex-direction: column; gap: 13px; }
@@ -1371,7 +1440,9 @@ summary:focus-visible {
     border-top: 1px solid #2a354a;
     bottom: 0;
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
+    grid-auto-columns: 1fr;
+    grid-auto-flow: column;
+    grid-template-columns: none;
     left: 0;
     min-height: calc(67px + env(safe-area-inset-bottom));
     padding-bottom: env(safe-area-inset-bottom);

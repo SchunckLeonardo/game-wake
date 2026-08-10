@@ -59,7 +59,18 @@ class GameWakeApi:
             accounts = self._application.list_accounts(viewer_user_id=request.user_id)
             return ApiResponse(
                 200,
-                {"accounts": [self._account(account) for account in accounts]},
+                {
+                    "accounts": [
+                        self._account(
+                            account,
+                            access=self._application.account_access(
+                                account.id,
+                                viewer_user_id=request.user_id,
+                            ),
+                        )
+                        for account in accounts
+                    ]
+                },
             )
         if parts[:3] != ("api", "v1", "accounts"):
             raise KeyError(request.path)
@@ -240,6 +251,50 @@ class GameWakeApi:
                 201,
                 {"invitations": [self._invitation(item) for item in invitations]},
             )
+        if request.method == "POST" and parts[4:] == ("invitation-links",):
+            access = self._required_string(request.body, "access")
+            if access not in {"play", "console"}:
+                raise ValueError("access must be play or console")
+            custom_role_id = self._optional_string(request.body, "customRoleId")
+            predefined_role_value = self._optional_string(
+                request.body,
+                "predefinedRole",
+            )
+            if access == "play":
+                if custom_role_id is not None or predefined_role_value not in {None, "player"}:
+                    raise ValueError("play access always grants the Player Role")
+                role = PredefinedRole.PLAYER
+            else:
+                if request.authenticated_at is None:
+                    raise PermissionError(
+                        "console invitation links require recent Discord authentication"
+                    )
+                if (custom_role_id is None) == (predefined_role_value is None):
+                    raise ValueError("choose exactly one predefinedRole or customRoleId")
+                if predefined_role_value == "player":
+                    raise ValueError("console access requires a Moderator or custom Role")
+                role = (
+                    PredefinedRole(predefined_role_value)
+                    if predefined_role_value is not None
+                    else None
+                )
+            invitation = self._application.create_invitation_link(
+                account_id,
+                actor_user_id=request.user_id,
+                role=role,
+                custom_role_id=custom_role_id,
+                world_id=self._optional_string(request.body, "worldId"),
+            )
+            return ApiResponse(201, {"invitation": self._invitation(invitation)})
+        if request.method == "GET" and len(parts) == 6 and parts[4] == "invitations":
+            account, invitation = self._application.get_invitation(
+                account_id,
+                parts[5],
+                viewer_user_id=request.user_id,
+            )
+            payload = self._invitation(invitation)
+            payload["accountName"] = account.name
+            return ApiResponse(200, {"invitation": payload})
         if (
             request.method == "POST"
             and len(parts) == 7
@@ -267,7 +322,25 @@ class GameWakeApi:
                 account_id,
                 viewer_user_id=request.user_id,
             )
-            return ApiResponse(200, {"worlds": [self._world(world) for world in worlds]})
+            return ApiResponse(
+                200,
+                {
+                    "worlds": [
+                        {
+                            **self._world(world),
+                            "permissions": sorted(
+                                permission.value
+                                for permission in self._application.account_access(
+                                    account_id,
+                                    viewer_user_id=request.user_id,
+                                    world_id=world.id,
+                                )[1]
+                            ),
+                        }
+                        for world in worlds
+                    ]
+                },
+            )
         if len(parts) < 6 or parts[4] != "worlds":
             raise KeyError(request.path)
         world_id = parts[5]
@@ -477,12 +550,27 @@ class GameWakeApi:
         )
 
     @staticmethod
-    def _account(account: Account) -> dict[str, Any]:
-        return {
+    def _account(
+        account: Account,
+        access: tuple[Membership, frozenset[Permission]] | None = None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
             "id": account.id,
             "name": account.name,
             "discordGuildId": account.discord_guild_id,
         }
+        if access is not None:
+            membership, permissions = access
+            payload["access"] = {
+                "roles": sorted(
+                    assignment.predefined_role.value
+                    if assignment.predefined_role is not None
+                    else str(assignment.custom_role_id)
+                    for assignment in membership.assignments
+                ),
+                "permissions": sorted(permission.value for permission in permissions),
+            }
+        return payload
 
     @staticmethod
     def _invitation(invitation: Invitation) -> dict[str, Any]:
@@ -491,6 +579,15 @@ class GameWakeApi:
             "accountId": invitation.account_id,
             "invitedUserId": invitation.invited_user_id,
             "status": invitation.status.value,
+            "access": invitation.access.value,
+            "predefinedRole": (
+                invitation.predefined_role.value if invitation.predefined_role is not None else None
+            ),
+            "customRoleId": invitation.custom_role_id,
+            "worldId": invitation.world_id,
+            "expiresAt": (
+                invitation.expires_at.isoformat() if invitation.expires_at is not None else None
+            ),
         }
 
     @staticmethod

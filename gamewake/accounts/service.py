@@ -10,6 +10,7 @@ from .model import (
     DiscordGuildAlreadyLinkedError,
     IdentityProvider,
     Invitation,
+    InvitationAccess,
     InvitationStatus,
     LastOwnerRemovalError,
     LinkedIdentity,
@@ -357,6 +358,26 @@ class Accounts:
             world_id=world_id,
         )
 
+    def access_for(
+        self,
+        account_id: str,
+        *,
+        user_id: str,
+        world_id: str | None = None,
+    ) -> tuple[Membership, frozenset[Permission]]:
+        snapshot = self._repository.get(account_id)
+        membership = next(
+            (membership for membership in snapshot.memberships if membership.user_id == user_id),
+            None,
+        )
+        if membership is None:
+            raise PermissionDeniedError("access is visible only inside the account")
+        return membership, permissions_for(
+            membership.assignments,
+            custom_roles=snapshot.custom_roles,
+            world_id=world_id,
+        )
+
     def create_custom_role(
         self,
         account_id: str,
@@ -581,6 +602,80 @@ class Accounts:
         )
         return invitations
 
+    def create_invitation_link(
+        self,
+        account_id: str,
+        *,
+        inviter_user_id: str,
+        role: PredefinedRole | None = PredefinedRole.PLAYER,
+        custom_role_id: str | None = None,
+        world_id: str | None = None,
+        expires_in: timedelta = timedelta(days=7),
+    ) -> Invitation:
+        snapshot = self._repository.get(account_id)
+        if not self.authorize(
+            account_id,
+            user_id=inviter_user_id,
+            permission=Permission.MANAGE_MEMBERSHIPS,
+        ):
+            raise PermissionDeniedError(
+                "creating invitation links requires membership management permission"
+            )
+        if (role is None) == (custom_role_id is None):
+            raise ValueError("choose exactly one predefined or custom Role")
+        if role is PredefinedRole.OWNER:
+            raise ValueError("Owner access cannot be granted through an Invitation link")
+        access = (
+            InvitationAccess.PLAY
+            if role is PredefinedRole.PLAYER and custom_role_id is None
+            else InvitationAccess.CONSOLE
+        )
+        if access is InvitationAccess.CONSOLE and not self.authorize(
+            account_id,
+            user_id=inviter_user_id,
+            permission=Permission.MANAGE_ROLES,
+        ):
+            raise PermissionDeniedError(
+                "console invitation links require role management permission"
+            )
+        if custom_role_id is not None and not any(
+            item.id == custom_role_id for item in snapshot.custom_roles
+        ):
+            raise ValueError("the custom Role does not exist")
+        if expires_in <= timedelta(0) or expires_in > timedelta(days=30):
+            raise ValueError("Invitation expiry must be between one second and 30 days")
+
+        invitation = Invitation(
+            id=str(uuid4()),
+            account_id=account_id,
+            inviter_user_id=inviter_user_id,
+            invited_user_id=None,
+            status=InvitationStatus.PENDING,
+            access=access,
+            predefined_role=role,
+            custom_role_id=custom_role_id,
+            world_id=world_id,
+            expires_at=self._clock() + expires_in,
+        )
+        self._repository.save(
+            replace(snapshot, invitations=(*snapshot.invitations, invitation)),
+            expected_version=snapshot.version,
+        )
+        return invitation
+
+    def get_invitation(
+        self,
+        account_id: str,
+        invitation_id: str,
+        *,
+        viewer_user_id: str,
+    ) -> tuple[Account, Invitation]:
+        snapshot = self._repository.get(account_id)
+        invitation = next(item for item in snapshot.invitations if item.id == invitation_id)
+        if invitation.invited_user_id is not None and invitation.invited_user_id != viewer_user_id:
+            raise PermissionDeniedError("only the invited User can view this Invitation")
+        return snapshot.account, invitation
+
     def accept_invitation(
         self,
         account_id: str,
@@ -592,36 +687,53 @@ class Accounts:
         invitation = next(
             invitation for invitation in snapshot.invitations if invitation.id == invitation_id
         )
-        if invitation.invited_user_id != invited_user_id:
+        if invitation.invited_user_id != invited_user_id and invitation.invited_user_id is not None:
             raise PermissionDeniedError("only the invited User can accept this Invitation")
         if invitation.status is not InvitationStatus.PENDING:
             raise ValueError("the Invitation is no longer pending")
-        accepted = Invitation(
-            id=invitation.id,
-            account_id=invitation.account_id,
-            inviter_user_id=invitation.inviter_user_id,
-            invited_user_id=invitation.invited_user_id,
-            status=InvitationStatus.ACCEPTED,
-        )
-        membership = Membership(
+        if invitation.expires_at is not None and self._clock() >= invitation.expires_at:
+            raise ValueError("the Invitation has expired")
+        accepted = replace(invitation, status=InvitationStatus.ACCEPTED)
+        assignment = RoleAssignment(
             id=str(uuid4()),
-            account_id=account_id,
-            user_id=invited_user_id,
-            assignments=(
-                RoleAssignment(
-                    id=str(uuid4()),
-                    scope=ResourceScope(account_id=account_id),
-                    predefined_role=PredefinedRole.PLAYER,
-                ),
-            ),
+            scope=ResourceScope(account_id=account_id, world_id=invitation.world_id),
+            predefined_role=invitation.predefined_role,
+            custom_role_id=invitation.custom_role_id,
         )
+        existing = next(
+            (item for item in snapshot.memberships if item.user_id == invited_user_id),
+            None,
+        )
+        if existing is None:
+            membership = Membership(
+                id=str(uuid4()),
+                account_id=account_id,
+                user_id=invited_user_id,
+                assignments=(assignment,),
+            )
+            memberships = (*snapshot.memberships, membership)
+        else:
+            duplicate = any(
+                item.scope == assignment.scope
+                and item.predefined_role == assignment.predefined_role
+                and item.custom_role_id == assignment.custom_role_id
+                for item in existing.assignments
+            )
+            membership = (
+                existing
+                if duplicate
+                else replace(existing, assignments=(*existing.assignments, assignment))
+            )
+            memberships = tuple(
+                membership if item.id == existing.id else item for item in snapshot.memberships
+            )
         invitations = tuple(
             accepted if item.id == invitation.id else item for item in snapshot.invitations
         )
         self._repository.save(
             replace(
                 snapshot,
-                memberships=(*snapshot.memberships, membership),
+                memberships=memberships,
                 invitations=invitations,
             ),
             expected_version=snapshot.version,

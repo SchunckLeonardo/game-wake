@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-08-01T20:51:43Z",
+  "generatedAt": "2026-08-10T12:57:56Z",
   "title": "Design System: GameWake",
   "extensions": {
     "colorMeta": {
@@ -452,6 +452,11 @@
         "name": "The Pill Means State Rule",
         "body": "Formas totalmente arredondadas pertencem a status, Roles, badges e escolhas compactas, não a todo botão.",
         "section": "shapes"
+      },
+      {
+        "name": "The Permission Is Visible Rule",
+        "body": "Mostre a Role efetiva e somente as áreas permitidas; não faça o usuário descobrir sua permissão por tentativa, erro ou botões mortos.",
+        "section": "components"
       }
     ],
     "dos": [
@@ -460,7 +465,8 @@
       "**Do** aplicar Mesa Central e Command Table ao ciclo compartilhado de um World, mantendo outras jornadas livres para a composição adequada.",
       "**Do** combinar ícone linear, texto e estado para que informação não dependa apenas de cor.",
       "**Do** preservar foco visível, navegação por teclado, redução de movimento e contraste WCAG 2.2 AA.",
-      "**Do** manter tracking negativo em -0.04em ou mais aberto."
+      "**Do** manter tracking negativo em -0.04em ou mais aberto.",
+      "**Do** tornar a Role atual visível e esconder áreas que ela não pode usar."
     ],
     "donts": [
       "**Don't** transformar a narrativa principal da landing em um hero SaaS genérico seguido por uma grade de feature cards.",

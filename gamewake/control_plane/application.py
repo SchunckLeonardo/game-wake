@@ -157,6 +157,19 @@ class GameWakeApplication:
     def list_accounts(self, *, viewer_user_id: str) -> list[Account]:
         return self.accounts.list_accounts(viewer_user_id)
 
+    def account_access(
+        self,
+        account_id: str,
+        *,
+        viewer_user_id: str,
+        world_id: str | None = None,
+    ) -> tuple[Membership, frozenset[Permission]]:
+        return self.accounts.access_for(
+            account_id,
+            user_id=viewer_user_id,
+            world_id=world_id,
+        )
+
     def list_memberships(self, account_id: str, *, viewer_user_id: str) -> list[Membership]:
         return self.accounts.list_memberships(account_id, viewer_user_id=viewer_user_id)
 
@@ -267,6 +280,36 @@ class GameWakeApplication:
             account_id,
             inviter_user_id=actor_user_id,
             invited_user_ids=invited_user_ids,
+        )
+
+    def create_invitation_link(
+        self,
+        account_id: str,
+        *,
+        actor_user_id: str,
+        role: PredefinedRole | None,
+        custom_role_id: str | None,
+        world_id: str | None,
+    ) -> Invitation:
+        return self.accounts.create_invitation_link(
+            account_id,
+            inviter_user_id=actor_user_id,
+            role=role,
+            custom_role_id=custom_role_id,
+            world_id=world_id,
+        )
+
+    def get_invitation(
+        self,
+        account_id: str,
+        invitation_id: str,
+        *,
+        viewer_user_id: str,
+    ) -> tuple[Account, Invitation]:
+        return self.accounts.get_invitation(
+            account_id,
+            invitation_id,
+            viewer_user_id=viewer_user_id,
         )
 
     def accept_invitation(

@@ -6,6 +6,8 @@ from gamewake.accounts import (
     Accounts,
     InMemoryAccountRepository,
     InMemoryRecoverySecretStore,
+    Permission,
+    SensitiveActionConfirmation,
 )
 from gamewake.billing import (
     Billing,
@@ -683,7 +685,120 @@ def test_authenticated_user_can_discover_only_their_accounts_for_console_routing
 
     assert response.status == 200
     assert response.body == {
-        "accounts": [{"id": mine.id, "name": "Meu grupo", "discordGuildId": None}]
+        "accounts": [
+            {
+                "id": mine.id,
+                "name": "Meu grupo",
+                "discordGuildId": None,
+                "access": {
+                    "roles": ["owner"],
+                    "permissions": sorted(permission.value for permission in Permission),
+                },
+            }
+        ]
+    }
+
+
+def test_owner_creates_separate_play_and_console_invitation_links():
+    now = datetime(2026, 8, 10, 12, 0, tzinfo=UTC)
+    accounts = Accounts(InMemoryAccountRepository(), clock=lambda: now)
+    account = accounts.create_account(name="Grupo", owner_user_id="owner")
+    custom_role = accounts.create_custom_role(
+        account.id,
+        actor_user_id="owner",
+        name="Guardião dos saves",
+        permissions={Permission.VIEW_WORLD, Permission.CREATE_BACKUP},
+        confirmation=SensitiveActionConfirmation(
+            actor_user_id="owner",
+            reauthenticated_at=now,
+            confirmed_resource_name="Grupo",
+        ),
+    )
+    catalog = GameCatalog.with_palworld()
+    api = GameWakeApi(
+        GameWakeApplication(
+            accounts=accounts,
+            worlds=Worlds(InMemoryWorldRepository(), access=accounts, game_catalog=catalog),
+            billing=Billing(InMemoryBillingRepository()),
+            game_catalog=catalog,
+        )
+    )
+
+    play = api.handle(
+        ApiRequest(
+            "POST",
+            f"/api/v1/accounts/{account.id}/invitation-links",
+            "owner",
+            {"access": "play"},
+            authenticated_at=now,
+        )
+    )
+    manage = api.handle(
+        ApiRequest(
+            "POST",
+            f"/api/v1/accounts/{account.id}/invitation-links",
+            "owner",
+            {"access": "console", "predefinedRole": "manager"},
+            authenticated_at=now,
+        )
+    )
+    custom_manage = api.handle(
+        ApiRequest(
+            "POST",
+            f"/api/v1/accounts/{account.id}/invitation-links",
+            "owner",
+            {"access": "console", "customRoleId": custom_role.id},
+            authenticated_at=now,
+        )
+    )
+    invalid_manage = api.handle(
+        ApiRequest(
+            "POST",
+            f"/api/v1/accounts/{account.id}/invitation-links",
+            "owner",
+            {"access": "console", "predefinedRole": "player"},
+            authenticated_at=now,
+        )
+    )
+    invitation_id = manage.body["invitation"]["id"]
+    preview = api.handle(
+        ApiRequest(
+            "GET",
+            f"/api/v1/accounts/{account.id}/invitations/{invitation_id}",
+            "friend",
+        )
+    )
+    accepted = api.handle(
+        ApiRequest(
+            "POST",
+            f"/api/v1/accounts/{account.id}/invitations/{invitation_id}/accept",
+            "friend",
+        )
+    )
+    custom_accepted = api.handle(
+        ApiRequest(
+            "POST",
+            f"/api/v1/accounts/{account.id}/invitations/{custom_manage.body['invitation']['id']}/accept",
+            "custom-friend",
+        )
+    )
+    custom_accounts = api.handle(ApiRequest("GET", "/api/v1/me/accounts", "custom-friend"))
+
+    assert play.status == 201
+    assert play.body["invitation"]["access"] == "play"
+    assert play.body["invitation"]["predefinedRole"] == "player"
+    assert manage.status == 201
+    assert manage.body["invitation"]["access"] == "console"
+    assert invalid_manage.status == 400
+    assert invalid_manage.body["error"]["message"] == (
+        "console access requires a Moderator or custom Role"
+    )
+    assert preview.body["invitation"]["accountName"] == "Grupo"
+    assert accepted.body["membership"]["roles"][0]["role"] == "manager"
+    assert custom_accepted.body["membership"]["roles"][0]["role"] == custom_role.id
+    assert custom_accounts.body["accounts"][0]["access"] == {
+        "roles": [custom_role.id],
+        "permissions": ["backup:create", "world:view"],
     }
 
 

@@ -52,6 +52,12 @@ type ApiWorld = {
   region: string;
   status: WorldStatus;
   autoSleepMinutes?: 10 | 20 | 30 | 60 | null;
+  permissions?: string[];
+};
+
+type ApiAccountAccess = {
+  roles: string[];
+  permissions: string[];
 };
 
 type WorldBudget = {
@@ -127,6 +133,37 @@ const sections: Array<{ id: Section; label: string; icon: IconName }> = [
   { id: "backups", label: "Backups", icon: "database" },
   { id: "activity", label: "Atividade", icon: "activity" },
 ];
+
+const legacyOwnerPermissions = [
+  "world:create",
+  "world:view",
+  "world:wake",
+  "world:sleep_when_empty",
+  "world:edit",
+  "world:restart",
+  "world:update",
+  "world:force_sleep",
+  "world:logs:view",
+  "backup:create",
+  "backup:restore",
+  "membership:manage",
+  "role:manage",
+  "integration:manage",
+  "wallet:manage",
+  "world:budget:manage",
+  "world:migrate",
+  "world:export",
+  "world:delete",
+  "account:ownership:transfer",
+  "account:delete",
+];
+
+function roleLabel(role: string, customRoles: ApiCustomRole[] = []) {
+  if (role === "owner") return "Owner";
+  if (role === "manager") return "Moderador";
+  if (role === "player") return "Player";
+  return customRoles.find((custom) => custom.id === role)?.name ?? "Role personalizada";
+}
 
 const permissionLabels: Record<string, string> = {
   "world:view": "Ver Worlds",
@@ -256,7 +293,11 @@ export function ConsoleDashboard({
   const [paymentNotice, setPaymentNotice] = useState("");
   const [loading, setLoading] = useState(!isDemo);
   const [invites, setInvites] = useState(["Ana", "Bia"]);
-  const [inviteUserIds, setInviteUserIds] = useState("");
+  const [inviteAccess, setInviteAccess] = useState<"play" | "console">("play");
+  const [inviteRole, setInviteRole] = useState("predefined:manager");
+  const [invitationLink, setInvitationLink] = useState("");
+  const [invitationCopied, setInvitationCopied] = useState(false);
+  const [invitationLoading, setInvitationLoading] = useState(false);
   const [memberships, setMemberships] = useState<ApiMembership[]>([]);
   const [customRoles, setCustomRoles] = useState<ApiCustomRole[]>([]);
   const [availablePermissions, setAvailablePermissions] = useState<string[]>([]);
@@ -266,6 +307,12 @@ export function ConsoleDashboard({
   ]);
   const [confirmationName, setConfirmationName] = useState("");
   const [roleSelections, setRoleSelections] = useState<Record<string, string>>({});
+  const [pendingRoleAssignment, setPendingRoleAssignment] = useState<string | null>(null);
+  const [roleActionError, setRoleActionError] = useState("");
+  const [accountAccess, setAccountAccess] = useState<ApiAccountAccess>({
+    roles: isDemo ? ["owner"] : [],
+    permissions: isDemo ? legacyOwnerPermissions : [],
+  });
   const [backups, setBackups] = useState<ApiBackup[]>([]);
   const [activityEvents, setActivityEvents] = useState<ApiActivityEvent[]>([]);
   const [worldOperations, setWorldOperations] = useState<ApiOperation[]>([]);
@@ -326,35 +373,98 @@ export function ConsoleDashboard({
       label: operationPhaseLabels[activeOperation.phase] ?? activeOperation.phase.replaceAll("_", " "),
     };
   }, [activeOperation]);
+  const latestOperation = useMemo(
+    () => [...worldOperations].reverse()[0] ?? null,
+    [worldOperations],
+  );
+  const effectivePermissions = useMemo(
+    () => new Set(world?.permissions ?? accountAccess.permissions),
+    [accountAccess.permissions, world?.permissions],
+  );
+  const can = useCallback(
+    (permission: string) => isDemo || effectivePermissions.has(permission),
+    [effectivePermissions, isDemo],
+  );
+  const visibleSections = useMemo(
+    () => sections.filter((item) => {
+      if (item.id === "worlds") return can("world:view");
+      if (item.id === "members") {
+        return can("membership:manage") || can("role:manage");
+      }
+      if (item.id === "configuration") return can("world:edit");
+      if (item.id === "backups") {
+        return can("backup:create") || can("backup:restore") || can("world:export");
+      }
+      return true;
+    }),
+    [can],
+  );
+  const activeSection = visibleSections.some((item) => item.id === section)
+    ? section
+    : (visibleSections[0]?.id ?? "worlds");
+  const viewerRole = useMemo(() => {
+    if (accountAccess.roles.includes("owner")) return "Owner";
+    if (accountAccess.roles.includes("manager")) return "Moderador";
+    if (accountAccess.roles.includes("player")) return "Player";
+    return accountAccess.roles.length > 0 ? "Role personalizada" : "Acesso carregando";
+  }, [accountAccess.roles]);
+  const selectedWorldId = world?.id;
 
   const loadLiveState = useCallback(async () => {
     if (isDemo) return;
     try {
-      const [worldsResponse, walletResponse, accountsResponse] = await Promise.all([
-        gameWakeFetch(`/api/v1/accounts/${accountId}/worlds`),
-        gameWakeFetch(`/api/v1/accounts/${accountId}/wallet`),
-        gameWakeFetch("/api/v1/me/accounts"),
+      const [worldsResult, walletResult, accountsResult] = await Promise.allSettled([
+        gameWakeFetch(`/api/v1/accounts/${accountId}/worlds`).then(async (response) =>
+          (await response.json()) as { worlds: ApiWorld[] },
+        ),
+        gameWakeFetch(`/api/v1/accounts/${accountId}/wallet`).then(async (response) =>
+          (await response.json()) as {
+            wallet: { balance?: string; availableBalance: string; statement: WalletEntry[] };
+          },
+        ),
+        gameWakeFetch("/api/v1/me/accounts").then(async (response) =>
+          (await response.json()) as {
+            accounts: Array<{
+              id: string;
+              name: string;
+              discordGuildId?: string | null;
+              access?: ApiAccountAccess;
+            }>;
+          },
+        ),
       ]);
-      const worldsPayload = (await worldsResponse.json()) as { worlds: ApiWorld[] };
-      const walletPayload = (await walletResponse.json()) as {
-        wallet: { balance?: string; availableBalance: string; statement: WalletEntry[] };
-      };
-      const accountsPayload = (await accountsResponse.json()) as {
-        accounts: Array<{ id: string; name: string; discordGuildId?: string | null }>;
-      };
+
+      if (worldsResult.status === "rejected") throw worldsResult.reason;
+      const worldsPayload = worldsResult.value;
       setWorlds(worldsPayload.worlds);
       setWorld((current) => {
         const selected = worldsPayload.worlds.find((item) => item.id === current?.id) ?? worldsPayload.worlds[0] ?? null;
         if (selected) setWorldStatus(selected.status);
         return selected;
       });
-      setWalletBalance(walletPayload.wallet.availableBalance);
-      setWalletTotalBalance(walletPayload.wallet.balance ?? walletPayload.wallet.availableBalance);
-      setWalletStatement(walletPayload.wallet.statement ?? []);
-      const account = accountsPayload.accounts.find((item) => item.id === accountId);
-      setAccountName(account?.name ?? "Seu grupo");
-      setDiscordGuildId(account?.discordGuildId ?? null);
-      setError("");
+
+      if (walletResult.status === "fulfilled") {
+        const wallet = walletResult.value.wallet;
+        setWalletBalance(wallet.availableBalance);
+        setWalletTotalBalance(wallet.balance ?? wallet.availableBalance);
+        setWalletStatement(wallet.statement ?? []);
+      }
+      if (accountsResult.status === "fulfilled") {
+        const account = accountsResult.value.accounts.find((item) => item.id === accountId);
+        setAccountName(account?.name ?? "Seu grupo");
+        setDiscordGuildId(account?.discordGuildId ?? null);
+        setAccountAccess(
+          account?.access ?? { roles: [], permissions: [] },
+        );
+      }
+      const partialFailures = [walletResult, accountsResult].filter(
+        (result) => result.status === "rejected",
+      ).length;
+      setError(
+        partialFailures > 0
+          ? "O progresso do World está atualizado. Alguns dados auxiliares serão recarregados automaticamente."
+          : "",
+      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Não foi possível carregar a Console.");
     } finally {
@@ -461,12 +571,12 @@ export function ConsoleDashboard({
   }, [isDemo, loadLiveState, worldStatus]);
 
   useEffect(() => {
-    if (isDemo || !world || !["waking", "going_to_sleep"].includes(worldStatus)) return;
+    if (isDemo || !selectedWorldId) return;
     let active = true;
     async function loadProgress() {
       try {
         const response = await gameWakeFetch(
-          `/api/v1/accounts/${accountId}/worlds/${world?.id}/operations`,
+          `/api/v1/accounts/${accountId}/worlds/${selectedWorldId}/operations`,
         );
         const payload = (await response.json()) as { operations: ApiOperation[] };
         if (active) setWorldOperations(payload.operations);
@@ -475,15 +585,17 @@ export function ConsoleDashboard({
       }
     }
     void loadProgress();
-    const interval = window.setInterval(() => void loadProgress(), 3000);
+    const interval = ["waking", "going_to_sleep"].includes(worldStatus)
+      ? window.setInterval(() => void loadProgress(), 3000)
+      : undefined;
     return () => {
       active = false;
-      window.clearInterval(interval);
+      if (interval !== undefined) window.clearInterval(interval);
     };
-  }, [accountId, isDemo, world, worldStatus]);
+  }, [accountId, isDemo, selectedWorldId, worldStatus]);
 
   useEffect(() => {
-    if (isDemo || section !== "wallet" || !world) return;
+    if (isDemo || activeSection !== "wallet" || !world) return;
     async function loadBudget() {
       try {
         const response = await gameWakeFetch(
@@ -497,10 +609,10 @@ export function ConsoleDashboard({
       }
     }
     void loadBudget();
-  }, [accountId, isDemo, section, world]);
+  }, [accountId, activeSection, isDemo, world]);
 
   useEffect(() => {
-    if (isDemo || section !== "configuration" || !world) return;
+    if (isDemo || activeSection !== "configuration" || !world) return;
     async function loadConfiguration() {
       try {
         const base = `/api/v1/accounts/${accountId}/worlds/${world.id}/configuration`;
@@ -521,13 +633,13 @@ export function ConsoleDashboard({
       }
     }
     void loadConfiguration();
-  }, [accountId, isDemo, section, world]);
+  }, [accountId, activeSection, isDemo, world]);
 
   useEffect(() => {
     if (isDemo) return;
     async function loadSection() {
       try {
-        if (section === "members") {
+        if (activeSection === "members") {
           const [membersResponse, rolesResponse] = await Promise.all([
             gameWakeFetch(`/api/v1/accounts/${accountId}/memberships`),
             gameWakeFetch(`/api/v1/accounts/${accountId}/roles`),
@@ -541,14 +653,14 @@ export function ConsoleDashboard({
           setCustomRoles(roles.customRoles);
           setAvailablePermissions(roles.permissions);
         }
-        if (section === "backups" && world) {
+        if (activeSection === "backups" && world) {
           const response = await gameWakeFetch(
             `/api/v1/accounts/${accountId}/worlds/${world.id}/backups`,
           );
           const payload = (await response.json()) as { backups: ApiBackup[] };
           setBackups(payload.backups);
         }
-        if (section === "activity") {
+        if (activeSection === "activity") {
           const [activityResponse, operationsResponse] = await Promise.all([
             gameWakeFetch(`/api/v1/accounts/${accountId}/activity`),
             world
@@ -571,7 +683,7 @@ export function ConsoleDashboard({
       }
     }
     void loadSection();
-  }, [accountId, isDemo, section, world]);
+  }, [accountId, activeSection, isDemo, world]);
 
   async function wakeWorld() {
     if (!world) {
@@ -604,6 +716,7 @@ export function ConsoleDashboard({
     if (!world || !wakeEstimate) return;
     setWakeEstimate(null);
     setWorldStatus("waking");
+    setWorld((current) => current ? { ...current, status: "waking" } : current);
     if (isDemo) {
       const operation: ApiOperation = {
         id: "demo-wake",
@@ -627,7 +740,8 @@ export function ConsoleDashboard({
       const payload = (await response.json()) as { operation: ApiOperation };
       setWorldOperations((current) => [...current, payload.operation]);
     } catch (caught) {
-      setWorldStatus("sleeping");
+      setWorldStatus(world.status);
+      setWorld((current) => current ? { ...current, status: world.status } : current);
       setError(caught instanceof Error ? caught.message : "Não foi possível acordar o World.");
     }
   }
@@ -842,26 +956,49 @@ export function ConsoleDashboard({
     );
   }
 
-  async function inviteFriends() {
+  async function createInvitationLink() {
+    if (invitationLoading) return;
     if (isDemo) {
       addInvite();
+      setInvitationLink(
+        `${window.location.origin}/convites/demo/${crypto.randomUUID()}`,
+      );
       return;
     }
-    const invitedUserIds = inviteUserIds
-      .split(/[\s,]+/)
-      .map((item) => item.trim())
-      .filter(Boolean);
-    if (invitedUserIds.length === 0) return;
+    const [kind, roleId] = inviteRole.split(":", 2);
+    setInvitationLoading(true);
+    setInvitationCopied(false);
+    setError("");
     try {
-      await gameWakeFetch(`/api/v1/accounts/${accountId}/invitations`, {
+      const response = await gameWakeFetch(
+        `/api/v1/accounts/${accountId}/invitation-links`,
+        {
         method: "POST",
-        body: JSON.stringify({ invitedUserIds }),
-      });
-      setInviteUserIds("");
-      setSaved(true);
+          body: JSON.stringify({
+            access: inviteAccess,
+            ...(inviteAccess === "console" && kind === "custom"
+              ? { customRoleId: roleId }
+              : inviteAccess === "console"
+                ? { predefinedRole: roleId }
+                : {}),
+          }),
+        },
+      );
+      const payload = (await response.json()) as { invitation: { id: string } };
+      setInvitationLink(
+        `${window.location.origin}/convites/${accountId}/${payload.invitation.id}`,
+      );
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Não foi possível criar os convites.");
+      setError(caught instanceof Error ? caught.message : "Não foi possível criar o link.");
+    } finally {
+      setInvitationLoading(false);
     }
+  }
+
+  async function copyInvitationLink() {
+    if (!invitationLink) return;
+    await navigator.clipboard.writeText(invitationLink);
+    setInvitationCopied(true);
   }
 
   async function createCustomRole() {
@@ -886,8 +1023,13 @@ export function ConsoleDashboard({
 
   async function assignRole(membershipId: string) {
     const selected = roleSelections[membershipId];
-    if (isDemo || !selected || confirmationName !== accountName) return;
+    if (isDemo || !selected) return;
+    if (confirmationName !== accountName) {
+      setRoleActionError(`Digite exatamente “${accountName}” para confirmar.`);
+      return;
+    }
     const [kind, roleId] = selected.split(":", 2);
+    setRoleActionError("");
     try {
       const response = await gameWakeFetch(
         `/api/v1/accounts/${accountId}/memberships/${membershipId}/roles`,
@@ -902,9 +1044,20 @@ export function ConsoleDashboard({
       const payload = (await response.json()) as { membership: ApiMembership };
       setMemberships((current) => current.map((item) => item.id === membershipId ? payload.membership : item));
       setRoleSelections((current) => ({ ...current, [membershipId]: "" }));
+      setPendingRoleAssignment(null);
+      setConfirmationName("");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Não foi possível atribuir a Role.");
+      setRoleActionError(
+        caught instanceof Error ? caught.message : "Não foi possível atribuir a Role.",
+      );
     }
+  }
+
+  function beginRoleAssignment(membershipId: string) {
+    if (!roleSelections[membershipId]) return;
+    setPendingRoleAssignment(membershipId);
+    setConfirmationName("");
+    setRoleActionError("");
   }
 
   async function removeRole(membershipId: string, roleAssignmentId: string) {
@@ -1041,15 +1194,15 @@ export function ConsoleDashboard({
           <span>GameWake</span>
         </Link>
         <div className="account-switcher">
-          <span className="account-avatar">S</span>
-          <div><strong>{accountName}</strong><small>Conta compartilhada</small></div>
+          <span className="account-avatar">{accountName[0]?.toUpperCase() ?? "G"}</span>
+          <div><strong>{accountName}</strong><small>Seu acesso: {viewerRole}</small></div>
           <Icon name="chevron-down" size={16} />
         </div>
         <nav aria-label="Áreas da Console">
           <span className="nav-caption">GERENCIAR</span>
-          {sections.map((item) => (
+          {visibleSections.map((item) => (
             <button
-              className={section === item.id ? "active" : ""}
+              className={activeSection === item.id ? "active" : ""}
               data-testid={`nav-${item.id}`}
               disabled={!hydrated}
               key={item.id}
@@ -1076,7 +1229,7 @@ export function ConsoleDashboard({
         <header className="console-topbar">
           <div>
             <span className="mobile-brand"><Icon name="power" size={17} /></span>
-            <strong>{sections.find((item) => item.id === section)?.label}</strong>
+            <span className="topbar-section-title"><strong>{visibleSections.find((item) => item.id === activeSection)?.label}</strong><small>Seu acesso: {viewerRole}</small></span>
           </div>
           <div className="topbar-actions">
             {!isDemo && (
@@ -1097,7 +1250,7 @@ export function ConsoleDashboard({
           {error && <div className="config-notice" role="alert"><span><Icon name="warning" size={15} /></span><p>{error}</p></div>}
           {paymentNotice && <div className="payment-notice" role="status"><span><Icon name="check" size={15} /></span><p>{paymentNotice}</p></div>}
           {loading && <p role="status">Carregando sua GameWake Console…</p>}
-          {section === "worlds" && (
+          {activeSection === "worlds" && (
             <>
               <div className="welcome-row">
                 <div>
@@ -1105,7 +1258,7 @@ export function ConsoleDashboard({
                   <h1>{isDemo ? "Bom jogo, Leonardo" : "Bom jogo, seu grupo"}</h1>
                   <p>{world ? "Seu grupo tem um World pronto para a próxima sessão." : "Crie o primeiro World do grupo para começar."}</p>
                 </div>
-                <button aria-label="+ Novo World" className="button button-outline" disabled={!hydrated} onClick={() => setShowNewWorld((current) => !current)} type="button"><Icon name="plus" size={17} />Novo World</button>
+                {can("world:create") && <button aria-label="+ Novo World" className="button button-outline" disabled={!hydrated} onClick={() => setShowNewWorld((current) => !current)} type="button"><Icon name="plus" size={17} />Novo World</button>}
               </div>
 
               {showNewWorld && <article className="contribution-panel"><h2>Criar World</h2><p>Palworld em São Paulo, com preço confirmado antes de cada sessão.</p><div className="inline-action-form"><label>Nome do novo World<input aria-label="Nome do novo World" autoFocus onChange={(event) => setNewWorldName(event.target.value)} placeholder="Ex.: Palpagos" value={newWorldName} /></label><button className="button button-primary" disabled={!newWorldName.trim()} onClick={() => void createWorld()} type="button">Criar World</button></div></article>}
@@ -1150,7 +1303,7 @@ export function ConsoleDashboard({
                       </div>
                       <div className="first-session-action">
                         {Number(walletBalance) <= 0 && <button className="button button-primary" onClick={() => setSection("wallet")} type="button"><Icon name="wallet" size={17} />Adicionar créditos</button>}
-                        {Number(walletBalance) > 0 && ["sleeping", "needs_attention"].includes(worldStatus) && <button className="button button-primary" onClick={() => void wakeWorld()} type="button"><Icon name="power" size={17} />{worldStatus === "needs_attention" ? "Tentar novamente" : "Acordar o World"}</button>}
+                        {Number(walletBalance) > 0 && can("world:wake") && ["sleeping", "needs_attention"].includes(worldStatus) && <button className="button button-primary" onClick={() => void wakeWorld()} type="button"><Icon name="power" size={17} />{worldStatus === "needs_attention" ? "Tentar novamente" : "Acordar o World"}</button>}
                         {worldStatus === "online" && <button className="button button-primary" onClick={() => void connectWorld()} type="button"><Icon name="globe" size={17} />Ver como conectar</button>}
                         {["waking", "going_to_sleep"].includes(worldStatus) && <span><Icon name="clock" size={16} /> Pode sair desta tela; a operação continua protegida.</span>}
                       </div>
@@ -1231,7 +1384,13 @@ export function ConsoleDashboard({
                       <div className="operation-progress" role="status">
                         <div><span>{operationProgress?.label ?? (worldStatus === "waking" ? "Preparando despertar" : "Preparando sono seguro")}</span><strong>{operationProgress ? `${operationProgress.current} de ${operationProgress.total}` : "Aguardando fase"}</strong></div>
                         <div className="meter"><span style={{ width: `${operationProgress?.percentage ?? 8}%` }} /></div>
-                        <small>Você pode sair desta tela. A operação continua protegida.</small>
+                        <small>A Console acompanha cada fase automaticamente. Você pode sair desta tela sem interromper a operação.</small>
+                      </div>
+                    )}
+                    {worldStatus === "needs_attention" && (
+                      <div className="operation-progress operation-attention" role="status">
+                        <div><span>A inicialização foi encerrada com segurança</span><strong>Ação necessária</strong></div>
+                        <p>{latestOperation?.status === "needs_attention" ? "O runtime não chegou a ficar disponível. A reserva não utilizada volta para a Wallet." : "A GameWake protegeu o World e liberou o runtime. Você pode tentar novamente."}</p>
                       </div>
                     )}
                   </div>
@@ -1244,7 +1403,7 @@ export function ConsoleDashboard({
                   </aside>
                 </div>
 
-                <label className="auto-sleep-setting">
+                {can("world:edit") && <label className="auto-sleep-setting">
                   <span><strong>Auto Sleep</strong><small>Dorme com save seguro quando o servidor fica vazio.</small></span>
                   <select
                     aria-label="Auto Sleep"
@@ -1258,7 +1417,7 @@ export function ConsoleDashboard({
                     <option value="60">60 minutos</option>
                     <option value="off">Desligado · gera alerta de custo</option>
                   </select>
-                </label>
+                </label>}
 
                 <div className="world-action-dock">
                   <div className="world-stats">
@@ -1267,17 +1426,17 @@ export function ConsoleDashboard({
                     <div><small>Preço</small><strong>Confirmado ao acordar</strong></div>
                   </div>
                   <div className="world-actions">
-                    <button className="button button-primary wake-button" data-testid="wake-world" disabled={!["sleeping", "needs_attention"].includes(worldStatus)} onClick={wakeWorld} type="button">
+                    {can("world:wake") && <button className="button button-primary wake-button" data-testid="wake-world" disabled={!["sleeping", "needs_attention"].includes(worldStatus)} onClick={wakeWorld} type="button">
                       <Icon name="power" size={18} />
                       {worldStatus === "sleeping" ? "Acordar World" : worldStatus === "needs_attention" ? "Tentar novamente" : statusCopy.label}
-                    </button>
+                    </button>}
                     {worldStatus === "online" && (
                       <>
                         <button className="button button-primary" data-testid="connect-world" onClick={connectWorld} type="button"><Icon name="globe" size={18} />Conectar</button>
-                        <button className="button button-quiet-dark" data-testid="sleep-world" onClick={sleepWorld} type="button"><Icon name="moon" size={18} />Dormir com segurança</button>
+                        {can("world:sleep_when_empty") && <button className="button button-quiet-dark" data-testid="sleep-world" onClick={sleepWorld} type="button"><Icon name="moon" size={18} />Dormir com segurança</button>}
                       </>
                     )}
-                    <button className="button button-quiet-dark" onClick={() => setSection("configuration")} type="button"><Icon name="settings" size={18} />Configurar</button>
+                    {can("world:edit") && <button className="button button-quiet-dark" onClick={() => setSection("configuration")} type="button"><Icon name="settings" size={18} />Configurar</button>}
                     <button className="icon-button" aria-label="Mais ações" type="button"><Icon name="menu" size={18} /></button>
                   </div>
                 </div>
@@ -1312,7 +1471,7 @@ export function ConsoleDashboard({
             </>
           )}
 
-          {section === "wallet" && (
+          {activeSection === "wallet" && (
             <div className="panel-page" data-testid="wallet-panel">
               <div className="panel-heading"><div><h1>Créditos do grupo</h1><p>Todo valor é explicado em um ledger imutável. A Wallet nunca fica negativa.</p></div></div>
               <div className="wallet-layout">
@@ -1326,7 +1485,7 @@ export function ConsoleDashboard({
                   <button className="button button-primary full-button" data-testid="create-checkout" disabled={checkoutLoading} onClick={() => void createCheckout()} type="button">{checkoutLoading ? "Abrindo checkout Pix…" : `Contribuir R$ ${contribution},00`}</button>
                 </article>
               </div>
-              {world && (
+              {world && can("world:budget:manage") && (
                 <article className="budget-panel">
                   <div>
                     <span className="section-index">WORLD BUDGET · {world.name}</span>
@@ -1362,14 +1521,23 @@ export function ConsoleDashboard({
             </div>
           )}
 
-          {section === "members" && (
+          {activeSection === "members" && (
             <div className="panel-page" data-testid="members-panel">
-              <div className="panel-heading split"><div><h1>Membros e Roles</h1><p>Use Player, Manager e Owner. Convites do Discord continuam aceitos explicitamente.</p></div></div>
-              <article className="contribution-panel">
-                <h2>Convidar amigos</h2>
-                <p>No Discord, use <code>/gamewake convidar @amigo1 @amigo2</code>. Aqui, informe os IDs internos separados por vírgula.</p>
-                <div className="inline-action-form"><label>IDs dos amigos<input aria-label="IDs dos amigos" onChange={(event) => setInviteUserIds(event.target.value)} placeholder="user-1, user-2" value={inviteUserIds} /></label><button className="button button-primary" data-testid="invite-friends" onClick={() => void inviteFriends()} type="button"><Icon name="plus" size={17} />Criar convites</button></div>
-                {saved && <small>Convites criados. Cada amigo precisa abrir este servidor no Discord e usar <code>/gamewake aceitar</code>.</small>}
+              <div className="panel-heading split"><div><h1>Membros e Roles</h1><p>Convide um amigo para jogar ou entregue somente os controles que ele precisa.</p></div><span className="viewer-role-badge">Você é {viewerRole}</span></div>
+              <article className="contribution-panel invitation-builder">
+                <h2>Criar link de convite</h2>
+                <p>O amigo entra com o Discord, aceita uma vez e chega direto ao lugar certo.</p>
+                <div className="invitation-access-picker" role="group" aria-label="Tipo de acesso do convite">
+                  <button aria-pressed={inviteAccess === "play"} className={inviteAccess === "play" ? "selected" : ""} onClick={() => { setInviteAccess("play"); setInvitationLink(""); }} type="button"><Icon name="globe" size={18} /><span><strong>Só jogar</strong><small>Entrar, acordar e conectar ao World</small></span></button>
+                  <button aria-pressed={inviteAccess === "console"} className={inviteAccess === "console" ? "selected" : ""} onClick={() => { setInviteAccess("console"); setInvitationLink(""); }} type="button"><Icon name="shield" size={18} /><span><strong>Gerenciar Console</strong><small>Acesso conforme a Role escolhida</small></span></button>
+                </div>
+                <div className="invitation-create-row">
+                  {inviteAccess === "console" && <label>Role ao aceitar<select aria-label="Role do link de gerenciamento" onChange={(event) => setInviteRole(event.target.value)} value={inviteRole}><option value="predefined:manager">Moderador</option>{customRoles.map((role) => <option key={role.id} value={`custom:${role.id}`}>{role.name}</option>)}</select></label>}
+                  <button className="button button-primary" data-testid="create-invitation-link" disabled={invitationLoading} onClick={() => void createInvitationLink()} type="button"><Icon name="plus" size={17} />{invitationLoading ? "Criando link…" : `Criar link para ${inviteAccess === "play" ? "jogar" : "gerenciar"}`}</button>
+                </div>
+                {inviteAccess === "console" && <small>Por segurança, links de gerenciamento exigem que seu login Discord tenha sido renovado recentemente. <Link href={`/auth/discord/start?install=0&accountId=${encodeURIComponent(accountId)}`}>Renovar login</Link></small>}
+                {invitationLink && <div className="invitation-link-result" role="status"><label>Link pronto<input aria-label="Link de convite criado" readOnly value={invitationLink} /></label><button className="button button-outline" onClick={() => void copyInvitationLink()} type="button">{invitationCopied ? "Link copiado ✓" : "Copiar link"}</button><small>Expira em 7 dias e funciona uma única vez.</small></div>}
+                <div className="discord-command-guide"><Icon name="discord" size={19} /><p><strong>Quer convidar dentro do Discord?</strong> Use <code>/gamewake convidar @amigo1 @amigo2</code>. Esses convites dão acesso Player.</p></div>
               </article>
               <article className="table-card">
                 <div className="card-heading"><h2>Seu grupo</h2><span>{isDemo ? invites.length + 2 : memberships.length} membros</span></div>
@@ -1380,18 +1548,20 @@ export function ConsoleDashboard({
                     <div className="role-list">
                       {membership.roles.map((role) => (
                         <span className={`role role-${role.role}`} key={role.id}>
-                          {customRoles.find((custom) => custom.id === role.role)?.name ?? role.role}
+                          {roleLabel(role.role, customRoles)}
                           <button aria-label={`Remover Role ${role.role} de ${membership.userId}`} disabled={confirmationName !== accountName} onClick={() => void removeRole(membership.id, role.id)} type="button"><Icon name="close" size={12} /></button>
                         </span>
                       ))}
                     </div>
-                    <select aria-label={`Nova Role para ${membership.userId}`} onChange={(event) => setRoleSelections((current) => ({ ...current, [membership.id]: event.target.value }))} value={roleSelections[membership.id] ?? ""}><option value="">Adicionar Role…</option><option value="predefined:player">Player</option><option value="predefined:manager">Manager</option><option value="predefined:owner">Owner</option>{customRoles.map((role) => <option key={role.id} value={`custom:${role.id}`}>{role.name}</option>)}</select>
-                    <button disabled={!roleSelections[membership.id] || confirmationName !== accountName} onClick={() => void assignRole(membership.id)} type="button">Atribuir</button>
-                    <button aria-label={`Remover membro ${membership.userId}`} className="danger-link" disabled={confirmationName !== accountName} onClick={() => void removeMembership(membership.id)} type="button">Remover</button>
+                    <div className="role-controls">
+                      <select aria-label={`Nova Role para ${membership.userId}`} onChange={(event) => setRoleSelections((current) => ({ ...current, [membership.id]: event.target.value }))} value={roleSelections[membership.id] ?? ""}><option value="">Adicionar Role…</option><option value="predefined:player">Player</option><option value="predefined:manager">Moderador</option><option value="predefined:owner">Owner</option>{customRoles.map((role) => <option key={role.id} value={`custom:${role.id}`}>{role.name}</option>)}</select>
+                      <div><button disabled={!roleSelections[membership.id]} onClick={() => beginRoleAssignment(membership.id)} type="button">Atribuir</button><button aria-label={`Remover membro ${membership.userId}`} className="danger-link" disabled={confirmationName !== accountName} onClick={() => void removeMembership(membership.id)} type="button">Remover</button></div>
+                    </div>
+                    {pendingRoleAssignment === membership.id && <div className="role-confirmation-panel"><div><strong>Confirmar nova Role</strong><p>Você vai atribuir {roleLabel((roleSelections[membership.id] ?? "").split(":", 2)[1] ?? "", customRoles)} a {membership.userId}.</p></div><label>Digite o nome do grupo<input aria-label={`Confirme ${accountName} para atribuir Role a ${membership.userId}`} autoFocus onChange={(event) => setConfirmationName(event.target.value)} placeholder={accountName} value={confirmationName} /></label>{roleActionError && <p className="field-error" role="alert">{roleActionError}</p>}<div className="role-confirmation-actions"><button className="button button-primary" onClick={() => void assignRole(membership.id)} type="button">Confirmar atribuição</button><button className="button button-outline" onClick={() => { setPendingRoleAssignment(null); setRoleActionError(""); }} type="button">Cancelar</button><Link href={`/auth/discord/start?install=0&accountId=${encodeURIComponent(accountId)}`}>Renovar login Discord</Link></div></div>}
                   </div>
                 ))}
               </article>
-              {!isDemo && <label className="confirmation-field">Confirme o nome da conta para mudanças de acesso<input aria-label="Confirme o nome da conta" onChange={(event) => setConfirmationName(event.target.value)} placeholder={accountName} value={confirmationName} /></label>}
+              {!isDemo && <label className="confirmation-field">Para remover membros, Roles ou criar uma Role personalizada, digite o nome do grupo<input aria-label="Confirme o nome da conta" onChange={(event) => setConfirmationName(event.target.value)} placeholder={accountName} value={confirmationName} /></label>}
               <details className="advanced-roles" open={!isDemo && customRoles.length > 0}>
                 <summary>Permissões avançadas e Roles personalizadas</summary>
                 <p>As permissões são aditivas. Criar uma Role exige uma sessão Discord iniciada nos últimos cinco minutos.</p>
@@ -1405,7 +1575,7 @@ export function ConsoleDashboard({
             </div>
           )}
 
-          {section === "configuration" && (
+          {activeSection === "configuration" && (
             <div className="panel-page" data-testid="configuration-panel">
               <div className="panel-heading split"><div><h1>Configuração</h1><p>Veja o impacto, os valores aceitos e a documentação oficial antes de alterar.</p></div><a className="button button-outline" href="https://tech.palworldgame.com/settings-and-operation/configuration/" rel="noreferrer" target="_blank">Documentação do Palworld <Icon name="arrow-right" size={16} /></a></div>
               <div className="config-notice"><span>i</span><p>As alterações criam uma revisão imutável e entram no próximo despertar. Se o World estiver Online, você poderá escolher uma reinicialização segura.</p></div>
@@ -1414,19 +1584,19 @@ export function ConsoleDashboard({
             </div>
           )}
 
-          {section === "backups" && (
+          {activeSection === "backups" && (
             <div className="panel-page" data-testid="backups-panel">
-              <div className="panel-heading split"><div><h1>Backups</h1><p>A última cópia recuperável nunca é removida. Restaurar sempre cria antes um ponto de retorno.</p></div><div className="world-actions"><button aria-label="+ Backup manual" className="button button-primary" disabled={!isDemo && worldStatus !== "sleeping"} onClick={() => void createManualBackup()} type="button"><Icon name="plus" size={17} />Backup manual</button><button className="button button-outline" onClick={() => void exportWorld()} type="button">Exportar World</button></div></div>
+              <div className="panel-heading split"><div><h1>Backups</h1><p>A última cópia recuperável nunca é removida. Restaurar sempre cria antes um ponto de retorno.</p></div><div className="world-actions">{can("backup:create") && <button aria-label="+ Backup manual" className="button button-primary" disabled={!isDemo && worldStatus !== "sleeping"} onClick={() => void createManualBackup()} type="button"><Icon name="plus" size={17} />Backup manual</button>}{can("world:export") && <button className="button button-outline" onClick={() => void exportWorld()} type="button">Exportar World</button>}</div></div>
               <article className="storage-card"><div><small>Armazenamento durável</small><strong>{isDemo ? "3 cópias protegidas" : `${backups.length} cópia${backups.length === 1 ? "" : "s"} protegida${backups.length === 1 ? "" : "s"}`}</strong></div><p>Backups, estado atual e exports usam armazenamento privado criptografado.</p>{exportUrl && <a className="button button-primary" href={exportUrl} rel="noreferrer">Baixar export privado</a>}</article>
               <article className="table-card backup-list">
-                {(isDemo ? [{ id: "demo-backup", kind: "manual" as const, sizeBytes: 1_200_000_000, checksumVerified: true, createdAt: "2026-07-31T23:42:00Z" }] : backups).map((backup) => <div className="backup-row" key={backup.id}><span className="backup-icon"><Icon name={backup.checksumVerified ? "check" : "warning"} size={17} /></span><div><strong>{backupLabels[backup.kind]}</strong><small>{backup.createdAt ? new Date(backup.createdAt).toLocaleString("pt-BR") : "Data indisponível"} · {formatBytes(backup.sizeBytes)} · {backup.checksumVerified ? "checksum verificado" : "verificação pendente"}</small></div><span className={`backup-badge${backup.kind === "manual" ? " manual" : ""}`}>{backup.kind.toUpperCase()}</span><button aria-label={`Restaurar ${backupLabels[backup.kind]}`} disabled={isDemo || worldStatus !== "sleeping"} onClick={() => void restoreBackup(backup.id)} type="button">Restaurar</button></div>)}
+                {(isDemo ? [{ id: "demo-backup", kind: "manual" as const, sizeBytes: 1_200_000_000, checksumVerified: true, createdAt: "2026-07-31T23:42:00Z" }] : backups).map((backup) => <div className="backup-row" key={backup.id}><span className="backup-icon"><Icon name={backup.checksumVerified ? "check" : "warning"} size={17} /></span><div><strong>{backupLabels[backup.kind]}</strong><small>{backup.createdAt ? new Date(backup.createdAt).toLocaleString("pt-BR") : "Data indisponível"} · {formatBytes(backup.sizeBytes)} · {backup.checksumVerified ? "checksum verificado" : "verificação pendente"}</small></div><span className={`backup-badge${backup.kind === "manual" ? " manual" : ""}`}>{backup.kind.toUpperCase()}</span>{can("backup:restore") && <button aria-label={`Restaurar ${backupLabels[backup.kind]}`} disabled={isDemo || worldStatus !== "sleeping"} onClick={() => void restoreBackup(backup.id)} type="button">Restaurar</button>}</div>)}
                 {!isDemo && backups.length === 0 && <p>Nenhum Backup disponível. O primeiro será criado ao concluir o sono seguro.</p>}
               </article>
-              {!isDemo && world && <details className="advanced-roles"><summary>Exclusão e portabilidade</summary>{worldStatus === "pending_deletion" ? <><p>Este World está em Pending Deletion por sete dias. O Backup final permanece protegido e você ainda pode exportar ou cancelar.</p><button className="button button-outline" onClick={() => void cancelWorldDeletion()} type="button">Cancelar exclusão</button></> : <><p>Excluir cria um Backup final e inicia sete dias de proteção. Confirme digitando o nome exato do World.</p><label>Nome do World<input aria-label="Confirme o nome do World" onChange={(event) => setDeletionConfirmation(event.target.value)} value={deletionConfirmation} /></label><button className="button button-outline" disabled={worldStatus !== "sleeping" || deletionConfirmation !== world.name} onClick={() => void scheduleWorldDeletion()} type="button">Agendar exclusão</button></>}</details>}
+              {!isDemo && world && can("world:delete") && <details className="advanced-roles"><summary>Exclusão e portabilidade</summary>{worldStatus === "pending_deletion" ? <><p>Este World está em Pending Deletion por sete dias. O Backup final permanece protegido e você ainda pode exportar ou cancelar.</p><button className="button button-outline" onClick={() => void cancelWorldDeletion()} type="button">Cancelar exclusão</button></> : <><p>Excluir cria um Backup final e inicia sete dias de proteção. Confirme digitando o nome exato do World.</p><label>Nome do World<input aria-label="Confirme o nome do World" onChange={(event) => setDeletionConfirmation(event.target.value)} value={deletionConfirmation} /></label><button className="button button-outline" disabled={worldStatus !== "sleeping" || deletionConfirmation !== world.name} onClick={() => void scheduleWorldDeletion()} type="button">Agendar exclusão</button></>}</details>}
             </div>
           )}
 
-          {section === "activity" && (
+          {activeSection === "activity" && (
             <div className="panel-page" data-testid="activity-panel">
               <div className="panel-heading"><div><h1>Atividade</h1><p>O grupo acompanha o que aconteceu sem expor senha, token ou dados de pagamento.</p></div></div>
               <article className="timeline-card">
@@ -1442,7 +1612,7 @@ export function ConsoleDashboard({
         </div>
 
         <nav className="mobile-nav" aria-label="Navegação móvel">
-          {sections.map((item) => <button className={section === item.id ? "active" : ""} data-testid={`nav-${item.id}`} disabled={!hydrated} key={item.id} onClick={() => setSection(item.id)} type="button"><span><Icon name={item.icon} size={19} /></span><small>{item.label.split(" ")[0]}</small></button>)}
+          {visibleSections.map((item) => <button className={activeSection === item.id ? "active" : ""} data-testid={`nav-${item.id}`} disabled={!hydrated} key={item.id} onClick={() => setSection(item.id)} type="button"><span><Icon name={item.icon} size={19} /></span><small>{item.label.split(" ")[0]}</small></button>)}
         </nav>
       </section>
       {connectionDetails && (

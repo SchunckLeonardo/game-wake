@@ -57,11 +57,21 @@ export function AuthCallback() {
         const { accounts } = (await response.json()) as AccountList;
         const requestedAccountId = fragment.get("accountId");
         const selectedAccount = accounts.find((account) => account.id === requestedAccountId);
-        const next = selectedAccount
+        const pendingInvitation = window.localStorage.getItem(
+          "gamewake:pending-invitation",
+        );
+        const safePendingInvitation =
+          pendingInvitation?.match(/^\/convites\/[0-9a-f-]+\/[0-9a-f-]+$/i)
+            ? pendingInvitation
+            : null;
+        if (safePendingInvitation) {
+          window.localStorage.removeItem("gamewake:pending-invitation");
+        }
+        const next = safePendingInvitation ?? (selectedAccount
           ? `/accounts/${selectedAccount.id}`
           : selectedDiscordGuildId || accounts.length === 0
             ? "/onboarding"
-            : `/accounts/${accounts[0].id}`;
+            : `/accounts/${accounts[0].id}`);
         if (recovery.length > 0) {
           setOwnerRecovery(recovery);
           setDestination(next);

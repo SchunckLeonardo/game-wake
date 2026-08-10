@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 
 
@@ -11,6 +12,11 @@ class PredefinedRole(StrEnum):
 class InvitationStatus(StrEnum):
     PENDING = "pending"
     ACCEPTED = "accepted"
+
+
+class InvitationAccess(StrEnum):
+    PLAY = "play"
+    CONSOLE = "console"
 
 
 class IdentityProvider(StrEnum):
@@ -95,5 +101,18 @@ class Invitation:
     id: str
     account_id: str
     inviter_user_id: str
-    invited_user_id: str
+    invited_user_id: str | None
     status: InvitationStatus
+    access: InvitationAccess = InvitationAccess.PLAY
+    predefined_role: PredefinedRole | None = PredefinedRole.PLAYER
+    custom_role_id: str | None = None
+    world_id: str | None = None
+    expires_at: datetime | None = None
+
+    def __post_init__(self) -> None:
+        if (self.predefined_role is None) == (self.custom_role_id is None):
+            raise ValueError("an Invitation must grant exactly one Role")
+        if self.access is InvitationAccess.PLAY and (
+            self.predefined_role is not PredefinedRole.PLAYER or self.custom_role_id is not None
+        ):
+            raise ValueError("play Invitations must grant the Player Role")

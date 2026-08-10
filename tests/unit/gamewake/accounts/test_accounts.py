@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -182,3 +182,65 @@ def test_only_the_invited_user_can_accept_an_invitation():
             viewer_user_id="user-owner",
         )
     ] == ["user-owner"]
+
+
+def test_shareable_invitation_links_grant_play_or_console_access_once():
+    now = datetime(2026, 8, 10, 12, 0, tzinfo=UTC)
+    accounts = Accounts(InMemoryAccountRepository(), clock=lambda: now)
+    account = accounts.create_account(name="Sexta com os amigos", owner_user_id="owner")
+
+    play = accounts.create_invitation_link(
+        account.id,
+        inviter_user_id="owner",
+        role=PredefinedRole.PLAYER,
+    )
+    manage = accounts.create_invitation_link(
+        account.id,
+        inviter_user_id="owner",
+        role=PredefinedRole.MANAGER,
+    )
+
+    player = accounts.accept_invitation(
+        account.id,
+        play.id,
+        invited_user_id="friend-player",
+    )
+    moderator = accounts.accept_invitation(
+        account.id,
+        manage.id,
+        invited_user_id="friend-moderator",
+    )
+
+    assert play.invited_user_id is None
+    assert play.expires_at == now + timedelta(days=7)
+    assert play.access.value == "play"
+    assert player.roles == frozenset({PredefinedRole.PLAYER})
+    assert manage.access.value == "console"
+    assert moderator.roles == frozenset({PredefinedRole.MANAGER})
+    with pytest.raises(ValueError, match="no longer pending"):
+        accounts.accept_invitation(
+            account.id,
+            play.id,
+            invited_user_id="someone-else",
+        )
+
+
+def test_expired_shareable_invitation_link_cannot_be_accepted():
+    now = datetime(2026, 8, 10, 12, 0, tzinfo=UTC)
+    current = [now]
+    accounts = Accounts(InMemoryAccountRepository(), clock=lambda: current[0])
+    account = accounts.create_account(name="Grupo", owner_user_id="owner")
+    invitation = accounts.create_invitation_link(
+        account.id,
+        inviter_user_id="owner",
+        role=PredefinedRole.PLAYER,
+        expires_in=timedelta(hours=1),
+    )
+    current[0] = now + timedelta(hours=2)
+
+    with pytest.raises(ValueError, match="expired"):
+        accounts.accept_invitation(
+            account.id,
+            invitation.id,
+            invited_user_id="friend",
+        )

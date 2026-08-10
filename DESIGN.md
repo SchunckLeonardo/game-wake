@@ -261,7 +261,13 @@ O World circular pintado, recortado em transparência, é a silhueta focal. Íco
 
 ### Navigation
 
-A landing usa links discretos e entrada escura compacta. A Console usa sidebar de Tinta Noturna com item ativo em Verde Despertar; no mobile, os mesmos seis destinos migram para uma barra inferior fixa e o ativo combina cor, ícone e posição estável.
+A landing usa links discretos e entrada escura compacta. A Console usa sidebar de Tinta Noturna com item ativo em Verde Despertar; no mobile, os destinos permitidos migram para uma barra inferior fixa e o ativo combina cor, ícone e posição estável. A Role efetiva fica visível junto da identidade no desktop e abaixo do título da área no mobile. Áreas sem permissão não aparecem como controles desabilitados.
+
+### Access and Invitation Choice
+
+Convites separam duas decisões em opções grandes e mutuamente exclusivas: **Só jogar** entrega Player; **Gerenciar Console** revela uma segunda escolha de Role, limitada a Moderador ou Role personalizada. A opção escolhida usa hairline Verde Despertar e outline Índigo de Jornada, enquanto apenas o botão que cria o link recebe a superfície verde prioritária. No mobile, as escolhas e o campo de Role viram uma única pilha antes da ação.
+
+**The Permission Is Visible Rule.** Mostre a Role efetiva e somente as áreas permitidas; não faça o usuário descobrir sua permissão por tentativa, erro ou botões mortos.
 
 ### World Table / Command Table
 
@@ -277,6 +283,7 @@ A World Table persuasiva ancora amigos, Discord, preço e backup ao redor de um 
 - **Do** combinar ícone linear, texto e estado para que informação não dependa apenas de cor.
 - **Do** preservar foco visível, navegação por teclado, redução de movimento e contraste WCAG 2.2 AA.
 - **Do** manter tracking negativo em -0.04em ou mais aberto.
+- **Do** tornar a Role atual visível e esconder áreas que ela não pode usar.
 
 ### Don't:
 
