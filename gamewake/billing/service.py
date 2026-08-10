@@ -1022,6 +1022,56 @@ class Billing:
                 return entry
         raise ConcurrentBillingUpdate("could not apply Availability Credit after retries")
 
+    def apply_support_credit(
+        self,
+        account_id: str,
+        *,
+        amount: Decimal,
+        reference: str,
+        actor_user_id: str,
+        reason: str,
+        idempotency_key: str,
+    ) -> LedgerEntry:
+        normalized = self._positive_money(amount)
+        reference = reference.strip()
+        actor_user_id = actor_user_id.strip()
+        reason = reason.strip()
+        if not reference or not actor_user_id or not reason or not idempotency_key.strip():
+            raise ValueError("Support Credit requires reference, actor, reason and idempotency key")
+        for _ in range(100):
+            snapshot = self._repository.get(account_id)
+            existing = next(
+                (entry for entry in snapshot.entries if entry.idempotency_key == idempotency_key),
+                None,
+            )
+            if existing is not None:
+                if (
+                    existing.entry_type is not LedgerEntryType.SUPPORT_CREDIT
+                    or existing.amount != normalized
+                    or existing.reference != reference
+                    or existing.actor_user_id != actor_user_id
+                    or existing.reason != reason
+                ):
+                    raise ValueError("idempotency key was used for another Ledger Entry")
+                return existing
+            entry = LedgerEntry(
+                id=str(uuid4()),
+                account_id=account_id,
+                entry_type=LedgerEntryType.SUPPORT_CREDIT,
+                amount=normalized,
+                reference=reference,
+                idempotency_key=idempotency_key,
+                occurred_at=self._clock(),
+                actor_user_id=actor_user_id,
+                reason=reason,
+            )
+            if self._try_save(
+                replace(snapshot, entries=(*snapshot.entries, entry)),
+                expected_version=snapshot.version,
+            ):
+                return entry
+        raise ConcurrentBillingUpdate("could not apply Support Credit after retries")
+
     def capture_reservation(
         self,
         account_id: str,

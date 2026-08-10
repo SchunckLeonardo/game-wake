@@ -236,6 +236,7 @@ class WorldOperationWorker:
             updated_world = replace(
                 world,
                 status=WorldStatus.ONLINE,
+                empty_since=None,
                 version=world.version + 1,
             )
             self._repository.save_operation(
@@ -362,6 +363,7 @@ class WorldOperationWorker:
                 online = replace(
                     world,
                     status=WorldStatus.ONLINE,
+                    empty_since=None,
                     version=world.version + 1,
                 )
                 self._repository.save_operation(
@@ -457,6 +459,7 @@ class WorldOperationWorker:
                 session_quote_id=None,
                 usage_reservation_id=None,
                 runtime_started_at=None,
+                empty_since=None,
                 version=world.version + 1,
             )
             self._repository.save_operation(

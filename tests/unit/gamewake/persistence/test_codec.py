@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -89,6 +90,25 @@ def test_round_trips_decimal_enum_tuple_and_frozenset_values() -> None:
     assert decode_domain(encode_domain(frozenset({Permission.WAKE_WORLD}))) == frozenset(
         {Permission.WAKE_WORLD}
     )
+
+
+def test_old_ledger_payloads_decode_without_support_audit_fields() -> None:
+    entry = LedgerEntry(
+        "entry-1",
+        "account-1",
+        LedgerEntryType.RUNTIME_CHARGE,
+        Decimal("-0.73"),
+        "runtime-1",
+        "usage-1",
+        datetime(2026, 8, 10, 12, 0, tzinfo=UTC),
+    )
+    payload = json.loads(encode_domain(entry))
+    del payload["fields"]["actor_user_id"]
+    del payload["fields"]["reason"]
+
+    decoded = decode_domain(json.dumps(payload), LedgerEntry)
+
+    assert decoded == entry
 
 
 def test_rejects_unknown_domain_type_instead_of_importing_it() -> None:

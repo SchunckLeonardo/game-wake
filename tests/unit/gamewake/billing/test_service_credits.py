@@ -1,6 +1,8 @@
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
+import pytest
+
 from gamewake.billing import (
     Billing,
     InMemoryBillingRepository,
@@ -130,3 +132,39 @@ def test_three_minute_confirmed_outage_gets_one_availability_credit():
     assert credit.entry_type is LedgerEntryType.AVAILABILITY_CREDIT
     assert credit.amount == Decimal("0.18")
     assert billing.get_wallet("account-1").balance == Decimal("19.58")
+
+
+def test_support_credit_records_actor_reason_and_replays_idempotently():
+    billing = Billing(InMemoryBillingRepository())
+
+    credit = billing.apply_support_credit(
+        "account-1",
+        amount=Decimal("0.73"),
+        reference="incident:auto-sleep:28f2772d-b680-4714-961c-e0129cee4806",
+        actor_user_id="owner-1",
+        reason="Auto Sleep reused the previous session idle timestamp",
+        idempotency_key="support:auto-sleep:28f2772d-b680-4714-961c-e0129cee4806",
+    )
+    repeated = billing.apply_support_credit(
+        "account-1",
+        amount=Decimal("0.73"),
+        reference="incident:auto-sleep:28f2772d-b680-4714-961c-e0129cee4806",
+        actor_user_id="owner-1",
+        reason="Auto Sleep reused the previous session idle timestamp",
+        idempotency_key="support:auto-sleep:28f2772d-b680-4714-961c-e0129cee4806",
+    )
+
+    assert repeated == credit
+    assert credit.entry_type is LedgerEntryType.SUPPORT_CREDIT
+    assert credit.actor_user_id == "owner-1"
+    assert credit.reason == "Auto Sleep reused the previous session idle timestamp"
+    assert billing.get_wallet("account-1").balance == Decimal("0.73")
+    with pytest.raises(ValueError, match="another Ledger Entry"):
+        billing.apply_support_credit(
+            "account-1",
+            amount=Decimal("0.74"),
+            reference="incident:auto-sleep:28f2772d-b680-4714-961c-e0129cee4806",
+            actor_user_id="owner-1",
+            reason="Auto Sleep reused the previous session idle timestamp",
+            idempotency_key="support:auto-sleep:28f2772d-b680-4714-961c-e0129cee4806",
+        )

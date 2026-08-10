@@ -89,12 +89,22 @@ class Storage:
 class Billing:
     def __init__(self):
         self.storage_calls = []
+        self.support_credit_calls = []
 
     def charge_monthly_storage(self, account_id, **kwargs):
         self.storage_calls.append((account_id, kwargs))
         if account_id == "account-2":
             raise InsufficientFundsError("insufficient")
         return SimpleNamespace(id="storage-charge-1")
+
+    def apply_support_credit(self, account_id, **kwargs):
+        self.support_credit_calls.append((account_id, kwargs))
+        return SimpleNamespace(
+            id="support-credit-1",
+            entry_type=SimpleNamespace(value="support_credit"),
+            amount=kwargs["amount"],
+            reference=kwargs["reference"],
+        )
 
 
 class Repository:
@@ -287,6 +297,42 @@ def test_active_world_monitor_recovers_a_sleep_dispatch_after_a_retry():
     assert result["monitor_checks"] == 1
     assert composed.worker.monitor_calls == []
     assert orchestrator.calls == [("account-1", "sleep-existing")]
+
+
+def test_support_credit_action_preserves_incident_audit_fields():
+    composed = services()
+
+    result = gamewake_worker.handle_event(
+        {
+            "action": "apply_support_credit",
+            "account_id": "account-1",
+            "amount_brl": "0.73",
+            "reference": "incident:auto-sleep:operation-1",
+            "actor_user_id": "owner-1",
+            "reason": "Auto Sleep reused an old idle timestamp",
+            "idempotency_key": "support:auto-sleep:operation-1",
+        },
+        services=composed,
+    )
+
+    assert result == {
+        "ledger_entry_id": "support-credit-1",
+        "entry_type": "support_credit",
+        "amount_brl": "0.73",
+        "reference": "incident:auto-sleep:operation-1",
+    }
+    assert composed.billing.support_credit_calls == [
+        (
+            "account-1",
+            {
+                "amount": Decimal("0.73"),
+                "reference": "incident:auto-sleep:operation-1",
+                "actor_user_id": "owner-1",
+                "reason": "Auto Sleep reused an old idle timestamp",
+                "idempotency_key": "support:auto-sleep:operation-1",
+            },
+        )
+    ]
 
 
 def test_daily_data_maintenance_purges_due_deletions_and_evaluates_storage_grace():

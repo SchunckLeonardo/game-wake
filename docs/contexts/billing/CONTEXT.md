@@ -54,6 +54,10 @@ _Avoid_: free Runtime Usage, manual refund request, successful short session
 O lançamento compensatório pelo período em que um World anteriormente `Online` fica comprovadamente indisponível.
 _Avoid_: manual service credit, failed-wake refund, monitoring blip
 
+**Support Credit**:
+Uma entrada compensatória idempotente, com responsável e motivo, usada para corrigir impacto financeiro confirmado de um incidente do GameWake sem alterar o lançamento original.
+_Avoid_: editar o Ledger, contribuição fictícia, crédito sem evidência
+
 ## Cost protection
 
 **Storage Allowance**:

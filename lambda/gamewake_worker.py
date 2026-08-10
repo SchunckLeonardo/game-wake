@@ -228,6 +228,33 @@ def handle_event(event: dict[str, Any], *, services: Any) -> dict[str, Any]:
             "continue_monitoring": world.status is WorldStatus.ONLINE and operation is None,
             "sleep_operation_id": operation.id if operation is not None else None,
         }
+    if action == "apply_support_credit":
+        account_id = event.get("account_id")
+        reference = event.get("reference")
+        actor_user_id = event.get("actor_user_id")
+        reason = event.get("reason")
+        idempotency_key = event.get("idempotency_key")
+        if not all(
+            isinstance(value, str) and value.strip()
+            for value in (account_id, reference, actor_user_id, reason, idempotency_key)
+        ):
+            raise ValueError(
+                "account_id, reference, actor_user_id, reason and idempotency_key are required"
+            )
+        credit = services.billing.apply_support_credit(
+            account_id,
+            amount=Decimal(str(event.get("amount_brl"))),
+            reference=reference,
+            actor_user_id=actor_user_id,
+            reason=reason,
+            idempotency_key=idempotency_key,
+        )
+        return {
+            "ledger_entry_id": credit.id,
+            "entry_type": credit.entry_type.value,
+            "amount_brl": str(credit.amount),
+            "reference": credit.reference,
+        }
     if action == "maintain_data":
         raw_observed_at = event.get("observed_at")
         observed_at = (

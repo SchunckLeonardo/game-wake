@@ -22,6 +22,7 @@ class LedgerEntryType(StrEnum):
     STORAGE_CHARGE = "storage_charge"
     WAKE_GUARANTEE = "wake_guarantee"
     AVAILABILITY_CREDIT = "availability_credit"
+    SUPPORT_CREDIT = "support_credit"
     REFUND = "refund"
     DISPUTE = "dispute"
 
@@ -160,6 +161,8 @@ class LedgerEntry:
     reference: str
     idempotency_key: str
     occurred_at: datetime
+    actor_user_id: str | None = None
+    reason: str | None = None
 
 
 @dataclass(frozen=True)

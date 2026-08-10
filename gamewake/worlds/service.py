@@ -322,6 +322,7 @@ class Worlds:
             replace(
                 world,
                 status=WorldStatus.WAKING,
+                empty_since=None,
                 version=world.version + 1,
             ),
             operation,
