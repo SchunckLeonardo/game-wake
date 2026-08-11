@@ -89,6 +89,14 @@ test("renders the responsive Console with every MVP management surface", async (
   assert.match(html, /Configuração/);
   assert.match(html, /Backups/);
   assert.match(html, /Atividade/);
+  assert.match(
+    html,
+    /<button(?=[^>]*aria-label="Trocar grupo ou servidor")(?=[^>]*disabled="")[^>]*>/,
+  );
+  assert.match(
+    html,
+    /<button(?=[^>]*aria-label="Abrir menu do usuário")(?=[^>]*disabled="")[^>]*>/,
+  );
   assert.doesNotMatch(html, /segredo-do-grupo|203\.0\.113\.10/);
 });
 

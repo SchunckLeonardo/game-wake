@@ -1349,6 +1349,7 @@ export function ConsoleDashboard({
           aria-expanded={accountSwitcherOpen}
           aria-label="Trocar grupo ou servidor"
           className="account-switcher"
+          disabled={!hydrated}
           onClick={() => void openAccountSwitcher()}
           type="button"
         >
@@ -1380,6 +1381,7 @@ export function ConsoleDashboard({
           aria-expanded={profileMenuOpen}
           aria-label="Abrir menu do usuário"
           className="sidebar-foot"
+          disabled={!hydrated}
           onClick={() => { setProfileMenuOpen((current) => !current); setSignOutConfirmation(false); }}
           type="button"
         >
@@ -1401,6 +1403,7 @@ export function ConsoleDashboard({
                 aria-expanded={accountSwitcherOpen}
                 aria-label="Trocar grupo ou servidor"
                 className="discord-switch-link"
+                disabled={!hydrated}
                 onClick={() => void openAccountSwitcher()}
                 type="button"
               >
@@ -1412,6 +1415,7 @@ export function ConsoleDashboard({
               aria-expanded={profileMenuOpen}
               aria-label="Abrir menu do usuário"
               className="icon-button mobile-profile-button"
+              disabled={!hydrated}
               onClick={() => { setProfileMenuOpen((current) => !current); setSignOutConfirmation(false); }}
               type="button"
             ><span className="avatar avatar-small">{isDemo ? "L" : "V"}</span></button>
