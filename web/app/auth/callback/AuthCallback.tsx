@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import {
   clearGameWakeSession,
   gameWakeFetch,
+  getGameWakeLastAccountId,
   setGameWakeDiscordGuildId,
+  setGameWakeLastAccountId,
   setGameWakeSession,
 } from "../../gamewakeApi";
 import { Icon } from "../../Icon";
@@ -56,7 +58,11 @@ export function AuthCallback() {
         const response = await gameWakeFetch("/api/v1/me/accounts");
         const { accounts } = (await response.json()) as AccountList;
         const requestedAccountId = fragment.get("accountId");
-        const selectedAccount = accounts.find((account) => account.id === requestedAccountId);
+        const requestedAccount = accounts.find((account) => account.id === requestedAccountId);
+        const rememberedAccount = selectedDiscordGuildId
+          ? undefined
+          : accounts.find((account) => account.id === getGameWakeLastAccountId());
+        const selectedAccount = requestedAccount ?? rememberedAccount;
         const pendingInvitation = window.localStorage.getItem(
           "gamewake:pending-invitation",
         );
@@ -72,6 +78,8 @@ export function AuthCallback() {
           : selectedDiscordGuildId || accounts.length === 0
             ? "/onboarding"
             : `/accounts/${accounts[0].id}`);
+        const destinationAccount = selectedAccount ?? (!selectedDiscordGuildId ? accounts[0] : undefined);
+        if (destinationAccount) setGameWakeLastAccountId(destinationAccount.id);
         if (recovery.length > 0) {
           setOwnerRecovery(recovery);
           setDestination(next);

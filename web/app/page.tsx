@@ -117,7 +117,7 @@ export default function Home() {
             <span className="station-icon amber"><Icon name="wallet" /></span>
             <div>
               <h2>Preço por hora</h2>
-              <strong>Exemplo beta · R$ 5,50/h</strong>
+              <strong>Closed Beta · R$ 2,49/h</strong>
               <p>Preço travado para a sessão e cobrança pelo tempo realmente usado.</p>
             </div>
           </article>

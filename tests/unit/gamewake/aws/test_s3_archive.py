@@ -211,6 +211,19 @@ def test_export_writes_a_portable_manifest_with_a_short_lived_state_url():
     )
 
 
+def test_archive_client_forces_signature_v4_for_kms_encrypted_downloads():
+    calls = []
+
+    def client_factory(service, **kwargs):
+        calls.append((service, kwargs))
+        return FakeS3Client()
+
+    S3WorldArchiveStore("world-data", client_factory=client_factory)
+
+    assert calls[0][0] == "s3"
+    assert calls[0][1]["config"].signature_version == "s3v4"
+
+
 def test_delete_world_data_removes_only_the_selected_tenant_prefixes():
     client = FakeS3Client()
     client.objects["states/other-account/world-123/keep.tar.zst"] = {

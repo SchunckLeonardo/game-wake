@@ -2,7 +2,11 @@
 
 import { useCallback, useState } from "react";
 import { ConsoleDashboard } from "../console/ConsoleDashboard";
-import { gameWakeFetch } from "../gamewakeApi";
+import {
+  gameWakeFetch,
+  getGameWakeLastAccountId,
+  setGameWakeLastAccountId,
+} from "../gamewakeApi";
 import { Icon } from "../Icon";
 import { DiscordActivityBridge } from "./DiscordActivityBridge";
 
@@ -19,7 +23,12 @@ export function DiscordActivityExperience() {
       setNeedsOnboarding(true);
       return;
     }
-    setAccountId(accounts[0].id);
+    const remembered = accounts.find(
+      (account) => account.id === getGameWakeLastAccountId(),
+    );
+    const selected = remembered ?? accounts[0];
+    setGameWakeLastAccountId(selected.id);
+    setAccountId(selected.id);
   }, []);
 
   return (

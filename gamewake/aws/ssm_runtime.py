@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from secrets import token_urlsafe
 from typing import Any
 
+from gamewake.control_plane import WorldPasswordSettings
 from gamewake.worlds import Runtime, StoredWorldState, World
 from gamewake.worlds.contracts import WorldRepository
 
@@ -27,6 +28,128 @@ _HOST_ACTIONS = frozenset(
 
 class RuntimeNotReady(RuntimeError):
     """The managed host is registered in SSM but is still bootstrapping."""
+
+
+class SsmWorldPasswordManager:
+    """Keeps Palworld entry credentials in SecureString parameters, never in World data."""
+
+    _MODES = frozenset({"fixed", "random_each_run"})
+
+    def __init__(
+        self,
+        *,
+        parameter_prefix: str,
+        client: Any | None = None,
+        password_factory: Any | None = None,
+    ) -> None:
+        if not parameter_prefix:
+            raise ValueError("per-World parameter prefix is required")
+        if client is None:
+            import boto3
+
+            client = boto3.client("ssm")
+        self._parameter_prefix = parameter_prefix.rstrip("/")
+        self._client = client
+        self._password_factory = password_factory or (lambda: token_urlsafe(12))
+
+    def get(self, world: World) -> WorldPasswordSettings:
+        mode = self._read_optional(self._name(world, "server-password-mode")) or "fixed"
+        if mode not in self._MODES:
+            raise ValueError("stored World password mode is invalid")
+        return WorldPasswordSettings(mode=mode)
+
+    def configure(
+        self,
+        world: World,
+        *,
+        mode: str,
+        password: str | None,
+    ) -> WorldPasswordSettings:
+        if mode not in self._MODES:
+            raise ValueError("password mode must be fixed or random_each_run")
+        if mode == "fixed":
+            self._validate_password(password)
+            self._client.put_parameter(
+                Name=self._name(world, "server-password"),
+                Description="GameWake managed per-World Palworld entry credential",
+                Type="SecureString",
+                Value=password,
+                Overwrite=True,
+            )
+        elif password is not None:
+            raise ValueError("random_each_run does not accept a fixed password")
+        self._client.put_parameter(
+            Name=self._name(world, "server-password-mode"),
+            Description="GameWake per-World Palworld password rotation mode",
+            Type="String",
+            Value=mode,
+            Overwrite=True,
+        )
+        return WorldPasswordSettings(mode=mode)
+
+    def prepare_for_run(self, world: World, *, idempotency_key: str) -> None:
+        settings = self.get(world)
+        password_name = self._name(world, "server-password")
+        if settings.mode == "fixed":
+            self._ensure_secret(password_name)
+            return
+
+        rotation_name = self._name(world, "server-password-rotation")
+        if self._read_optional(rotation_name) == idempotency_key:
+            return
+        generated = self._password_factory()
+        self._validate_password(generated)
+        self._client.put_parameter(
+            Name=password_name,
+            Description="GameWake managed per-World Palworld entry credential",
+            Type="SecureString",
+            Value=generated,
+            Overwrite=True,
+        )
+        self._client.put_parameter(
+            Name=rotation_name,
+            Description="Idempotency marker for the current World password rotation",
+            Type="String",
+            Value=idempotency_key,
+            Overwrite=True,
+        )
+
+    def _ensure_secret(self, name: str) -> None:
+        if self._read_optional(name) is not None:
+            return
+        try:
+            self._client.put_parameter(
+                Name=name,
+                Description="GameWake managed per-World Palworld entry credential",
+                Type="SecureString",
+                Value=self._password_factory(),
+                Overwrite=False,
+            )
+        except Exception as error:
+            code = getattr(error, "response", {}).get("Error", {}).get("Code")
+            if code != "ParameterAlreadyExists":
+                raise
+
+    def _read_optional(self, name: str) -> str | None:
+        try:
+            return str(
+                self._client.get_parameter(Name=name, WithDecryption=False)["Parameter"]["Value"]
+            )
+        except Exception as error:
+            code = getattr(error, "response", {}).get("Error", {}).get("Code")
+            if code == "ParameterNotFound":
+                return None
+            raise
+
+    def _name(self, world: World, suffix: str) -> str:
+        return f"{self._parameter_prefix}/{world.account_id}/{world.id}/{suffix}"
+
+    @staticmethod
+    def _validate_password(password: object) -> None:
+        if not isinstance(password, str) or not 6 <= len(password) <= 64:
+            raise ValueError("fixed password must contain between 6 and 64 characters")
+        if any(ord(character) < 32 or ord(character) == 127 for character in password):
+            raise ValueError("fixed password cannot contain control characters")
 
 
 class SsmCommandRunner:
@@ -116,6 +239,7 @@ class SsmPalworldTemplate:
         base_configuration: dict[str, Any] | None = None,
         client: Any | None = None,
         password_factory: Any = token_urlsafe,
+        password_manager: SsmWorldPasswordManager | None = None,
     ) -> None:
         self._runner = runner
         self._repository = repository
@@ -127,6 +251,18 @@ class SsmPalworldTemplate:
             client = boto3.client("ssm")
         self._client = client
         self._password_factory = password_factory
+        self._password_manager = password_manager
+        if (
+            self._password_manager is None
+            and repository is not None
+            and self._parameter_prefix is not None
+            and client is not None
+        ):
+            self._password_manager = SsmWorldPasswordManager(
+                parameter_prefix=self._parameter_prefix,
+                client=client,
+                password_factory=password_factory,
+            )
 
     def apply_configuration(
         self,
@@ -155,7 +291,9 @@ class SsmPalworldTemplate:
                 Value=json.dumps(configuration, separators=(",", ":"), sort_keys=True),
                 Overwrite=True,
             )
-            self._ensure_secret(server_password_parameter)
+            if self._password_manager is None:
+                raise RuntimeError("per-World password manager is not configured")
+            self._password_manager.prepare_for_run(world, idempotency_key=idempotency_key)
             self._ensure_secret(admin_password_parameter)
             arguments = (
                 config_parameter,

@@ -6,7 +6,9 @@ import {
   GAMEWAKE_KNOWN_USER_KEY,
   clearGameWakeSession,
   gameWakeFetch,
+  getGameWakeLastAccountId,
   getGameWakeSession,
+  setGameWakeLastAccountId,
 } from "../../gamewakeApi";
 
 export function AuthEntry() {
@@ -23,8 +25,12 @@ export function AuthEntry() {
       try {
         const response = await gameWakeFetch("/api/v1/me/accounts");
         const payload = (await response.json()) as { accounts: Array<{ id: string }> };
+        const remembered = getGameWakeLastAccountId();
+        const selected = payload.accounts.find((account) => account.id === remembered)
+          ?? payload.accounts[0];
+        if (selected) setGameWakeLastAccountId(selected.id);
         window.location.replace(
-          payload.accounts.length > 0 ? `/accounts/${payload.accounts[0].id}` : "/onboarding",
+          selected ? `/accounts/${selected.id}` : "/onboarding",
         );
       } catch {
         clearGameWakeSession();

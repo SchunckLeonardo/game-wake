@@ -8,6 +8,7 @@ from .ssm_runtime import (
     S3WorldStateStore,
     SsmCommandRunner,
     SsmPalworldTemplate,
+    SsmWorldPasswordManager,
 )
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "S3WorldStateStore",
     "SsmCommandRunner",
     "SsmPalworldTemplate",
+    "SsmWorldPasswordManager",
 ]

@@ -52,6 +52,10 @@ export async function generateMetadata(): Promise<Metadata> {
       template: "GameWake | %s",
     },
     description,
+    icons: {
+      icon: "/icon.svg",
+      shortcut: "/icon.svg",
+    },
     openGraph: {
       type: "website",
       locale: "pt_BR",

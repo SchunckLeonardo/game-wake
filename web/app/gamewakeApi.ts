@@ -1,6 +1,7 @@
 export const GAMEWAKE_SESSION_KEY = "gamewake_session";
 export const GAMEWAKE_DISCORD_GUILD_ID_KEY = "gamewake_discord_guild_id";
 export const GAMEWAKE_KNOWN_USER_KEY = "gamewake_known_user";
+export const GAMEWAKE_LAST_ACCOUNT_KEY = "gamewake:last-account";
 
 function migrateSessionValue(key: string) {
   const persisted = window.localStorage.getItem(key);
@@ -25,6 +26,22 @@ export function setGameWakeSession(session: string) {
 export function clearGameWakeSession() {
   window.localStorage.removeItem(GAMEWAKE_SESSION_KEY);
   window.sessionStorage.removeItem(GAMEWAKE_SESSION_KEY);
+}
+
+export function getGameWakeLastAccountId() {
+  return window.localStorage.getItem(GAMEWAKE_LAST_ACCOUNT_KEY);
+}
+
+export function setGameWakeLastAccountId(accountId: string) {
+  window.localStorage.setItem(GAMEWAKE_LAST_ACCOUNT_KEY, accountId);
+}
+
+export function getGameWakeLastWorldId(accountId: string) {
+  return window.localStorage.getItem(`gamewake:last-world:${accountId}`);
+}
+
+export function setGameWakeLastWorldId(accountId: string, worldId: string) {
+  window.localStorage.setItem(`gamewake:last-world:${accountId}`, worldId);
 }
 
 export function getGameWakeDiscordGuildId() {

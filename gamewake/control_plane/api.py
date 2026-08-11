@@ -414,6 +414,22 @@ class GameWakeApi:
                 viewer_user_id=request.user_id,
             )
             return ApiResponse(200, {"connection": self._connection(details)})
+        if request.method == "GET" and parts[6:] == ("access", "password"):
+            settings = self._application.world_password_settings(
+                account_id,
+                world_id,
+                viewer_user_id=request.user_id,
+            )
+            return ApiResponse(200, {"password": {"mode": settings.mode}})
+        if request.method == "PATCH" and parts[6:] == ("access", "password"):
+            settings = self._application.update_world_password_settings(
+                account_id,
+                world_id,
+                actor_user_id=request.user_id,
+                mode=self._required_string(request.body, "mode"),
+                password=self._optional_string(request.body, "password"),
+            )
+            return ApiResponse(200, {"password": {"mode": settings.mode}})
         if request.method == "GET" and parts[6:] == ("configuration", "schema"):
             template = self._application.configuration_schema(
                 account_id,

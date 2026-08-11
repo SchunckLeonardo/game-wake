@@ -8,6 +8,9 @@ import {
   clearGameWakeSession,
   gameWakeFetch,
   gameWakeIdempotencyKey,
+  getGameWakeLastWorldId,
+  setGameWakeLastAccountId,
+  setGameWakeLastWorldId,
 } from "../gamewakeApi";
 import { useHydrated } from "../useHydrated";
 
@@ -59,6 +62,16 @@ type ApiAccountAccess = {
   roles: string[];
   permissions: string[];
 };
+
+type ApiAccountSummary = {
+  id: string;
+  name: string;
+  discordGuildId?: string | null;
+  access?: ApiAccountAccess;
+  worlds: ApiWorld[];
+};
+
+type WorldPasswordMode = "fixed" | "random_each_run";
 
 type WorldBudget = {
   worldId: string;
@@ -325,6 +338,11 @@ export function ConsoleDashboard({
     roles: isDemo ? ["owner"] : [],
     permissions: isDemo ? legacyOwnerPermissions : [],
   });
+  const [availableAccounts, setAvailableAccounts] = useState<ApiAccountSummary[]>([]);
+  const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
+  const [accountSwitcherLoading, setAccountSwitcherLoading] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [signOutConfirmation, setSignOutConfirmation] = useState(false);
   const [backups, setBackups] = useState<ApiBackup[]>([]);
   const [activityEvents, setActivityEvents] = useState<ApiActivityEvent[]>([]);
   const [worldOperations, setWorldOperations] = useState<ApiOperation[]>([]);
@@ -348,6 +366,10 @@ export function ConsoleDashboard({
     isDemo ? { worldId: "palpagos", period: "2026-07", monthlyLimit: "80.00", spent: "31.20", reserved: "0.00", committed: "31.20", percentage: "39.00", wakeAllowed: true } : null,
   );
   const [budgetLimit, setBudgetLimit] = useState("80.00");
+  const [passwordMode, setPasswordMode] = useState<WorldPasswordMode>("fixed");
+  const [savedPasswordMode, setSavedPasswordMode] = useState<WorldPasswordMode>("fixed");
+  const [fixedPassword, setFixedPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
 
   const statusCopy = useMemo(
     () =>
@@ -463,7 +485,11 @@ export function ConsoleDashboard({
       const worldsPayload = worldsResult.value;
       setWorlds(worldsPayload.worlds);
       setWorld((current) => {
-        const selected = worldsPayload.worlds.find((item) => item.id === current?.id) ?? worldsPayload.worlds[0] ?? null;
+        const rememberedWorldId = getGameWakeLastWorldId(accountId);
+        const selected = worldsPayload.worlds.find((item) => item.id === current?.id)
+          ?? worldsPayload.worlds.find((item) => item.id === rememberedWorldId)
+          ?? worldsPayload.worlds[0]
+          ?? null;
         if (selected) setWorldStatus(selected.status);
         return selected;
       });
@@ -500,6 +526,24 @@ export function ConsoleDashboard({
   useEffect(() => {
     void Promise.resolve().then(loadLiveState);
   }, [loadLiveState]);
+
+  useEffect(() => {
+    if (isDemo || !world) return;
+    setGameWakeLastAccountId(accountId);
+    setGameWakeLastWorldId(accountId, world.id);
+  }, [accountId, isDemo, world]);
+
+  useEffect(() => {
+    if (!accountSwitcherOpen && !profileMenuOpen) return;
+    function closeMenus(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setAccountSwitcherOpen(false);
+      setProfileMenuOpen(false);
+      setSignOutConfirmation(false);
+    }
+    window.addEventListener("keydown", closeMenus);
+    return () => window.removeEventListener("keydown", closeMenus);
+  }, [accountSwitcherOpen, profileMenuOpen]);
 
   useEffect(() => {
     let active = true;
@@ -641,9 +685,10 @@ export function ConsoleDashboard({
     async function loadConfiguration() {
       try {
         const base = `/api/v1/accounts/${accountId}/worlds/${world.id}/configuration`;
-        const [schemaResponse, revisionResponse] = await Promise.all([
+        const [schemaResponse, revisionResponse, passwordResponse] = await Promise.all([
           gameWakeFetch(`${base}/schema`),
           gameWakeFetch(base),
+          gameWakeFetch(`/api/v1/accounts/${accountId}/worlds/${world.id}/access/password`),
         ]);
         const schema = (await schemaResponse.json()) as {
           template: { configurationFields: ConfigurationField[] };
@@ -651,8 +696,15 @@ export function ConsoleDashboard({
         const revision = (await revisionResponse.json()) as {
           revision: { values: Record<string, string | number | boolean> };
         };
+        const password = (await passwordResponse.json()) as {
+          password: { mode: WorldPasswordMode };
+        };
         setLiveConfigurationFields(schema.template.configurationFields);
         setConfigurationValues(revision.revision.values);
+        setPasswordMode(password.password.mode);
+        setSavedPasswordMode(password.password.mode);
+        setFixedPassword("");
+        setPasswordError("");
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : "Falha ao carregar configuração.");
       }
@@ -720,8 +772,8 @@ export function ConsoleDashboard({
     if (isDemo) {
       setWakeEstimate({
         currency: "BRL",
-        hourlyRate: "5.50",
-        minimumReservation: "2.30",
+        hourlyRate: "2.49",
+        minimumReservation: "1.04",
         reservedMinutes: 25,
       });
       return;
@@ -947,28 +999,103 @@ export function ConsoleDashboard({
     }
   }
 
+  async function openAccountSwitcher() {
+    setAccountSwitcherOpen(true);
+    setProfileMenuOpen(false);
+    if (isDemo) {
+      setAvailableAccounts([{
+        id: "demo",
+        name: accountName,
+        discordGuildId,
+        access: accountAccess,
+        worlds,
+      }]);
+      return;
+    }
+    setAccountSwitcherLoading(true);
+    try {
+      const response = await gameWakeFetch("/api/v1/me/accounts");
+      const payload = (await response.json()) as {
+        accounts: Array<Omit<ApiAccountSummary, "worlds">>;
+      };
+      const choices = await Promise.all(payload.accounts.map(async (account) => {
+        try {
+          const worldsResponse = await gameWakeFetch(`/api/v1/accounts/${account.id}/worlds`);
+          const worldsPayload = (await worldsResponse.json()) as { worlds: ApiWorld[] };
+          return { ...account, worlds: worldsPayload.worlds };
+        } catch {
+          return { ...account, worlds: [] };
+        }
+      }));
+      setAvailableAccounts(choices);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível listar seus grupos.");
+    } finally {
+      setAccountSwitcherLoading(false);
+    }
+  }
+
+  function selectWorld(item: ApiWorld) {
+    setWorld(item);
+    setWorldStatus(item.status);
+    setWorldOperations([]);
+    setBackups([]);
+    setConnectionDetails(null);
+    setExportUrl("");
+    setSaved(false);
+    if (!isDemo) {
+      setGameWakeLastAccountId(accountId);
+      setGameWakeLastWorldId(accountId, item.id);
+    }
+  }
+
   function signOut() {
     clearGameWakeSession();
     window.location.assign("/");
   }
 
   async function saveConfiguration() {
+    setPasswordError("");
+    const passwordChanged = passwordMode !== savedPasswordMode || fixedPassword.length > 0;
+    if (passwordMode === "fixed" && passwordChanged && fixedPassword.length < 6) {
+      setPasswordError("Escolha uma senha com pelo menos 6 caracteres.");
+      return;
+    }
     if (isDemo) {
+      setSavedPasswordMode(passwordMode);
+      setFixedPassword("");
       setSaved(true);
       return;
     }
     if (!world) return;
     try {
-      await gameWakeFetch(
-        `/api/v1/accounts/${accountId}/worlds/${world.id}/configuration`,
-        {
-          method: "PATCH",
-          body: JSON.stringify({
-            changes: configurationValues,
-            idempotencyKey: gameWakeIdempotencyKey("configuration"),
-          }),
-        },
-      );
+      const requests: Promise<Response>[] = [
+        gameWakeFetch(
+          `/api/v1/accounts/${accountId}/worlds/${world.id}/configuration`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              changes: configurationValues,
+              idempotencyKey: gameWakeIdempotencyKey("configuration"),
+            }),
+          },
+        ),
+      ];
+      if (passwordChanged) {
+        requests.push(gameWakeFetch(
+          `/api/v1/accounts/${accountId}/worlds/${world.id}/access/password`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              mode: passwordMode,
+              ...(passwordMode === "fixed" ? { password: fixedPassword } : {}),
+            }),
+          },
+        ));
+      }
+      await Promise.all(requests);
+      setSavedPasswordMode(passwordMode);
+      setFixedPassword("");
       setSaved(true);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Não foi possível salvar a configuração.");
@@ -1218,11 +1345,17 @@ export function ConsoleDashboard({
           <span className="brand-mark"><Icon name="power" size={19} /></span>
           <span>GameWake</span>
         </Link>
-        <div className="account-switcher">
+        <button
+          aria-expanded={accountSwitcherOpen}
+          aria-label="Trocar grupo ou servidor"
+          className="account-switcher"
+          onClick={() => void openAccountSwitcher()}
+          type="button"
+        >
           <span className="account-avatar">{accountName[0]?.toUpperCase() ?? "G"}</span>
-          <div><strong>{accountName}</strong><small>Seu acesso: {viewerRole}</small></div>
+          <div><strong>{accountName}</strong><small>{worlds.length} World{worlds.length === 1 ? "" : "s"} · trocar grupo</small></div>
           <Icon name="chevron-down" size={16} />
-        </div>
+        </button>
         <nav aria-label="Áreas da Console">
           <span className="nav-caption">GERENCIAR</span>
           {visibleSections.map((item) => (
@@ -1243,11 +1376,17 @@ export function ConsoleDashboard({
           <Link href="/terms">Termos</Link>
           <Link href="/privacy">Privacidade</Link>
         </div>
-        <div className="sidebar-foot">
-          <span className="avatar avatar-small">L</span>
-          <div><strong>{isDemo ? "Leonardo" : "Você"}</strong><small>GameWake</small></div>
-          <button aria-label="Sair" onClick={signOut} type="button"><Icon name="close" size={18} /></button>
-        </div>
+        <button
+          aria-expanded={profileMenuOpen}
+          aria-label="Abrir menu do usuário"
+          className="sidebar-foot"
+          onClick={() => { setProfileMenuOpen((current) => !current); setSignOutConfirmation(false); }}
+          type="button"
+        >
+          <span className="avatar avatar-small">{isDemo ? "L" : "V"}</span>
+          <div><strong>{isDemo ? "Leonardo" : "Você"}</strong><small>{viewerRole}</small></div>
+          <Icon name="chevron-down" size={16} />
+        </button>
       </aside>
 
       <section className="console-main">
@@ -1258,15 +1397,24 @@ export function ConsoleDashboard({
           </div>
           <div className="topbar-actions">
             {!isDemo && (
-              <Link
-                aria-label="Trocar servidor do Discord"
+              <button
+                aria-expanded={accountSwitcherOpen}
+                aria-label="Trocar grupo ou servidor"
                 className="discord-switch-link"
-                href="/auth/discord/start?install=1"
+                onClick={() => void openAccountSwitcher()}
+                type="button"
               >
-                <Icon name="discord" size={17} /><span>Trocar servidor</span>
-              </Link>
+                <Icon name="discord" size={17} /><span>Trocar grupo</span>
+              </button>
             )}
             <button aria-label="Notificações" className="icon-button" type="button"><Icon name="bell" size={18} /></button>
+            <button
+              aria-expanded={profileMenuOpen}
+              aria-label="Abrir menu do usuário"
+              className="icon-button mobile-profile-button"
+              onClick={() => { setProfileMenuOpen((current) => !current); setSignOutConfirmation(false); }}
+              type="button"
+            ><span className="avatar avatar-small">{isDemo ? "L" : "V"}</span></button>
             <span className="wallet-pill"><small>Saldo</small><strong>{formattedWallet}</strong></span>
           </div>
         </header>
@@ -1356,11 +1504,7 @@ export function ConsoleDashboard({
                       aria-selected={item.id === world?.id}
                       className={item.id === world?.id ? "selected" : ""}
                       key={item.id}
-                      onClick={() => {
-                        setWorld(item);
-                        setWorldStatus(item.status);
-                        setWorldOperations([]);
-                      }}
+                      onClick={() => selectWorld(item)}
                       role="tab"
                       type="button"
                     >
@@ -1619,6 +1763,47 @@ export function ConsoleDashboard({
             <div className="panel-page" data-testid="configuration-panel">
               <div className="panel-heading split"><div><h1>Configuração</h1><p>Veja o impacto, os valores aceitos e a documentação oficial antes de alterar.</p></div><a className="button button-outline" href="https://tech.palworldgame.com/settings-and-operation/configuration/" rel="noreferrer" target="_blank">Documentação do Palworld <Icon name="arrow-right" size={16} /></a></div>
               <div className="config-notice"><span>i</span><p>As alterações criam uma revisão imutável e entram no próximo despertar. Se o World estiver Online, você poderá escolher uma reinicialização segura.</p></div>
+              <fieldset className="world-password-card">
+                <legend>Senha para entrar no World</legend>
+                <p>A senha fica criptografada e nunca é exibida na configuração ou nos logs. Quem pode conectar a recebe apenas enquanto o World está Online.</p>
+                <div className="password-mode-options">
+                  <label>
+                    <input
+                      checked={passwordMode === "fixed"}
+                      name="world-password-mode"
+                      onChange={() => { setPasswordMode("fixed"); setPasswordError(""); setSaved(false); }}
+                      type="radio"
+                    />
+                    <span><strong>Usar uma senha escolhida por mim</strong><small>Ela permanece igual até um Moderador ou Owner alterá-la.</small></span>
+                  </label>
+                  <label>
+                    <input
+                      checked={passwordMode === "random_each_run"}
+                      name="world-password-mode"
+                      onChange={() => { setPasswordMode("random_each_run"); setFixedPassword(""); setPasswordError(""); setSaved(false); }}
+                      type="radio"
+                    />
+                    <span><strong>Gerar uma senha nova a cada despertar</strong><small>A senha muda somente quando uma nova sessão começa; repetir a mesma operação não a troca.</small></span>
+                  </label>
+                </div>
+                {passwordMode === "fixed" && (
+                  <label className="fixed-password-field">
+                    Nova senha do World
+                    <input
+                      aria-describedby="fixed-password-help"
+                      autoComplete="new-password"
+                      maxLength={64}
+                      minLength={6}
+                      onChange={(event) => { setFixedPassword(event.target.value); setPasswordError(""); setSaved(false); }}
+                      placeholder={savedPasswordMode === "fixed" ? "Deixe vazio para manter a senha atual" : "6 a 64 caracteres"}
+                      type="password"
+                      value={fixedPassword}
+                    />
+                    <small id="fixed-password-help">A senha atual nunca é revelada. Digite uma nova somente quando quiser substituí-la.</small>
+                  </label>
+                )}
+                {passwordError && <p className="field-error" role="alert">{passwordError}</p>}
+              </fieldset>
               <div className="config-grid">{liveConfigurationFields.map((field) => <article className="config-card" key={field.key}><div><span className="config-key">{field.key}</span><h2>{field.label}</h2><p>{field.impact}</p></div><label>Valor{field.valueType === "boolean" ? <select aria-label={field.label} onChange={(event) => setConfigurationValues((current) => ({ ...current, [field.key]: event.target.value === "true" }))} value={String(configurationValues[field.key] ?? field.default)}><option value="true">Ativado</option><option value="false">Desativado</option></select> : <input aria-label={field.label} onChange={(event) => setConfigurationValues((current) => ({ ...current, [field.key]: field.valueType === "string" ? event.target.value : Number(event.target.value) }))} type={field.valueType === "string" ? "text" : "number"} value={String(configurationValues[field.key] ?? field.default)} />}</label><small>Valores aceitos: <strong>{field.acceptedValues}</strong></small></article>)}</div>
               <div className="sticky-save"><div><strong>{liveConfigurationFields.length} opções validadas</strong><small>Uma revisão imutável será criada · reinicialização pode ser necessária</small></div><button className="button button-primary" data-testid="save-configuration" onClick={() => void saveConfiguration()} type="button">{saved ? "Configuração salva ✓" : "Revisar e salvar"}</button></div>
             </div>
@@ -1655,6 +1840,65 @@ export function ConsoleDashboard({
           {visibleSections.map((item) => <button className={activeSection === item.id ? "active" : ""} data-testid={`nav-${item.id}`} disabled={!hydrated} key={item.id} onClick={() => setSection(item.id)} type="button"><span><Icon name={item.icon} size={19} /></span><small>{item.label.split(" ")[0]}</small></button>)}
         </nav>
       </section>
+      {accountSwitcherOpen && (
+        <div className="modal-backdrop">
+          <section
+            aria-label="Escolher grupo ou servidor"
+            aria-modal="true"
+            className="account-switch-dialog"
+            role="dialog"
+          >
+            <div className="dialog-heading">
+              <div><Icon name="discord" size={19} /><strong>Seus grupos GameWake</strong></div>
+              <button aria-label="Fechar troca de grupo" onClick={() => setAccountSwitcherOpen(false)} type="button"><Icon name="close" size={19} /></button>
+            </div>
+            <p>Trocar entre grupos existentes não abre o Discord novamente. Cada grupo mostra somente os Worlds aos quais você tem acesso.</p>
+            <div className="account-choice-list">
+              {accountSwitcherLoading && <p role="status">Buscando seus grupos e Worlds…</p>}
+              {!accountSwitcherLoading && availableAccounts.filter((account) => account.worlds.length > 0).map((account) => (
+                <Link
+                  aria-current={account.id === accountId ? "page" : undefined}
+                  href={`/accounts/${account.id}`}
+                  key={account.id}
+                  onClick={() => {
+                    setGameWakeLastAccountId(account.id);
+                    const preferredWorld = account.worlds.find((item) => item.id === getGameWakeLastWorldId(account.id)) ?? account.worlds[0];
+                    if (preferredWorld) setGameWakeLastWorldId(account.id, preferredWorld.id);
+                  }}
+                >
+                  <span className="account-avatar">{account.name[0]?.toUpperCase() ?? "G"}</span>
+                  <span><strong>{account.name}</strong><small>{account.worlds.map((item) => item.name).join(" · ")}</small></span>
+                  {account.id === accountId ? <em>Atual</em> : <Icon name="arrow-right" size={17} />}
+                </Link>
+              ))}
+              {!accountSwitcherLoading && availableAccounts.filter((account) => account.worlds.length > 0).length === 0 && (
+                <p>Nenhum outro grupo com World foi encontrado para esta conta.</p>
+              )}
+            </div>
+            <Link className="button button-primary full-button" href="/auth/discord/start?install=1">
+              <Icon name="plus" size={17} />Adicionar GameWake a outro servidor
+            </Link>
+            <small>Esta opção abre o Discord uma vez para você escolher e autorizar o novo servidor.</small>
+          </section>
+        </div>
+      )}
+      {profileMenuOpen && (
+        <section aria-label="Menu do usuário" className="user-menu-popover" role="dialog">
+          <header><span className="avatar avatar-small">{isDemo ? "L" : "V"}</span><span><strong>{isDemo ? "Leonardo" : "Você"}</strong><small>{viewerRole} em {accountName}</small></span></header>
+          {signOutConfirmation ? (
+            <div className="signout-confirmation">
+              <strong>Sair desta sessão?</strong>
+              <p>Você precisará entrar novamente com o Discord neste dispositivo.</p>
+              <div><button className="button button-outline" onClick={() => setSignOutConfirmation(false)} type="button">Continuar conectado</button><button className="button button-primary" onClick={signOut} type="button">Confirmar saída</button></div>
+            </div>
+          ) : (
+            <>
+              <button className="user-menu-action" onClick={() => setSignOutConfirmation(true)} type="button"><Icon name="power" size={17} />Sair do GameWake</button>
+              <button className="user-menu-close" onClick={() => setProfileMenuOpen(false)} type="button">Fechar menu</button>
+            </>
+          )}
+        </section>
+      )}
       {connectionDetails && (
         <div className="modal-backdrop">
           <section

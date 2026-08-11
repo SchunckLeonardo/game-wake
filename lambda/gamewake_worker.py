@@ -17,6 +17,7 @@ from gamewake.aws import (
     S3WorldStateStore,
     SsmCommandRunner,
     SsmPalworldTemplate,
+    SsmWorldPasswordManager,
 )
 from gamewake.billing import Billing, BillingRuntimeUsageRecorder, InsufficientFundsError
 from gamewake.experience import DiscordChannelNotifier, DiscordRestMessageClient
@@ -102,7 +103,7 @@ def build_services(
     runner = SsmCommandRunner(client=ssm)
     archive = S3WorldArchiveStore(
         _required(environ, "WORLD_DATA_BUCKET"),
-        client=client_factory("s3"),
+        client_factory=client_factory,
     )
     accounts = Accounts(account_repository)
     billing = Billing(PostgresBillingRepository(database))
@@ -138,6 +139,10 @@ def build_services(
                 parameter_prefix=_required(environ, "GAMEWAKE_WORLD_PARAMETER_PREFIX"),
                 base_configuration=json.loads(_required(environ, "PALWORLD_BASE_CONFIG_JSON")),
                 client=ssm,
+                password_manager=SsmWorldPasswordManager(
+                    parameter_prefix=_required(environ, "GAMEWAKE_WORLD_PARAMETER_PREFIX"),
+                    client=ssm,
+                ),
             )
         ),
         backup_store=archive,

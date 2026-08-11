@@ -12,7 +12,11 @@ from discord_signature import SignatureValidationError, verify_discord_signature
 
 from gamewake.accounts import Accounts
 from gamewake.auth import DiscordOAuthClient, KmsSessionCodec
-from gamewake.aws import Ec2SsmConnectionDetailsProvider, S3WorldArchiveStore
+from gamewake.aws import (
+    Ec2SsmConnectionDetailsProvider,
+    S3WorldArchiveStore,
+    SsmWorldPasswordManager,
+)
 from gamewake.billing import (
     AbacatePayPaymentProvider,
     AbacatePayWebhookHandler,
@@ -106,7 +110,7 @@ def build_handler(*, client_factory: Any = boto3.client) -> GameWakeHttpHandler:
     world_repository = PostgresWorldRepository(database)
     archive = S3WorldArchiveStore(
         _required("WORLD_DATA_BUCKET"),
-        client=client_factory("s3"),
+        client_factory=client_factory,
     )
     storage = StoragePolicyService(
         world_repository,
@@ -144,6 +148,10 @@ def build_handler(*, client_factory: Any = boto3.client) -> GameWakeHttpHandler:
             ec2_client=client_factory("ec2"),
             ssm_client=ssm,
             port=int(_required("PALWORLD_PORT")),
+        ),
+        world_password_manager=SsmWorldPasswordManager(
+            parameter_prefix=_required("GAMEWAKE_WORLD_PARAMETER_PREFIX"),
+            client=ssm,
         ),
         runtime_profile_hourly_rates=_runtime_profile_rates(),
     )

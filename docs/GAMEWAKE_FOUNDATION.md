@@ -157,7 +157,8 @@ Um World é criado a partir de um Game Template e não troca de jogo. Palworld �
 ### Acesso ao jogo
 
 - Quando o jogo suporta allowlist, o GameWake usa Game Identities vinculadas.
-- Quando existe apenas senha compartilhada, o GameWake gerencia e entrega o segredo de forma efêmera.
+- Quando existe apenas senha compartilhada, o Owner ou Manager escolhe entre uma senha fixa e uma nova senha aleatória a cada despertar. O segredo fica em armazenamento seguro, nunca é revelado no editor e só aparece de forma efêmera nas Connection Details autorizadas.
+- Repetir ou retomar o mesmo despertar preserva a senha gerada; somente uma nova sessão efetiva a rotaciona.
 - Revogar acesso invalida comandos imediatamente e remove a identidade ou rotaciona o segredo antigo.
 - Connection Details nunca aparecem em cards públicos ou Activity Events.
 
@@ -280,7 +281,7 @@ O crescimento deve ampliar o comportamento validado, não aumentar o catálogo a
 
 ## Decisões abertas antes do lançamento público
 
-- preço final, margem mínima e valores dos Runtime Profiles;
+- evolução do preço da Closed Beta de `R$ 2,49/h`, margem mínima pública e valores de novos Runtime Profiles;
 - tamanho da Storage Allowance e retenção automática por jogo;
 - política comercial e jurídica de reembolso de créditos não utilizados, disputas, tributos e LGPD;
 - regiões AWS do MVP e benchmarks reais de latência, custo e tempo de despertar;

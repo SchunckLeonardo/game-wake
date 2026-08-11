@@ -26,6 +26,7 @@ class S3WorldArchiveStore:
         bucket: str,
         *,
         client: Any | None = None,
+        client_factory: Any | None = None,
         clock: Callable[[], datetime] | None = None,
         download_expiry_seconds: int = 900,
     ) -> None:
@@ -33,8 +34,10 @@ class S3WorldArchiveStore:
             raise ValueError("world archive bucket is required")
         if client is None:
             import boto3
+            from botocore.config import Config
 
-            client = boto3.client("s3")
+            factory = client_factory or boto3.client
+            client = factory("s3", config=Config(signature_version="s3v4"))
         self._bucket = bucket
         self._client = client
         self._clock = clock or (lambda: datetime.now(UTC))

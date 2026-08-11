@@ -66,6 +66,17 @@ data "aws_iam_policy_document" "gamewake_api" {
       aws_ssm_parameter.abacatepay_api_key.arn,
       aws_ssm_parameter.abacatepay_webhook_secret.arn,
       aws_ssm_parameter.abacatepay_public_key.arn,
+    ]
+  }
+
+  statement {
+    sid    = "ManagePerWorldConfiguration"
+    effect = "Allow"
+    actions = [
+      "ssm:GetParameter",
+      "ssm:PutParameter",
+    ]
+    resources = [
       "arn:${data.aws_partition.current.partition}:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${local.parameter_path}/gamewake/worlds/*",
     ]
   }

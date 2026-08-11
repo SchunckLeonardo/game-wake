@@ -57,6 +57,10 @@ test("renders the public GameWake landing page without starter artifacts", async
     html,
     /<meta property="og:image" content="https:\/\/gamewake\.com\.br\/og\.png"/i,
   );
+  assert.match(
+    html,
+    /<link rel="(?:shortcut )?icon" href="(?:https:\/\/[^"/]+)?\/icon\.svg"/i,
+  );
   assert.doesNotMatch(html, /codex-preview|SkeletonPreview|react-loading-skeleton/i);
 });
 

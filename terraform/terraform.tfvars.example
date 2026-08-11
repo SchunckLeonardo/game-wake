@@ -25,9 +25,9 @@ abacatepay_packages = [
   { id = "credits-100", amount = 100, product_id = "prod_ghi789" },
 ]
 
-# Preco de beta ilustrativo: valide custo, impostos e margem antes de publicar.
+# Preço da Closed Beta validado em 11/08/2026; acompanhe custos reais e margem.
 runtime_profile_hourly_rates = {
-  palworld-small = 5.50
+  palworld-small = 2.49
 }
 
 # 10 GiB incluidos por conta; excedente sem saldo entra em 30 dias de tolerancia.

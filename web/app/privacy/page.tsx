@@ -34,7 +34,7 @@ export default function PrivacyPage() {
       <p>Compartilhamos o mínimo necessário com o Discord para identidade, instalação e comandos; com a Amazon Web Services para computação, banco de dados, logs e armazenamento; e com a AbacatePay para checkout, confirmação e conciliação do pagamento. Também podemos compartilhar dados para cumprir ordem legal ou proteger direitos e segurança. Não vendemos dados pessoais.</p>
 
       <h2>6. Sessão no navegador</h2>
-      <p>O Console usa o armazenamento local do navegador para manter a sessão GameWake, lembrar que você já entrou e conservar temporariamente o servidor Discord escolhido durante o onboarding. A sessão expira no servidor e pode ser removida a qualquer momento usando “Sair” no Console ou limpando os dados do site. Não usamos cookies de publicidade.</p>
+      <p>O Console usa o armazenamento local do navegador para manter a sessão GameWake, lembrar que você já entrou, reabrir o último grupo e World selecionados e conservar temporariamente o servidor Discord escolhido durante o onboarding. A sessão expira no servidor e pode ser removida a qualquer momento usando “Sair do GameWake” no menu do usuário ou limpando os dados do site. As preferências de último grupo e World permanecem no dispositivo para facilitar a próxima entrada. Não usamos cookies de publicidade.</p>
 
       <h2>7. Retenção e segurança</h2>
       <p>Mantemos dados enquanto a conta estiver ativa e pelo período necessário para segurança, suporte, conciliação financeira, cumprimento de obrigações e exercício de direitos. Depois, eliminamos ou anonimizamos os dados quando aplicável. Usamos controles de acesso, criptografia, registros imutáveis para eventos sensíveis e segregação entre identidade, pagamento e dados do World.</p>

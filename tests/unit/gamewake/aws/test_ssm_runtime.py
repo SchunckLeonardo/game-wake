@@ -9,6 +9,7 @@ from gamewake.aws import (
     S3WorldStateStore,
     SsmCommandRunner,
     SsmPalworldTemplate,
+    SsmWorldPasswordManager,
 )
 from gamewake.worlds import ConfigurationRevision, Runtime, World, WorldStatus
 
@@ -267,6 +268,48 @@ def test_palworld_template_publishes_per_world_configuration_and_secrets_before_
             ),
         )
     ]
+
+
+def test_random_password_rotates_once_per_wake_and_never_leaks_from_settings():
+    client = FakeSsmClient()
+    generated = iter(("first-random-password", "second-random-password"))
+    manager = SsmWorldPasswordManager(
+        parameter_prefix="/gamewake/prod/worlds",
+        client=client,
+        password_factory=lambda: next(generated),
+    )
+    target = world()
+
+    configured = manager.configure(target, mode="random_each_run", password=None)
+    manager.prepare_for_run(target, idempotency_key="wake-1:configure")
+    manager.prepare_for_run(target, idempotency_key="wake-1:configure")
+
+    secret_name = "/gamewake/prod/worlds/account-123/world-123/server-password"
+    assert configured.mode == "random_each_run"
+    assert not hasattr(configured, "password")
+    assert client.parameters[secret_name] == "first-random-password"
+
+    manager.prepare_for_run(target, idempotency_key="wake-2:configure")
+
+    assert client.parameters[secret_name] == "second-random-password"
+
+
+def test_fixed_password_is_stored_only_as_a_secure_parameter():
+    client = FakeSsmClient()
+    manager = SsmWorldPasswordManager(
+        parameter_prefix="/gamewake/prod/worlds",
+        client=client,
+    )
+
+    configured = manager.configure(world(), mode="fixed", password="meu-segredo-123")
+
+    password_call = next(
+        call for call in client.put_calls if call["Name"].endswith("/server-password")
+    )
+    assert configured.mode == "fixed"
+    assert not hasattr(configured, "password")
+    assert password_call["Type"] == "SecureString"
+    assert password_call["Value"] == "meu-segredo-123"
 
 
 def test_connection_details_resolve_the_current_public_ip_and_per_world_secret():

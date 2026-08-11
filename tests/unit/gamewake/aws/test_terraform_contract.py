@@ -204,6 +204,19 @@ def test_disposable_world_configuration_is_isolated_under_a_tenant_path():
     assert "PALWORLD_BASE_CONFIG_JSON" in orchestration
 
 
+def test_api_can_manage_only_per_world_password_parameters():
+    api = source("gamewake-api.tf")
+
+    assert 'sid    = "ManagePerWorldConfiguration"' in api
+    assert '"ssm:GetParameter"' in api
+    assert '"ssm:PutParameter"' in api
+    assert (
+        '"arn:${data.aws_partition.current.partition}:ssm:${var.aws_region}:'
+        "${data.aws_caller_identity.current.account_id}:parameter${local.parameter_path}"
+        '/gamewake/worlds/*"'
+    ) in api
+
+
 def test_runtime_pricing_is_injected_into_api_and_usage_meter_worker():
     variables = source("variables.tf")
     orchestration = source("gamewake-orchestration.tf")
@@ -213,7 +226,7 @@ def test_runtime_pricing_is_injected_into_api_and_usage_meter_worker():
     assert "RUNTIME_PROFILE_HOURLY_RATES_JSON" in api
     assert "PostgresBillingRepository" not in orchestration
     assert "AURORA_CLUSTER_ARN" in orchestration
-    assert "palworld-small = 5.50" in variables
+    assert "palworld-small = 2.49" in variables
 
 
 def test_online_session_monitor_runs_inside_the_active_world_workflow_only():

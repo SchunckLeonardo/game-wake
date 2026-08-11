@@ -189,7 +189,7 @@ variable "runtime_profile_hourly_rates" {
   description = "Preco final por hora em BRL de cada Runtime Profile oferecido no MVP."
   type        = map(number)
   default = {
-    palworld-small = 5.50
+    palworld-small = 2.49
   }
 
   validation {

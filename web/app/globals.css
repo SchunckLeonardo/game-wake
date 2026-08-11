@@ -577,13 +577,21 @@ summary:focus-visible {
 .console-brand .brand-mark { color: var(--ink); }
 .account-switcher {
   align-items: center;
+  background: transparent;
+  border-left: 0;
+  border-right: 0;
   border-bottom: 1px solid #283247;
   border-top: 1px solid #283247;
+  color: var(--white);
+  cursor: pointer;
   display: grid;
   gap: 10px;
   grid-template-columns: auto 1fr auto;
   padding: 16px 7px;
+  text-align: left;
+  width: 100%;
 }
+.account-switcher:hover { background: #121c2d; }
 .account-avatar,
 .avatar {
   align-items: center;
@@ -624,8 +632,9 @@ summary:focus-visible {
 .console-sidebar nav button:hover { background: #151f31; color: var(--white); }
 .console-sidebar nav button.active { background: var(--wake); color: var(--ink); font-weight: 760; }
 .console-sidebar nav button > span { align-items: center; display: flex; justify-content: center; width: 20px; }
-.sidebar-foot { align-items: center; display: grid; gap: 10px; grid-template-columns: auto 1fr auto; margin-top: auto; padding: 15px 7px 0; }
-.sidebar-foot button { background: transparent; border: 0; color: #8f9aac; cursor: pointer; padding: 4px; }
+.sidebar-foot { align-items: center; background: transparent; border: 0; color: var(--white); cursor: pointer; display: grid; gap: 10px; grid-template-columns: auto 1fr auto; margin-top: auto; padding: 15px 7px 0; text-align: left; width: 100%; }
+.sidebar-foot > svg { color: #8f9aac; }
+.sidebar-foot:hover strong { color: var(--wake); }
 .sidebar-legal { display: flex; gap: 12px; margin-top: auto; padding: 20px 7px 0; }
 .sidebar-legal a { color: #778397; font-size: 10px; }
 .sidebar-legal a:hover { color: var(--white); }
@@ -679,6 +688,7 @@ summary:focus-visible {
 .wallet-pill strong { font-size: 12px; }
 .discord-switch-link {
   align-items: center;
+  background: transparent;
   border: 1px solid #334058;
   border-radius: 10px;
   color: #c8cce9;
@@ -690,6 +700,8 @@ summary:focus-visible {
   padding: 0 12px;
 }
 .discord-switch-link:hover { background: #162136; color: var(--white); }
+.mobile-profile-button { display: none; padding: 0; }
+.mobile-profile-button .avatar { height: 29px; width: 29px; }
 .console-content { margin: 0 auto; max-width: 1280px; padding: 42px 34px 92px; }
 .console-content > [role="status"] { color: var(--night-muted); }
 .welcome-row { align-items: end; display: flex; justify-content: space-between; margin-bottom: 26px; }
@@ -1151,6 +1163,20 @@ summary:focus-visible {
 .config-notice { align-items: center; background: #19213c; border: 1px solid #343f70; border-radius: 12px; display: flex; gap: 12px; margin-bottom: 16px; padding: 14px 16px; }
 .config-notice > span { align-items: center; background: var(--blue); border-radius: 50%; display: flex; flex: 0 0 auto; height: 24px; justify-content: center; width: 24px; }
 .config-notice p { color: #ccd0ff; font-size: 12px; line-height: 1.55; margin: 0; }
+.world-password-card { background: #101a2b; border: 1px solid var(--night-line); border-radius: 14px; margin: 0 0 16px; padding: 22px; }
+.world-password-card legend { color: var(--white); font-size: 17px; font-weight: 760; padding: 0 7px; }
+.world-password-card > p { color: var(--night-muted); font-size: 12px; line-height: 1.6; margin: 0 0 18px; max-width: 72ch; }
+.password-mode-options { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
+.password-mode-options > label { align-items: flex-start; background: #0a1423; border: 1px solid #334159; border-radius: 12px; color: var(--white); cursor: pointer; display: grid; gap: 11px; grid-template-columns: auto 1fr; padding: 16px; }
+.password-mode-options > label:has(input:checked) { background: #172438; border-color: var(--wake); }
+.password-mode-options input { accent-color: var(--wake); margin-top: 2px; min-height: auto; width: auto; }
+.password-mode-options span { display: flex; flex-direction: column; gap: 5px; }
+.password-mode-options strong { font-size: 12px; }
+.password-mode-options small,
+.fixed-password-field small { color: #91a0b4; font-size: 11px; line-height: 1.5; }
+.fixed-password-field { color: #c7d0dc; display: flex; flex-direction: column; font-size: 12px; font-weight: 670; gap: 8px; margin-top: 16px; max-width: 520px; }
+.fixed-password-field input { width: 100%; }
+.world-password-card .field-error { color: #ffb0aa; font-size: 12px; margin: 12px 0 0; }
 .config-grid { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
 .config-card { background: #101a2b; border: 1px solid var(--night-line); border-radius: 14px; display: grid; gap: 18px; grid-template-columns: 1fr auto; padding: 20px; }
 .config-key { color: #aeb4ff; }
@@ -1210,6 +1236,32 @@ summary:focus-visible {
   padding: 28px;
   width: 100%;
 }
+.account-switch-dialog { background: var(--paper-bright); border-radius: 16px; box-shadow: 0 35px 80px rgba(0, 0, 0, 0.45); color: var(--ink); max-height: min(720px, calc(100vh - 40px)); max-width: 580px; overflow-y: auto; padding: 28px; width: 100%; }
+.account-switch-dialog > p { color: #60675d; font-size: 13px; line-height: 1.6; margin: 18px 0; }
+.account-switch-dialog > small { color: #697064; display: block; font-size: 11px; line-height: 1.5; margin-top: 12px; text-align: center; }
+.account-switch-dialog .full-button { margin-top: 18px; }
+.account-choice-list { border-bottom: 1px solid #d8dbd2; border-top: 1px solid #d8dbd2; display: grid; margin: 18px 0; }
+.account-choice-list > a { align-items: center; color: var(--ink); display: grid; gap: 12px; grid-template-columns: auto 1fr auto; min-height: 76px; padding: 12px 3px; }
+.account-choice-list > a + a { border-top: 1px solid #d8dbd2; }
+.account-choice-list > a:hover strong { color: #4652cc; }
+.account-choice-list > a > span:nth-child(2) { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.account-choice-list strong { font-size: 13px; }
+.account-choice-list small { color: #697064; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-choice-list em { background: #e6f8bd; border-radius: 999px; font-size: 10px; font-style: normal; font-weight: 760; padding: 6px 8px; }
+.account-choice-list > p { color: #697064; font-size: 12px; line-height: 1.55; margin: 0; padding: 20px 4px; }
+.user-menu-popover { background: #101a2b; border: 1px solid #3a4860; border-radius: 14px; bottom: 76px; box-shadow: 0 24px 65px rgba(0, 0, 0, 0.48); color: var(--white); left: 16px; padding: 16px; position: fixed; width: min(330px, calc(100vw - 32px)); z-index: 45; }
+.user-menu-popover header { align-items: center; border-bottom: 1px solid #2d394e; display: grid; gap: 10px; grid-template-columns: auto 1fr; padding-bottom: 14px; }
+.user-menu-popover header > span:last-child { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.user-menu-popover header strong { font-size: 12px; }
+.user-menu-popover header small { color: #8f9aac; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-menu-action { align-items: center; background: transparent; border: 0; border-radius: 9px; color: #ffb0aa; cursor: pointer; display: flex; font-size: 12px; font-weight: 680; gap: 9px; margin-top: 10px; min-height: 42px; padding: 0 10px; width: 100%; }
+.user-menu-action:hover { background: #281c25; }
+.user-menu-close { background: transparent; border: 0; color: #9aa6b7; cursor: pointer; font-size: 11px; margin-top: 5px; padding: 8px 10px; }
+.signout-confirmation { padding-top: 15px; }
+.signout-confirmation > strong { font-size: 14px; }
+.signout-confirmation > p { color: #aab5c5; font-size: 11px; line-height: 1.5; margin: 6px 0 14px; }
+.signout-confirmation > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.signout-confirmation .button { flex: 1 1 120px; min-height: 40px; padding: 0 11px; }
 .dialog-heading { align-items: center; display: flex; justify-content: space-between; }
 .dialog-heading > div { align-items: center; display: flex; gap: 8px; }
 .dialog-heading button { background: transparent; border: 0; cursor: pointer; font-size: 24px; }
@@ -1383,6 +1435,7 @@ summary:focus-visible {
   .wallet-pill small { display: none; }
   .discord-switch-link span { display: none; }
   .discord-switch-link { height: 39px; justify-content: center; padding: 0; width: 39px; }
+  .mobile-profile-button { display: inline-flex; }
   .console-content { padding: 28px 16px 50px; }
   .welcome-row { align-items: flex-start; gap: 20px; }
   .welcome-row h1,
@@ -1447,6 +1500,8 @@ summary:focus-visible {
   .invitation-link-result > small { grid-column: 1; }
   .config-card { grid-template-columns: 1fr; }
   .config-card > small { grid-column: auto; }
+  .password-mode-options { grid-template-columns: 1fr; }
+  .world-password-card { padding: 18px; }
   .sticky-save { align-items: stretch; flex-direction: column; gap: 13px; }
   .storage-card { align-items: flex-start; flex-direction: column; }
   .backup-row { grid-template-columns: auto 1fr; }
@@ -1470,6 +1525,8 @@ summary:focus-visible {
   .mobile-nav button.active { color: var(--wake); }
   .mobile-nav small { font-size: 11px; }
   .console-legal-footer { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .user-menu-popover { bottom: auto; left: auto; right: 12px; top: 68px; }
+  .account-switch-dialog { padding: 22px 18px; }
 
   .onboarding-shell { padding: 18px 16px 38px; }
   .onboarding-progress { margin: 20px auto 26px; }

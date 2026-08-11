@@ -20,6 +20,7 @@ from gamewake.control_plane import (
     ConnectionDetails,
     GameWakeApi,
     GameWakeApplication,
+    WorldPasswordSettings,
 )
 from gamewake.game_catalog import GameCatalog
 from gamewake.worlds import (
@@ -52,6 +53,19 @@ class StubConnectionDetailsProvider:
     def issue(self, world, *, viewer_user_id):
         assert viewer_user_id == "owner"
         return ConnectionDetails(host="203.0.113.10", port=8211, password="grupo-secreto")
+
+
+class StubWorldPasswordManager:
+    def __init__(self):
+        self.calls = []
+
+    def get(self, world):
+        self.calls.append(("get", world.id))
+        return WorldPasswordSettings(mode="fixed")
+
+    def configure(self, world, *, mode, password):
+        self.calls.append(("configure", world.id, mode, password))
+        return WorldPasswordSettings(mode=mode)
 
 
 def test_web_onboarding_invites_friends_and_configures_first_world_through_one_api():
@@ -697,6 +711,75 @@ def test_authenticated_user_can_discover_only_their_accounts_for_console_routing
             }
         ]
     }
+
+
+def test_manager_configures_world_password_policy_without_returning_the_secret():
+    accounts = Accounts(InMemoryAccountRepository())
+    account = accounts.create_account(name="Grupo", owner_user_id="owner")
+    catalog = GameCatalog.with_palworld()
+    worlds = Worlds(InMemoryWorldRepository(), access=accounts, game_catalog=catalog)
+    target = worlds.create_world(
+        account.id,
+        actor_user_id="owner",
+        name="Palpagos",
+        game_template_id="palworld:1",
+        region="sa-east-1",
+        runtime_profile_id="palworld-small",
+    )
+    invitation = accounts.invite_members(
+        account.id,
+        inviter_user_id="owner",
+        invited_user_ids=["player"],
+    )[0]
+    accounts.accept_invitation(
+        account.id,
+        invitation.id,
+        invited_user_id="player",
+    )
+    passwords = StubWorldPasswordManager()
+    api = GameWakeApi(
+        GameWakeApplication(
+            accounts=accounts,
+            worlds=worlds,
+            billing=Billing(InMemoryBillingRepository()),
+            game_catalog=catalog,
+            world_password_manager=passwords,
+        )
+    )
+
+    updated = api.handle(
+        ApiRequest(
+            "PATCH",
+            f"/api/v1/accounts/{account.id}/worlds/{target.id}/access/password",
+            "owner",
+            {"mode": "fixed", "password": "meu-segredo-123"},
+        )
+    )
+    loaded = api.handle(
+        ApiRequest(
+            "GET",
+            f"/api/v1/accounts/{account.id}/worlds/{target.id}/access/password",
+            "owner",
+        )
+    )
+    forbidden = api.handle(
+        ApiRequest(
+            "PATCH",
+            f"/api/v1/accounts/{account.id}/worlds/{target.id}/access/password",
+            "player",
+            {"mode": "random_each_run"},
+        )
+    )
+
+    assert updated.status == 200
+    assert updated.body == {"password": {"mode": "fixed"}}
+    assert loaded.body == {"password": {"mode": "fixed"}}
+    assert forbidden.status == 403
+    assert "meu-segredo-123" not in repr(updated.body)
+    assert passwords.calls == [
+        ("configure", target.id, "fixed", "meu-segredo-123"),
+        ("get", target.id),
+    ]
 
 
 def test_owner_creates_separate_play_and_console_invitation_links():

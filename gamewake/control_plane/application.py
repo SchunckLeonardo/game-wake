@@ -24,7 +24,13 @@ from gamewake.worlds import (
     Worlds,
 )
 
-from .contracts import ConnectionDetails, ConnectionDetailsProvider, OperationDispatcher
+from .contracts import (
+    ConnectionDetails,
+    ConnectionDetailsProvider,
+    OperationDispatcher,
+    WorldPasswordManager,
+    WorldPasswordSettings,
+)
 
 
 class GameWakeApplication:
@@ -39,6 +45,7 @@ class GameWakeApplication:
         billing: Billing,
         game_catalog: GameCatalog,
         connection_details_provider: ConnectionDetailsProvider | None = None,
+        world_password_manager: WorldPasswordManager | None = None,
         operation_dispatcher: OperationDispatcher | None = None,
         runtime_profile_hourly_rates: dict[str, Decimal] | None = None,
     ) -> None:
@@ -48,6 +55,7 @@ class GameWakeApplication:
         self.billing = billing
         self.game_catalog = game_catalog
         self._connection_details_provider = connection_details_provider
+        self._world_password_manager = world_password_manager
         self._operation_dispatcher = operation_dispatcher
         self._runtime_profile_hourly_rates = dict(runtime_profile_hourly_rates or {})
 
@@ -608,6 +616,58 @@ class GameWakeApplication:
         return self._connection_details_provider.issue(
             world,
             viewer_user_id=viewer_user_id,
+        )
+
+    def world_password_settings(
+        self,
+        account_id: str,
+        world_id: str,
+        *,
+        viewer_user_id: str,
+    ) -> WorldPasswordSettings:
+        world = self.worlds.get_world(
+            account_id,
+            world_id,
+            viewer_user_id=viewer_user_id,
+        )
+        if not self.accounts.authorize(
+            account_id,
+            user_id=viewer_user_id,
+            permission=Permission.EDIT_WORLD,
+            world_id=world_id,
+        ):
+            raise PermissionError("viewing World password settings requires Manager permission")
+        if self._world_password_manager is None:
+            raise ValueError("World password management is not configured")
+        return self._world_password_manager.get(world)
+
+    def update_world_password_settings(
+        self,
+        account_id: str,
+        world_id: str,
+        *,
+        actor_user_id: str,
+        mode: str,
+        password: str | None,
+    ) -> WorldPasswordSettings:
+        world = self.worlds.get_world(
+            account_id,
+            world_id,
+            viewer_user_id=actor_user_id,
+        )
+        if not self.accounts.authorize(
+            account_id,
+            user_id=actor_user_id,
+            permission=Permission.EDIT_WORLD,
+            world_id=world_id,
+        ):
+            raise PermissionError("editing World password settings requires Manager permission")
+        if self._world_password_manager is None:
+            raise ValueError("World password management is not configured")
+        return self._world_password_manager.configure(
+            world,
+            mode=mode,
+            password=password,
         )
 
     def configuration_schema(

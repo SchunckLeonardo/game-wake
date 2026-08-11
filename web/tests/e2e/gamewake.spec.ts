@@ -16,6 +16,10 @@ function navigation(page: import("@playwright/test").Page, section: string) {
   return page.locator(`[data-testid="nav-${section}"]:visible`);
 }
 
+function visibleAccessRole(page: import("@playwright/test").Page) {
+  return page.locator(".sidebar-foot:visible, .topbar-section-title small:visible");
+}
+
 async function expectControlsSeparated(
   first: import("@playwright/test").Locator,
   second: import("@playwright/test").Locator,
@@ -66,6 +70,105 @@ test("returning visitor enters the Console with the persisted session without re
   await expect(page).toHaveURL(/\/accounts\/account-returning$/);
 });
 
+test("returning visitor reopens the last Account and World they selected", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("gamewake_session", "persisted-session");
+    localStorage.setItem("gamewake:last-account", "account-last");
+    localStorage.setItem("gamewake:last-world:account-last", "world-last");
+  });
+  await page.route("**/api/v1/me/accounts", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({
+      accounts: [
+        { id: "account-first", name: "Primeiro grupo", access: ownerAccess },
+        { id: "account-last", name: "Grupo lembrado", access: ownerAccess },
+      ],
+    }),
+  }));
+  await page.route("**/api/v1/accounts/account-last/worlds", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({
+      worlds: [
+        { id: "world-first", name: "Primeiro World", region: "sa-east-1", status: "sleeping" },
+        { id: "world-last", name: "World lembrado", region: "sa-east-1", status: "sleeping" },
+      ],
+    }),
+  }));
+  await page.route("**/api/v1/accounts/account-last/wallet", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ wallet: { balance: "25.00", availableBalance: "25.00", statement: [] } }),
+  }));
+
+  await page.goto("/auth/enter");
+
+  await expect(page).toHaveURL(/\/accounts\/account-last$/);
+  await expect(page.getByRole("heading", { name: "World lembrado" })).toBeVisible();
+});
+
+test("Console switches among existing groups without OAuth and offers installing a new server", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("gamewake_session", "signed-session"));
+  await page.route("**/api/v1/me/accounts", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({
+      accounts: [
+        { id: "account-one", name: "Servidor Um", discordGuildId: "111", access: ownerAccess },
+        { id: "account-two", name: "Servidor Dois", discordGuildId: "222", access: ownerAccess },
+      ],
+    }),
+  }));
+  for (const [account, world] of [["account-one", "World Um"], ["account-two", "World Dois"]]) {
+    await page.route(`**/api/v1/accounts/${account}/worlds`, (route) => route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ worlds: [{ id: `world-${account}`, name: world, region: "sa-east-1", status: "sleeping" }] }),
+    }));
+    await page.route(`**/api/v1/accounts/${account}/wallet`, (route) => route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ wallet: { balance: "25.00", availableBalance: "25.00", statement: [] } }),
+    }));
+  }
+
+  await page.goto("/accounts/account-one");
+  await page.getByRole("button", { name: "Trocar grupo ou servidor" }).first().click();
+  await expect(page.getByRole("dialog", { name: "Escolher grupo ou servidor" })).toContainText("World Dois");
+  await expect(page.getByRole("link", { name: "Adicionar GameWake a outro servidor" })).toHaveAttribute(
+    "href",
+    "/auth/discord/start?install=1",
+  );
+  await page.getByRole("link", { name: /Servidor Dois/ }).click();
+
+  await expect(page).toHaveURL(/\/accounts\/account-two$/);
+  await expect(page.getByRole("heading", { name: "World Dois" })).toBeVisible();
+});
+
+test("logout is an explicit confirmed action in the user menu", async ({ page }) => {
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem("gamewake:test-session-seeded")) return;
+    localStorage.setItem("gamewake_session", "signed-session");
+    sessionStorage.setItem("gamewake:test-session-seeded", "true");
+  });
+  await page.route("**/api/v1/me/accounts", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ accounts: [{ id: "account-live", name: "Grupo", access: ownerAccess }] }),
+  }));
+  await page.route("**/api/v1/accounts/account-live/worlds", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ worlds: [] }),
+  }));
+  await page.route("**/api/v1/accounts/account-live/wallet", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ wallet: { availableBalance: "0.00", statement: [] } }),
+  }));
+
+  await page.goto("/accounts/account-live");
+  await page.getByRole("button", { name: "Abrir menu do usuário" }).click();
+  await page.getByRole("button", { name: "Sair do GameWake" }).click();
+  await expect(page.getByText("Sair desta sessão?")).toBeVisible();
+  await page.getByRole("button", { name: "Confirmar saída" }).click();
+
+  await expect(page).toHaveURL(/\/$/);
+  expect(await page.evaluate(() => localStorage.getItem("gamewake_session"))).toBeNull();
+});
+
 test("group completes onboarding without infrastructure vocabulary", async ({ page }) => {
   await page.goto("/onboarding?demo=1");
   await expect(page.getByTestId("onboarding")).toHaveAttribute("data-hydrated", "true");
@@ -99,8 +202,8 @@ test("group contributes, invites friends, wakes, connects, configures and sleeps
 
   await navigation(page, "worlds").click();
   await page.getByTestId("wake-world").click();
-  await expect(page.getByRole("dialog", { name: "Confirmar despertar de Palpagos" })).toContainText("R$ 5,50 por hora");
-  await page.getByRole("button", { name: "Reservar R$ 2,30 e acordar" }).click();
+  await expect(page.getByRole("dialog", { name: "Confirmar despertar de Palpagos" })).toContainText("R$ 2,49 por hora");
+  await page.getByRole("button", { name: "Reservar R$ 1,04 e acordar" }).click();
   const preparation = page.getByRole("status");
   await expect(preparation).toContainText("Preparando a máquina do jogo");
   await expect(preparation).toContainText("restaurando seu World protegido");
@@ -358,24 +461,21 @@ test("authenticated Console loads and mutates the real World through bearer API"
   await page.route("**/api/v1/accounts/account-live/worlds/world-live/wake/estimate", async (route) => {
     await route.fulfill({
       contentType: "application/json",
-      body: JSON.stringify({ estimate: { currency: "BRL", hourlyRate: "5.50", minimumReservation: "2.30", reservedMinutes: 25 } }),
+      body: JSON.stringify({ estimate: { currency: "BRL", hourlyRate: "2.49", minimumReservation: "1.04", reservedMinutes: 25 } }),
     });
   });
 
   await page.goto("/accounts/account-live");
-  await expect(page.getByRole("link", { name: "Trocar servidor do Discord" })).toHaveAttribute(
-    "href",
-    "/auth/discord/start?install=1",
-  );
+  await expect(page.getByRole("button", { name: "Trocar grupo ou servidor" }).first()).toBeVisible();
   await expect(page.getByRole("heading", { name: "Mundo real" })).toBeVisible();
   await expect(page.getByText("R$ 18,50").first()).toBeVisible();
   await expect(page.getByText("R$ 1,50 reservados temporariamente")).toBeVisible();
   await page.getByTestId("wake-world").click();
   const wakeDialog = page.getByRole("dialog", { name: "Confirmar despertar de Mundo real" });
-  await expect(wakeDialog).toContainText("R$ 5,50 por hora");
-  await expect(wakeDialog).toContainText("R$ 2,30 reservados agora");
+  await expect(wakeDialog).toContainText("R$ 2,49 por hora");
+  await expect(wakeDialog).toContainText("R$ 1,04 reservados agora");
   await expect(wakeDialog).toContainText("não é uma cobrança");
-  await page.getByRole("button", { name: "Reservar R$ 2,30 e acordar" }).click();
+  await page.getByRole("button", { name: "Reservar R$ 1,04 e acordar" }).click();
 
   expect(wakeBody).toMatchObject({ idempotencyKey: expect.any(String) });
   const preparation = page.getByRole("status");
@@ -392,6 +492,70 @@ test("authenticated Console loads and mutates the real World through bearer API"
     timeout: 6_000,
   });
   await expect(page.getByTestId("wake-world")).toBeEnabled();
+});
+
+test("Manager chooses a fixed World password or a new random password for every wake", async ({ page }) => {
+  let passwordBody: unknown;
+  await page.addInitScript(() => localStorage.setItem("gamewake_session", "signed-session"));
+  await page.route("**/api/v1/me/accounts", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ accounts: [{ id: "account-live", name: "Grupo", access: ownerAccess }] }),
+  }));
+  await page.route("**/api/v1/accounts/account-live/worlds", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ worlds: [{ id: "world-live", name: "Mundo real", region: "sa-east-1", status: "sleeping" }] }),
+  }));
+  await page.route("**/api/v1/accounts/account-live/wallet", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ wallet: { balance: "25.00", availableBalance: "25.00", statement: [] } }),
+  }));
+  await page.route("**/api/v1/accounts/account-live/worlds/world-live/configuration/schema", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ template: { configurationFields: [{
+      key: "enemy_drop_item_rate",
+      label: "Drop de itens dos inimigos",
+      valueType: "number",
+      default: 1,
+      acceptedValues: "maior que 0",
+      impact: "Multiplica os drops.",
+      officialDocumentationUrl: "https://tech.palworldgame.com/settings-and-operation/configuration/",
+    }] } }),
+  }));
+  await page.route("**/api/v1/accounts/account-live/worlds/world-live/configuration", async (route) => {
+    if (route.request().method() === "GET") {
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ revision: { values: { enemy_drop_item_rate: 1 } } }),
+      });
+    }
+    return route.fulfill({ contentType: "application/json", body: JSON.stringify({}) });
+  });
+  await page.route("**/api/v1/accounts/account-live/worlds/world-live/access/password", async (route) => {
+    if (route.request().method() === "GET") {
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ password: { mode: "fixed" } }),
+      });
+    }
+    passwordBody = route.request().postDataJSON();
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ password: { mode: "random_each_run" } }),
+    });
+  });
+
+  await page.goto("/accounts/account-live");
+  await navigation(page, "configuration").click();
+  await expectControlsSeparated(
+    page.locator(".password-mode-options > label").nth(1),
+    page.getByTestId("save-configuration"),
+  );
+  await page.getByLabel("Gerar uma senha nova a cada despertar").check();
+  await expect(page.getByText(/senha muda somente quando uma nova sessão começa/i)).toBeVisible();
+  await page.getByTestId("save-configuration").click();
+
+  await expect.poll(() => passwordBody).toEqual({ mode: "random_each_run" });
+  await expect(page.getByTestId("save-configuration")).toHaveText("Configuração salva ✓");
 });
 
 test("Console keeps following a World startup when an auxiliary request fails", async ({ page }) => {
@@ -508,21 +672,21 @@ test("Player, Moderador and Owner see the Console allowed by their permissions",
   }));
 
   await page.goto("/accounts/account-role");
-  await expect(page.locator("small:visible", { hasText: "Seu acesso: Player" })).toBeVisible();
+  await expect(visibleAccessRole(page)).toContainText("Player");
   await expect(navigation(page, "members")).toHaveCount(0);
   await expect(navigation(page, "configuration")).toHaveCount(0);
   await expect(navigation(page, "backups")).toHaveCount(0);
 
   profile = "manager";
   await page.reload();
-  await expect(page.locator("small:visible", { hasText: "Seu acesso: Moderador" })).toBeVisible();
+  await expect(visibleAccessRole(page)).toContainText("Moderador");
   await expect(navigation(page, "members")).toHaveCount(0);
   await expect(navigation(page, "configuration")).toBeVisible();
   await expect(navigation(page, "backups")).toBeVisible();
 
   profile = "owner";
   await page.reload();
-  await expect(page.locator("small:visible", { hasText: "Seu acesso: Owner" })).toBeVisible();
+  await expect(visibleAccessRole(page)).toContainText("Owner");
   await expect(navigation(page, "members")).toBeVisible();
   await expect(navigation(page, "configuration")).toBeVisible();
   await expect(navigation(page, "backups")).toBeVisible();
