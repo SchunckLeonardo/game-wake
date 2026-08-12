@@ -77,6 +77,7 @@ let accountSwitcherCache: {
   expiresAt: number;
   accounts: ApiAccountSummary[];
 } | null = null;
+let accountSwitcherRequest: Promise<ApiAccountSummary[]> | null = null;
 
 function cachedAccountSwitcherChoices() {
   if (!accountSwitcherCache || accountSwitcherCache.expiresAt <= Date.now()) {
@@ -95,6 +96,36 @@ function cacheAccountSwitcherChoices(accounts: ApiAccountSummary[]) {
 
 function invalidateAccountSwitcherChoices() {
   accountSwitcherCache = null;
+}
+
+async function loadAccountSwitcherChoices() {
+  const cached = cachedAccountSwitcherChoices();
+  if (cached) return cached;
+  if (accountSwitcherRequest) return accountSwitcherRequest;
+
+  accountSwitcherRequest = (async () => {
+    const response = await gameWakeFetch("/api/v1/me/accounts");
+    const payload = (await response.json()) as {
+      accounts: Array<Omit<ApiAccountSummary, "worlds">>;
+    };
+    const choices = await Promise.all(payload.accounts.map(async (account) => {
+      try {
+        const worldsResponse = await gameWakeFetch(`/api/v1/accounts/${account.id}/worlds`);
+        const worldsPayload = (await worldsResponse.json()) as { worlds: ApiWorld[] };
+        return { ...account, worlds: worldsPayload.worlds };
+      } catch {
+        return { ...account, worlds: [] };
+      }
+    }));
+    cacheAccountSwitcherChoices(choices);
+    return choices;
+  })();
+
+  try {
+    return await accountSwitcherRequest;
+  } finally {
+    accountSwitcherRequest = null;
+  }
 }
 
 type WorldPasswordMode = "fixed" | "random_each_run";
@@ -1091,30 +1122,17 @@ export function ConsoleDashboard({
       }]);
       return;
     }
-    const cachedChoices = cachedAccountSwitcherChoices();
-    if (cachedChoices) {
-      setAvailableAccounts(cachedChoices);
+    const cached = cachedAccountSwitcherChoices();
+    if (cached) {
+      setAvailableAccounts(cached);
       setAccountSwitcherLoading(false);
       return;
     }
     setAccountSwitcherLoading(true);
     setAvailableAccounts([]);
     try {
-      const response = await gameWakeFetch("/api/v1/me/accounts");
-      const payload = (await response.json()) as {
-        accounts: Array<Omit<ApiAccountSummary, "worlds">>;
-      };
-      const choices = await Promise.all(payload.accounts.map(async (account) => {
-        try {
-          const worldsResponse = await gameWakeFetch(`/api/v1/accounts/${account.id}/worlds`);
-          const worldsPayload = (await worldsResponse.json()) as { worlds: ApiWorld[] };
-          return { ...account, worlds: worldsPayload.worlds };
-        } catch {
-          return { ...account, worlds: [] };
-        }
-      }));
+      const choices = await loadAccountSwitcherChoices();
       setAvailableAccounts(choices);
-      cacheAccountSwitcherChoices(choices);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Não foi possível listar seus grupos.");
     } finally {

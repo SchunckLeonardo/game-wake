@@ -143,6 +143,10 @@ test("Console switches among existing groups without OAuth and offers installing
   const switcher = page.getByRole("dialog", { name: "Escolher grupo ou servidor" });
   await expect(switcher.getByTestId("account-switcher-skeleton")).toBeVisible();
   await expect(switcher.getByRole("status")).toHaveText("Buscando seus grupos e Worlds…");
+  await page.getByRole("button", { name: "Fechar troca de grupo" }).click();
+  await page.getByRole("button", { name: "Trocar grupo ou servidor" }).first().click();
+  await expect(switcher.getByTestId("account-switcher-skeleton")).toBeVisible();
+  expect(secondAccountWorldRequests).toBe(1);
   releaseSecondAccountWorlds?.();
   await expect(page.getByRole("dialog", { name: "Escolher grupo ou servidor" })).toContainText("World Dois");
   await expect(switcher.getByTestId("account-switcher-skeleton")).toHaveCount(0);
