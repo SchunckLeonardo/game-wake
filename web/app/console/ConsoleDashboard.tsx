@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Icon, type IconName } from "../Icon";
@@ -52,6 +52,7 @@ type WorldStatus =
 type ApiWorld = {
   id: string;
   name: string;
+  gameTemplateId?: string;
   region: string;
   status: WorldStatus;
   autoSleepMinutes?: 10 | 20 | 30 | 60 | null;
@@ -70,6 +71,31 @@ type ApiAccountSummary = {
   access?: ApiAccountAccess;
   worlds: ApiWorld[];
 };
+
+const ACCOUNT_SWITCHER_CACHE_TTL_MS = 60_000;
+let accountSwitcherCache: {
+  expiresAt: number;
+  accounts: ApiAccountSummary[];
+} | null = null;
+
+function cachedAccountSwitcherChoices() {
+  if (!accountSwitcherCache || accountSwitcherCache.expiresAt <= Date.now()) {
+    accountSwitcherCache = null;
+    return null;
+  }
+  return accountSwitcherCache.accounts;
+}
+
+function cacheAccountSwitcherChoices(accounts: ApiAccountSummary[]) {
+  accountSwitcherCache = {
+    accounts,
+    expiresAt: Date.now() + ACCOUNT_SWITCHER_CACHE_TTL_MS,
+  };
+}
+
+function invalidateAccountSwitcherChoices() {
+  accountSwitcherCache = null;
+}
 
 type WorldPasswordMode = "fixed" | "random_each_run";
 
@@ -137,6 +163,8 @@ type ConfigurationField = {
   impact: string;
   officialDocumentationUrl: string;
 };
+
+const configurationSchemaCache = new Map<string, ConfigurationField[]>();
 
 const sections: Array<{ id: Section; label: string; icon: IconName }> = [
   { id: "worlds", label: "Worlds", icon: "globe" },
@@ -370,6 +398,8 @@ export function ConsoleDashboard({
   const [savedPasswordMode, setSavedPasswordMode] = useState<WorldPasswordMode>("fixed");
   const [fixedPassword, setFixedPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
+  const liveStateRequestActive = useRef(false);
+  const progressRequestKey = useRef<string | null>(null);
 
   const statusCopy = useMemo(
     () =>
@@ -523,6 +553,28 @@ export function ConsoleDashboard({
     }
   }, [accountId, isDemo]);
 
+  const loadWorldState = useCallback(async () => {
+    if (isDemo || liveStateRequestActive.current || document.hidden) return;
+    liveStateRequestActive.current = true;
+    try {
+      const response = await gameWakeFetch(`/api/v1/accounts/${accountId}/worlds`);
+      const payload = (await response.json()) as { worlds: ApiWorld[] };
+      setWorlds(payload.worlds);
+      setWorld((current) => {
+        const selected = payload.worlds.find((item) => item.id === current?.id)
+          ?? payload.worlds.find((item) => item.id === getGameWakeLastWorldId(accountId))
+          ?? payload.worlds[0]
+          ?? null;
+        if (selected) setWorldStatus(selected.status);
+        return selected;
+      });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível atualizar o World.");
+    } finally {
+      liveStateRequestActive.current = false;
+    }
+  }, [accountId, isDemo]);
+
   useEffect(() => {
     void Promise.resolve().then(loadLiveState);
   }, [loadLiveState]);
@@ -635,14 +687,23 @@ export function ConsoleDashboard({
 
   useEffect(() => {
     if (isDemo || !["waking", "going_to_sleep"].includes(worldStatus)) return;
-    const interval = window.setInterval(() => void loadLiveState(), 3000);
-    return () => window.clearInterval(interval);
-  }, [isDemo, loadLiveState, worldStatus]);
+    const refreshVisibleWorld = () => {
+      if (!document.hidden) void loadWorldState();
+    };
+    const interval = window.setInterval(refreshVisibleWorld, 3000);
+    document.addEventListener("visibilitychange", refreshVisibleWorld);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshVisibleWorld);
+    };
+  }, [isDemo, loadWorldState, worldStatus]);
 
   useEffect(() => {
     if (isDemo || !selectedWorldId) return;
     let active = true;
     async function loadProgress() {
+      if (progressRequestKey.current === selectedWorldId || document.hidden) return;
+      progressRequestKey.current = selectedWorldId;
       try {
         const response = await gameWakeFetch(
           `/api/v1/accounts/${accountId}/worlds/${selectedWorldId}/operations`,
@@ -651,15 +712,21 @@ export function ConsoleDashboard({
         if (active) setWorldOperations(payload.operations);
       } catch {
         // Status polling remains best-effort; the persisted World status is authoritative.
+      } finally {
+        if (progressRequestKey.current === selectedWorldId) progressRequestKey.current = null;
       }
     }
     void loadProgress();
-    const interval = ["waking", "going_to_sleep"].includes(worldStatus)
-      ? window.setInterval(() => void loadProgress(), 3000)
-      : undefined;
+    const isTransitioning = ["waking", "going_to_sleep"].includes(worldStatus);
+    const interval = isTransitioning ? window.setInterval(() => void loadProgress(), 3000) : undefined;
+    const refreshVisibleProgress = () => {
+      if (isTransitioning && !document.hidden) void loadProgress();
+    };
+    document.addEventListener("visibilitychange", refreshVisibleProgress);
     return () => {
       active = false;
       if (interval !== undefined) window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshVisibleProgress);
     };
   }, [accountId, isDemo, selectedWorldId, worldStatus]);
 
@@ -685,21 +752,32 @@ export function ConsoleDashboard({
     async function loadConfiguration() {
       try {
         const base = `/api/v1/accounts/${accountId}/worlds/${world.id}/configuration`;
-        const [schemaResponse, revisionResponse, passwordResponse] = await Promise.all([
-          gameWakeFetch(`${base}/schema`),
+        const schemaCacheKey = world.gameTemplateId;
+        const cachedSchema = schemaCacheKey
+          ? configurationSchemaCache.get(schemaCacheKey)
+          : undefined;
+        const schemaFields = cachedSchema
+          ? Promise.resolve(cachedSchema)
+          : gameWakeFetch(`${base}/schema`).then(async (response) => {
+              const schema = (await response.json()) as {
+                template: { id?: string; configurationFields: ConfigurationField[] };
+              };
+              const key = schema.template.id ?? schemaCacheKey;
+              if (key) configurationSchemaCache.set(key, schema.template.configurationFields);
+              return schema.template.configurationFields;
+            });
+        const [fields, revisionResponse, passwordResponse] = await Promise.all([
+          schemaFields,
           gameWakeFetch(base),
           gameWakeFetch(`/api/v1/accounts/${accountId}/worlds/${world.id}/access/password`),
         ]);
-        const schema = (await schemaResponse.json()) as {
-          template: { configurationFields: ConfigurationField[] };
-        };
         const revision = (await revisionResponse.json()) as {
           revision: { values: Record<string, string | number | boolean> };
         };
         const password = (await passwordResponse.json()) as {
           password: { mode: WorldPasswordMode };
         };
-        setLiveConfigurationFields(schema.template.configurationFields);
+        setLiveConfigurationFields(fields);
         setConfigurationValues(revision.revision.values);
         setPasswordMode(password.password.mode);
         setSavedPasswordMode(password.password.mode);
@@ -856,6 +934,7 @@ export function ConsoleDashboard({
       setWorld(payload.world);
       setWorlds((current) => [...current.filter((item) => item.id !== payload.world.id), payload.world]);
       setWorldStatus(payload.world.status);
+      invalidateAccountSwitcherChoices();
       setShowNewWorld(false);
       setNewWorldName("");
     } catch (caught) {
@@ -1012,7 +1091,14 @@ export function ConsoleDashboard({
       }]);
       return;
     }
+    const cachedChoices = cachedAccountSwitcherChoices();
+    if (cachedChoices) {
+      setAvailableAccounts(cachedChoices);
+      setAccountSwitcherLoading(false);
+      return;
+    }
     setAccountSwitcherLoading(true);
+    setAvailableAccounts([]);
     try {
       const response = await gameWakeFetch("/api/v1/me/accounts");
       const payload = (await response.json()) as {
@@ -1028,6 +1114,7 @@ export function ConsoleDashboard({
         }
       }));
       setAvailableAccounts(choices);
+      cacheAccountSwitcherChoices(choices);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Não foi possível listar seus grupos.");
     } finally {
@@ -1050,6 +1137,7 @@ export function ConsoleDashboard({
   }
 
   function signOut() {
+    invalidateAccountSwitcherChoices();
     clearGameWakeSession();
     window.location.assign("/");
   }
@@ -1857,8 +1945,24 @@ export function ConsoleDashboard({
               <button aria-label="Fechar troca de grupo" onClick={() => setAccountSwitcherOpen(false)} type="button"><Icon name="close" size={19} /></button>
             </div>
             <p>Trocar entre grupos existentes não abre o Discord novamente. Cada grupo mostra somente os Worlds aos quais você tem acesso.</p>
-            <div className="account-choice-list">
-              {accountSwitcherLoading && <p role="status">Buscando seus grupos e Worlds…</p>}
+            <div aria-busy={accountSwitcherLoading} className="account-choice-list">
+              {accountSwitcherLoading && (
+                <div
+                  aria-label="Carregando grupos e Worlds"
+                  className="account-choice-skeletons"
+                  data-testid="account-switcher-skeleton"
+                  role="status"
+                >
+                  <span className="sr-only">Buscando seus grupos e Worlds…</span>
+                  {[0, 1, 2].map((item) => (
+                    <span aria-hidden="true" className="account-choice-skeleton" key={item}>
+                      <span className="skeleton-avatar" />
+                      <span className="skeleton-copy"><span /><span /></span>
+                      <span className="skeleton-action" />
+                    </span>
+                  ))}
+                </div>
+              )}
               {!accountSwitcherLoading && availableAccounts.filter((account) => account.worlds.length > 0).map((account) => (
                 <Link
                   aria-current={account.id === accountId ? "page" : undefined}

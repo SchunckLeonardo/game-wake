@@ -1249,6 +1249,19 @@ summary:focus-visible {
 .account-choice-list small { color: #697064; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-choice-list em { background: #e6f8bd; border-radius: 999px; font-size: 10px; font-style: normal; font-weight: 760; padding: 6px 8px; }
 .account-choice-list > p { color: #697064; font-size: 12px; line-height: 1.55; margin: 0; padding: 20px 4px; }
+.account-choice-skeletons { display: grid; }
+.account-choice-skeleton + .account-choice-skeleton { border-top: 1px solid #d8dbd2; }
+.account-choice-skeleton { align-items: center; display: grid; gap: 12px; grid-template-columns: auto 1fr auto; min-height: 76px; overflow: hidden; padding: 12px 3px; position: relative; }
+.account-choice-skeleton::after { animation: account-skeleton-shimmer 1.35s ease-in-out infinite; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.72), transparent); content: ""; inset: 0; position: absolute; transform: translateX(-100%); }
+.skeleton-avatar,
+.skeleton-copy > span,
+.skeleton-action { background: #e1e4db; display: block; }
+.skeleton-avatar { border-radius: 10px; height: 38px; width: 38px; }
+.skeleton-copy { display: grid; gap: 7px; }
+.skeleton-copy > span { border-radius: 4px; height: 10px; width: min(180px, 72%); }
+.skeleton-copy > span:last-child { background: #e9ebe5; height: 8px; width: min(280px, 92%); }
+.skeleton-action { border-radius: 999px; height: 24px; width: 48px; }
+@keyframes account-skeleton-shimmer { to { transform: translateX(100%); } }
 .user-menu-popover { background: #101a2b; border: 1px solid #3a4860; border-radius: 14px; bottom: 76px; box-shadow: 0 24px 65px rgba(0, 0, 0, 0.48); color: var(--white); left: 16px; padding: 16px; position: fixed; width: min(330px, calc(100vw - 32px)); z-index: 45; }
 .user-menu-popover header { align-items: center; border-bottom: 1px solid #2d394e; display: grid; gap: 10px; grid-template-columns: auto 1fr; padding-bottom: 14px; }
 .user-menu-popover header > span:last-child { display: flex; flex-direction: column; gap: 3px; min-width: 0; }

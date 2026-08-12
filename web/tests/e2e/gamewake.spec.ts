@@ -106,6 +106,11 @@ test("returning visitor reopens the last Account and World they selected", async
 });
 
 test("Console switches among existing groups without OAuth and offers installing a new server", async ({ page }) => {
+  let releaseSecondAccountWorlds: (() => void) | undefined;
+  const secondAccountWorldsReady = new Promise<void>((resolve) => {
+    releaseSecondAccountWorlds = resolve;
+  });
+  let secondAccountWorldRequests = 0;
   await page.addInitScript(() => localStorage.setItem("gamewake_session", "signed-session"));
   await page.route("**/api/v1/me/accounts", (route) => route.fulfill({
     contentType: "application/json",
@@ -117,10 +122,16 @@ test("Console switches among existing groups without OAuth and offers installing
     }),
   }));
   for (const [account, world] of [["account-one", "World Um"], ["account-two", "World Dois"]]) {
-    await page.route(`**/api/v1/accounts/${account}/worlds`, (route) => route.fulfill({
+    await page.route(`**/api/v1/accounts/${account}/worlds`, async (route) => {
+      if (account === "account-two") {
+        secondAccountWorldRequests += 1;
+        await secondAccountWorldsReady;
+      }
+      return route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({ worlds: [{ id: `world-${account}`, name: world, region: "sa-east-1", status: "sleeping" }] }),
-    }));
+      });
+    });
     await page.route(`**/api/v1/accounts/${account}/wallet`, (route) => route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({ wallet: { balance: "25.00", availableBalance: "25.00", statement: [] } }),
@@ -129,11 +140,20 @@ test("Console switches among existing groups without OAuth and offers installing
 
   await page.goto("/accounts/account-one");
   await page.getByRole("button", { name: "Trocar grupo ou servidor" }).first().click();
+  const switcher = page.getByRole("dialog", { name: "Escolher grupo ou servidor" });
+  await expect(switcher.getByTestId("account-switcher-skeleton")).toBeVisible();
+  await expect(switcher.getByRole("status")).toHaveText("Buscando seus grupos e Worlds…");
+  releaseSecondAccountWorlds?.();
   await expect(page.getByRole("dialog", { name: "Escolher grupo ou servidor" })).toContainText("World Dois");
+  await expect(switcher.getByTestId("account-switcher-skeleton")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Adicionar GameWake a outro servidor" })).toHaveAttribute(
     "href",
     "/auth/discord/start?install=1",
   );
+  await page.getByRole("button", { name: "Fechar troca de grupo" }).click();
+  await page.getByRole("button", { name: "Trocar grupo ou servidor" }).first().click();
+  await expect(switcher).toContainText("World Dois");
+  expect(secondAccountWorldRequests).toBe(1);
   await page.getByRole("link", { name: /Servidor Dois/ }).click();
 
   await expect(page).toHaveURL(/\/accounts\/account-two$/);
@@ -496,6 +516,7 @@ test("authenticated Console loads and mutates the real World through bearer API"
 
 test("Manager chooses a fixed World password or a new random password for every wake", async ({ page }) => {
   let passwordBody: unknown;
+  let schemaRequests = 0;
   await page.addInitScript(() => localStorage.setItem("gamewake_session", "signed-session"));
   await page.route("**/api/v1/me/accounts", (route) => route.fulfill({
     contentType: "application/json",
@@ -503,24 +524,27 @@ test("Manager chooses a fixed World password or a new random password for every 
   }));
   await page.route("**/api/v1/accounts/account-live/worlds", (route) => route.fulfill({
     contentType: "application/json",
-    body: JSON.stringify({ worlds: [{ id: "world-live", name: "Mundo real", region: "sa-east-1", status: "sleeping" }] }),
+    body: JSON.stringify({ worlds: [{ id: "world-live", name: "Mundo real", gameTemplateId: "palworld:1", region: "sa-east-1", status: "sleeping" }] }),
   }));
   await page.route("**/api/v1/accounts/account-live/wallet", (route) => route.fulfill({
     contentType: "application/json",
     body: JSON.stringify({ wallet: { balance: "25.00", availableBalance: "25.00", statement: [] } }),
   }));
-  await page.route("**/api/v1/accounts/account-live/worlds/world-live/configuration/schema", (route) => route.fulfill({
-    contentType: "application/json",
-    body: JSON.stringify({ template: { configurationFields: [{
-      key: "enemy_drop_item_rate",
-      label: "Drop de itens dos inimigos",
-      valueType: "number",
-      default: 1,
-      acceptedValues: "maior que 0",
-      impact: "Multiplica os drops.",
-      officialDocumentationUrl: "https://tech.palworldgame.com/settings-and-operation/configuration/",
-    }] } }),
-  }));
+  await page.route("**/api/v1/accounts/account-live/worlds/world-live/configuration/schema", (route) => {
+    schemaRequests += 1;
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ template: { id: "palworld:1", configurationFields: [{
+        key: "enemy_drop_item_rate",
+        label: "Drop de itens dos inimigos",
+        valueType: "number",
+        default: 1,
+        acceptedValues: "maior que 0",
+        impact: "Multiplica os drops.",
+        officialDocumentationUrl: "https://tech.palworldgame.com/settings-and-operation/configuration/",
+      }] } }),
+    });
+  });
   await page.route("**/api/v1/accounts/account-live/worlds/world-live/configuration", async (route) => {
     if (route.request().method() === "GET") {
       return route.fulfill({
@@ -556,24 +580,35 @@ test("Manager chooses a fixed World password or a new random password for every 
 
   await expect.poll(() => passwordBody).toEqual({ mode: "random_each_run" });
   await expect(page.getByTestId("save-configuration")).toHaveText("Configuração salva ✓");
+  const schemaRequestsBeforeReopen = schemaRequests;
+  await navigation(page, "worlds").click();
+  await navigation(page, "configuration").click();
+  await expect(page.getByLabel("Drop de itens dos inimigos")).toBeVisible();
+  expect(schemaRequests).toBe(schemaRequestsBeforeReopen);
 });
 
 test("Console keeps following a World startup when an auxiliary request fails", async ({ page }) => {
   let worldRequests = 0;
+  let accountRequests = 0;
+  let walletRequests = 0;
+  let operationRequests = 0;
   await page.addInitScript(() => localStorage.setItem("gamewake_session", "signed-session"));
-  await page.route("**/api/v1/me/accounts", (route) => route.fulfill({
-    contentType: "application/json",
-    body: JSON.stringify({
-      accounts: [{
-        id: "account-starting",
-        name: "Grupo iniciando",
-        access: {
-          roles: ["owner"],
-          permissions: ["world:view", "world:wake"],
-        },
-      }],
-    }),
-  }));
+  await page.route("**/api/v1/me/accounts", (route) => {
+    accountRequests += 1;
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        accounts: [{
+          id: "account-starting",
+          name: "Grupo iniciando",
+          access: {
+            roles: ["owner"],
+            permissions: ["world:view", "world:wake"],
+          },
+        }],
+      }),
+    });
+  });
   await page.route("**/api/v1/accounts/account-starting/worlds", (route) => {
     worldRequests += 1;
     const status = worldRequests >= 2 ? "online" : "waking";
@@ -591,29 +626,97 @@ test("Console keeps following a World startup when an auxiliary request fails", 
       }),
     });
   });
-  await page.route("**/api/v1/accounts/account-starting/wallet", (route) => route.fulfill({
-    status: 503,
-    contentType: "application/json",
-    body: JSON.stringify({ error: { code: "temporarily_unavailable" } }),
-  }));
-  await page.route("**/api/v1/accounts/account-starting/worlds/world-starting/operations", (route) => route.fulfill({
-    contentType: "application/json",
-    body: JSON.stringify({
-      operations: [{
-        id: "operation-starting",
-        type: "wake",
-        status: worldRequests >= 2 ? "succeeded" : "running",
-        phase: worldRequests >= 2 ? "complete" : "restoring_world",
-        createdAt: "2026-08-10T12:00:00Z",
-      }],
-    }),
-  }));
+  await page.route("**/api/v1/accounts/account-starting/wallet", (route) => {
+    walletRequests += 1;
+    return route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { code: "temporarily_unavailable" } }),
+    });
+  });
+  await page.route("**/api/v1/accounts/account-starting/worlds/world-starting/operations", (route) => {
+    operationRequests += 1;
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        operations: [{
+          id: "operation-starting",
+          type: "wake",
+          status: worldRequests >= 2 ? "succeeded" : "running",
+          phase: worldRequests >= 2 ? "complete" : "restoring_world",
+          createdAt: "2026-08-10T12:00:00Z",
+        }],
+      }),
+    });
+  });
 
   await page.goto("/accounts/account-starting");
 
   await expect(page.getByRole("status")).toContainText("Preparando a máquina do jogo");
   await expect(page.getByTestId("connect-world")).toBeVisible({ timeout: 7_000 });
   await expect(page.getByText(/progresso do World está atualizado.*dados auxiliares/i)).toBeVisible();
+  expect(accountRequests).toBe(1);
+  expect(walletRequests).toBe(1);
+  expect(worldRequests).toBeGreaterThanOrEqual(2);
+  expect(operationRequests).toBeGreaterThanOrEqual(1);
+});
+
+test("World polling pauses in a hidden tab and revalidates when it becomes visible", async ({ page }) => {
+  let worldRequests = 0;
+  await page.addInitScript(() => {
+    localStorage.setItem("gamewake_session", "signed-session");
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      get: () => (window as typeof window & { __gamewakeHidden?: boolean }).__gamewakeHidden ?? false,
+    });
+  });
+  await page.route("**/api/v1/me/accounts", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({
+      accounts: [{ id: "account-hidden", name: "Grupo", access: ownerAccess }],
+    }),
+  }));
+  await page.route("**/api/v1/accounts/account-hidden/worlds", (route) => {
+    worldRequests += 1;
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        worlds: [{
+          id: "world-hidden",
+          name: "World oculto",
+          region: "sa-east-1",
+          status: "waking",
+          permissions: ["world:view", "world:wake"],
+        }],
+      }),
+    });
+  });
+  await page.route("**/api/v1/accounts/account-hidden/wallet", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ wallet: { balance: "25.00", availableBalance: "25.00", statement: [] } }),
+  }));
+  await page.route("**/api/v1/accounts/account-hidden/worlds/world-hidden/operations", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ operations: [] }),
+  }));
+
+  await page.goto("/accounts/account-hidden");
+  await expect(page.getByRole("heading", { name: "World oculto" })).toBeVisible();
+  await page.evaluate(() => {
+    (window as typeof window & { __gamewakeHidden?: boolean }).__gamewakeHidden = true;
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  // Let a request that crossed the visibility boundary settle before measuring the paused period.
+  await page.waitForTimeout(150);
+  const requestsWhileHidden = worldRequests;
+  await page.waitForTimeout(3_300);
+  expect(worldRequests).toBe(requestsWhileHidden);
+
+  await page.evaluate(() => {
+    (window as typeof window & { __gamewakeHidden?: boolean }).__gamewakeHidden = false;
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect.poll(() => worldRequests).toBe(requestsWhileHidden + 1);
 });
 
 test("Player, Moderador and Owner see the Console allowed by their permissions", async ({ page }) => {
