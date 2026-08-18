@@ -53,8 +53,11 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     description,
     icons: {
-      icon: "/icon.svg",
-      shortcut: "/icon.svg",
+      icon: [
+        { url: "/favicon.ico?v=20260818", sizes: "32x32", type: "image/x-icon" },
+        { url: "/icon.svg?v=20260818", type: "image/svg+xml" },
+      ],
+      shortcut: "/favicon.ico?v=20260818",
     },
     openGraph: {
       type: "website",

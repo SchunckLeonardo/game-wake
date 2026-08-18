@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 async function render(path = "/", environment = {}) {
@@ -59,9 +60,22 @@ test("renders the public GameWake landing page without starter artifacts", async
   );
   assert.match(
     html,
-    /<link rel="(?:shortcut )?icon" href="(?:https:\/\/[^"/]+)?\/icon\.svg"/i,
+    /<link rel="(?:shortcut )?icon" href="(?:https:\/\/[^"/]+)?\/favicon\.ico\?v=20260818"/i,
   );
   assert.doesNotMatch(html, /codex-preview|SkeletonPreview|react-loading-skeleton/i);
+});
+
+test("packages the GameWake browser icon referenced by the page metadata", async () => {
+  const icon = await readFile(new URL("../dist/client/favicon.ico", import.meta.url));
+  const scalableIcon = await readFile(
+    new URL("../dist/client/icon.svg", import.meta.url),
+    "utf8",
+  );
+
+  assert.deepEqual([...icon.subarray(0, 4)], [0, 0, 1, 0]);
+  assert.match(scalableIcon, /^<svg\b/i);
+  assert.match(scalableIcon, /#0b1020/i);
+  assert.match(scalableIcon, /#c8f20d/i);
 });
 
 test("renders Terms and Privacy as public, navigable documents", async () => {
