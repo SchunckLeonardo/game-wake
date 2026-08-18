@@ -172,8 +172,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Install ShellCheck
-        run: sudo apt-get update && sudo apt-get install -y ripgrep shellcheck
+      - name: Verify bundled ShellCheck
+        run: shellcheck --version
 
       - name: Check shell syntax
         run: bash -n scripts/*.sh server/*.sh terraform/user-data.sh.tpl
@@ -183,12 +183,12 @@ jobs:
 
       - name: Check server safety invariants
         run: |
-          if rg -n 'palworld_api POST save[[:space:]]*(>|$)' server/*.sh; then
+          if grep -nE 'palworld_api POST save[[:space:]]*(>|$)' server/*.sh; then
             echo "Every REST save call must send an empty JSON body: '{}'." >&2
             exit 1
           fi
-          rg --fixed-strings --line-regexp --quiet 'RuntimeDirectory=palworld' server/palworld.service
-          rg --fixed-strings --line-regexp --quiet 'RuntimeDirectoryMode=0750' server/palworld.service
+          grep -Fqx 'RuntimeDirectory=palworld' server/palworld.service
+          grep -Fqx 'RuntimeDirectoryMode=0750' server/palworld.service
 
   terraform-validation:
     name: Terraform and Lambda package
