@@ -74,12 +74,10 @@ export function AuthCallback() {
         if (safePendingInvitation) {
           window.localStorage.removeItem("gamewake:pending-invitation");
         }
-        const postAuthReturn = fragment.get("reauthenticated") === "1"
-          ? takeGameWakePostAuthReturn()
-          : null;
+        const postAuthReturn = takeGameWakePostAuthReturn();
         const postAuthAccountId = postAuthReturn?.match(/^\/accounts\/([^/?]+)/)?.[1];
         const safePostAuthReturn = postAuthAccountId
-          && accounts.some((account) => account.id === decodeURIComponent(postAuthAccountId))
+          && selectedAccount?.id === decodeURIComponent(postAuthAccountId)
           ? postAuthReturn
           : null;
         const next = safePendingInvitation ?? safePostAuthReturn ?? (selectedAccount

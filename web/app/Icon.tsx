@@ -9,6 +9,7 @@ export type IconName =
   | "chevron-down"
   | "clock"
   | "close"
+  | "copy"
   | "database"
   | "discord"
   | "globe"
@@ -37,6 +38,7 @@ export function Icon({ name, size = 20, ...props }: IconProps) {
     "chevron-down": <path d="m6 9 6 6 6-6" />,
     clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
     close: <><path d="m6 6 12 12M18 6 6 18" /></>,
+    copy: <><rect height="12" rx="2" width="12" x="8" y="8" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></>,
     database: <><ellipse cx="12" cy="5" rx="8" ry="3" /><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5" /><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" /></>,
     discord: <><path d="M8 8.5a10 10 0 0 1 8 0" /><path d="M7 17c-2.2-.6-3.6-1.7-4.5-3.2.7-3.7 2.2-6.6 4.3-8.5l2.4 1.1M17 17c2.2-.6 3.6-1.7 4.5-3.2-.7-3.7-2.2-6.6-4.3-8.5l-2.4 1.1" /><circle cx="9" cy="13" r="1" fill="currentColor" stroke="none" /><circle cx="15" cy="13" r="1" fill="currentColor" stroke="none" /><path d="M8 17c1.3.8 2.6 1.2 4 1.2s2.7-.4 4-1.2" /></>,
     globe: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" /></>,

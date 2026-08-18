@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Icon, type IconName } from "../Icon";
+import { DiscordSetupPanel } from "./DiscordSetupPanel";
 import {
   clearGameWakeSession,
   gameWakeFetch,
@@ -70,6 +71,7 @@ type ApiAccountSummary = {
   id: string;
   name: string;
   discordGuildId?: string | null;
+  discordChannelConfigured?: boolean;
   access?: ApiAccountAccess;
   worlds: ApiWorld[];
 };
@@ -215,7 +217,7 @@ const configurationSchemaCache = new Map<string, ConfigurationField[]>();
 const sections: Array<{ id: Section; label: string; icon: IconName }> = [
   { id: "worlds", label: "Worlds", icon: "globe" },
   { id: "wallet", label: "Wallet", icon: "wallet" },
-  { id: "members", label: "Membros e Roles", icon: "users" },
+  { id: "members", label: "Grupo e Discord", icon: "users" },
   { id: "configuration", label: "Configuração", icon: "settings" },
   { id: "backups", label: "Backups", icon: "database" },
   { id: "activity", label: "Atividade", icon: "activity" },
@@ -390,6 +392,9 @@ export function ConsoleDashboard({
   const [discordGuildId, setDiscordGuildId] = useState<string | null>(
     isDemo ? "123456789012345678" : null,
   );
+  const [discordChannelConfigured, setDiscordChannelConfigured] = useState(isDemo);
+  const [discordCheckLoading, setDiscordCheckLoading] = useState(false);
+  const [discordVerificationMessage, setDiscordVerificationMessage] = useState("");
   const [walletBalance, setWalletBalance] = useState(isDemo ? "42.80" : "0.00");
   const [walletTotalBalance, setWalletTotalBalance] = useState(isDemo ? "42.80" : "0.00");
   const [walletStatement, setWalletStatement] = useState<WalletEntry[]>([]);
@@ -530,7 +535,7 @@ export function ConsoleDashboard({
     () => sections.filter((item) => {
       if (item.id === "worlds") return can("world:view");
       if (item.id === "members") {
-        return can("membership:manage") || can("role:manage");
+        return can("membership:manage") || can("role:manage") || can("integration:manage");
       }
       if (item.id === "configuration") return can("world:edit");
       if (item.id === "backups") {
@@ -581,7 +586,7 @@ export function ConsoleDashboard({
     const rememberReauthenticationReturn = (event: MouseEvent) => {
       const target = event.target instanceof Element ? event.target : null;
       const link = target?.closest<HTMLAnchorElement>(
-        'a[href^="/auth/discord/start?install=0&accountId="]',
+        'a[href^="/auth/discord/start?"][href*="accountId="]',
       );
       if (link) {
         setGameWakePostAuthReturn(`${window.location.pathname}${window.location.search}`);
@@ -609,6 +614,7 @@ export function ConsoleDashboard({
               id: string;
               name: string;
               discordGuildId?: string | null;
+              discordChannelConfigured?: boolean;
               access?: ApiAccountAccess;
             }>;
           },
@@ -639,6 +645,7 @@ export function ConsoleDashboard({
         const account = accountsResult.value.accounts.find((item) => item.id === accountId);
         setAccountName(account?.name ?? "Seu grupo");
         setDiscordGuildId(account?.discordGuildId ?? null);
+        setDiscordChannelConfigured(account?.discordChannelConfigured ?? false);
         setAccountAccess(
           account?.access ?? { roles: [], permissions: [] },
         );
@@ -1237,6 +1244,44 @@ export function ConsoleDashboard({
     }
   }
 
+  async function refreshDiscordIntegration() {
+    if (isDemo) {
+      setDiscordChannelConfigured(true);
+      setDiscordVerificationMessage("Conexão confirmada. Os comandos estão prontos.");
+      return;
+    }
+    setDiscordCheckLoading(true);
+    setDiscordVerificationMessage("");
+    try {
+      const response = await gameWakeFetch("/api/v1/me/accounts");
+      const payload = (await response.json()) as {
+        accounts: Array<{
+          id: string;
+          discordGuildId?: string | null;
+          discordChannelConfigured?: boolean;
+        }>;
+      };
+      const account = payload.accounts.find((item) => item.id === accountId);
+      const nextGuildId = account?.discordGuildId ?? null;
+      const nextChannelConfigured = account?.discordChannelConfigured ?? false;
+      setDiscordGuildId(nextGuildId);
+      setDiscordChannelConfigured(nextChannelConfigured);
+      setDiscordVerificationMessage(
+        nextChannelConfigured
+          ? "Conexão confirmada. Os comandos estão prontos."
+          : "Ainda não recebemos /gamewake comecar. Execute o comando no Discord e tente novamente.",
+      );
+    } catch (caught) {
+      setDiscordVerificationMessage(
+        caught instanceof Error
+          ? caught.message
+          : "Não foi possível verificar agora. Tente novamente.",
+      );
+    } finally {
+      setDiscordCheckLoading(false);
+    }
+  }
+
   function selectWorld(item: ApiWorld) {
     setWorld(item);
     setWorldStatus(item.status);
@@ -1697,6 +1742,17 @@ export function ConsoleDashboard({
                 {can("world:create") && <button aria-label="+ Novo World" className="button button-outline" disabled={!hydrated} onClick={() => setShowNewWorld((current) => !current)} type="button"><Icon name="plus" size={17} />Novo World</button>}
               </div>
 
+              {can("integration:manage") && !discordChannelConfigured && (
+                <article className="discord-setup-nudge">
+                  <span><Icon name="discord" size={19} /></span>
+                  <div>
+                    <strong>{discordGuildId ? "O GameWake está instalado, mas falta ativar um canal" : "Use /gamewake sem configurar nada à mão"}</strong>
+                    <p>{discordGuildId ? "O Owner executa /gamewake comecar uma vez no canal onde o grupo joga." : "Escolha o servidor Discord e a GameWake cuida dos comandos para você."}</p>
+                  </div>
+                  <button className="button button-outline" onClick={() => navigateToSection("members")} type="button">Configurar Discord</button>
+                </article>
+              )}
+
               {showNewWorld && <article className="contribution-panel"><h2>Criar World</h2><p>Palworld em São Paulo, com preço confirmado antes de cada sessão.</p><div className="inline-action-form"><label>Nome do novo World<input aria-label="Nome do novo World" autoFocus onChange={(event) => setNewWorldName(event.target.value)} placeholder="Ex.: Palpagos" value={newWorldName} /></label><button className="button button-primary" disabled={!newWorldName.trim()} onClick={() => void createWorld()} type="button">Criar World</button></div></article>}
 
               {!world && !showNewWorld && (
@@ -1715,7 +1771,7 @@ export function ConsoleDashboard({
                     <button className="button button-primary" disabled={!hydrated} onClick={() => setShowNewWorld(true)} type="button"><Icon name="plus" size={17} />Criar meu primeiro World</button>
                     {!discordGuildId && <Link className="button button-outline" href={`/auth/discord/start?accountId=${encodeURIComponent(accountId)}`}><Icon name="discord" size={17} />Conectar Discord</Link>}
                   </div>
-                  <div className="discord-command-guide"><Icon name="discord" size={19} /><p><strong>Prefere começar no Discord?</strong> O Owner usa <code>/gamewake comecar</code> uma vez. Depois do convite, cada amigo usa <code>/gamewake aceitar</code>.</p></div>
+                  <div className="discord-command-guide"><Icon name="discord" size={19} /><p><strong>Prefere começar no Discord?</strong> {discordChannelConfigured ? <>Use <code>/gamewake comecar</code> somente se quiser trocar o canal do grupo. Depois do convite, cada amigo usa <code>/gamewake aceitar</code>.</> : <>Abra <button onClick={() => navigateToSection("members")} type="button">Grupo e Discord</button> e siga os dois passos guiados.</>}</p></div>
                 </section>
               )}
 
@@ -1749,12 +1805,14 @@ export function ConsoleDashboard({
                         <span><Icon name="discord" size={17} /></span>
                         <div><h3 id="discord-first-session">Pelo Discord</h3><p>Use o mesmo World no servidor Discord conectado.</p></div>
                       </div>
-                      <ol className="discord-first-session-steps">
-                        <li><code>/gamewake acordar</code><span>inicia a partida</span></li>
-                        <li><code>/gamewake status</code><span>acompanha o preparo</span></li>
-                        <li><code>/gamewake conectar</code><span>entrega IP e senha em privado</span></li>
-                      </ol>
-                      <p className="discord-friend-flow">Para chamar o grupo: <code>/gamewake convidar @amigo1 @amigo2</code>. Cada amigo entra usando <code>/gamewake aceitar</code>.</p>
+                      {discordChannelConfigured ? <>
+                        <ol className="discord-first-session-steps">
+                          <li><code>/gamewake acordar</code><span>inicia a partida</span></li>
+                          <li><code>/gamewake status</code><span>acompanha o preparo</span></li>
+                          <li><code>/gamewake conectar</code><span>entrega IP e senha em privado</span></li>
+                        </ol>
+                        <p className="discord-friend-flow">Para chamar o grupo: <code>/gamewake convidar @amigo1 @amigo2</code>. Cada amigo entra usando <code>/gamewake aceitar</code>.</p>
+                      </> : <div className="discord-route-blocked"><strong>Antes, ative o Discord do grupo</strong><p>Você verá exatamente onde instalar e qual único comando executar.</p><button className="button button-outline" onClick={() => navigateToSection("members")} type="button">Configurar Discord</button></div>}
                     </section>
                   </div>
                 </article>
@@ -1970,7 +2028,9 @@ export function ConsoleDashboard({
 
           {activeSection === "members" && (
             <div className="panel-page" data-testid="members-panel">
-              <div className="panel-heading split"><div><h1>Membros e Roles</h1><p>Convide um amigo para jogar ou entregue somente os controles que ele precisa.</p></div><span className="viewer-role-badge">Você é {viewerRole}</span></div>
+              <div className="panel-heading split"><div><h1>Grupo e Discord</h1><p>Prepare os comandos do servidor, convide amigos e controle quem pode fazer o quê.</p></div><span className="viewer-role-badge">Você é {viewerRole}</span></div>
+              {can("integration:manage") && <DiscordSetupPanel accountId={accountId} accountName={accountName} channelConfigured={discordChannelConfigured} checking={discordCheckLoading} discordGuildId={discordGuildId} onRefresh={refreshDiscordIntegration} verificationMessage={discordVerificationMessage} />}
+              {(can("membership:manage") || can("role:manage")) && <>
               <article className="contribution-panel invitation-builder">
                 <h2>Criar link de convite</h2>
                 <p>O amigo entra com o Discord, aceita uma vez e chega direto ao lugar certo.</p>
@@ -2022,6 +2082,7 @@ export function ConsoleDashboard({
                   <div className="custom-role-actions"><button className="button button-outline" disabled={customRoleLoading || !customRoleName.trim() || customRolePermissions.length === 0} onClick={() => void createCustomRole()} type="button">{customRoleLoading ? "Criando Role…" : "Criar Role personalizada"}</button><Link href={`/auth/discord/start?install=0&accountId=${encodeURIComponent(accountId)}`}>Renovar login Discord</Link></div>
                 </div>}
               </details>
+              </>}
             </div>
           )}
 

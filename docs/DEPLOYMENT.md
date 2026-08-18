@@ -113,7 +113,6 @@ Preencha `.env` somente na máquina operacional:
 
 ```dotenv
 DISCORD_APPLICATION_ID=...
-DISCORD_GUILD_ID=...
 DISCORD_BOT_TOKEN=...
 DISCORD_CLIENT_SECRET=...
 ABACATEPAY_API_KEY=...
@@ -165,13 +164,13 @@ No Discord Developer Portal:
 - Activity URL Mapping = origem da Console;
 - Activity launch path = `/activity`.
 
-Registre os comandos de guild para feedback imediato durante a beta:
+Registre `/gamewake` globalmente uma vez. O comando passa a ficar disponível em todo servidor que instalar o aplicativo sem apagar o comando `launch` da Activity:
 
 ```bash
 ./scripts/register-discord-commands.sh
 ```
 
-O script registra somente `/gamewake`. A jornada começa em `/gamewake comecar`.
+O script usa `POST` como upsert e registra somente `/gamewake`; ele não exige uma Guild fixa. A jornada de cada novo servidor começa em `/gamewake comecar`, que também ativa o canal escolhido para as notificações do grupo.
 
 ## 8. Publicar a Console
 

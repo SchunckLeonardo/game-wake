@@ -99,7 +99,7 @@ test("renders the responsive Console with every MVP management surface", async (
   assert.match(html, /Palpagos/);
   assert.match(html, /Acordar World/);
   assert.match(html, /Wallet/);
-  assert.match(html, /Membros e Roles/);
+  assert.match(html, /Grupo e Discord/);
   assert.match(html, /Configuração/);
   assert.match(html, /Backups/);
   assert.match(html, /Atividade/);

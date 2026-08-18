@@ -625,6 +625,7 @@ class GameWakeApi:
             "id": account.id,
             "name": account.name,
             "discordGuildId": account.discord_guild_id,
+            "discordChannelConfigured": account.discord_channel_id is not None,
         }
         if access is not None:
             membership, permissions = access

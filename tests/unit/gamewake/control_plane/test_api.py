@@ -704,6 +704,7 @@ def test_authenticated_user_can_discover_only_their_accounts_for_console_routing
                 "id": mine.id,
                 "name": "Meu grupo",
                 "discordGuildId": None,
+                "discordChannelConfigured": False,
                 "access": {
                     "roles": ["owner"],
                     "permissions": sorted(permission.value for permission in Permission),
@@ -711,6 +712,34 @@ def test_authenticated_user_can_discover_only_their_accounts_for_console_routing
             }
         ]
     }
+
+
+def test_account_projection_reports_discord_channel_readiness_without_exposing_channel_id():
+    repository = InMemoryAccountRepository()
+    accounts = Accounts(repository)
+    mine = accounts.create_account(
+        name="Meu grupo",
+        owner_user_id="owner",
+        discord_guild_id="123456789012345678",
+        discord_channel_id="987654321098765432",
+    )
+    catalog = GameCatalog.with_palworld()
+    api = GameWakeApi(
+        GameWakeApplication(
+            accounts=accounts,
+            worlds=Worlds(InMemoryWorldRepository(), access=accounts, game_catalog=catalog),
+            billing=Billing(InMemoryBillingRepository()),
+            game_catalog=catalog,
+        )
+    )
+
+    response = api.handle(ApiRequest("GET", "/api/v1/me/accounts", "owner"))
+
+    [account] = response.body["accounts"]
+    assert account["id"] == mine.id
+    assert account["discordGuildId"] == "123456789012345678"
+    assert account["discordChannelConfigured"] is True
+    assert "discordChannelId" not in account
 
 
 def test_manager_configures_world_password_policy_without_returning_the_secret():

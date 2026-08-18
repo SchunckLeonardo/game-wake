@@ -164,6 +164,97 @@ test("Console switches among existing groups without OAuth and offers installing
   await expect(page.getByRole("heading", { name: "World Dois" })).toBeVisible();
 });
 
+test("Console shows the exact Discord installation step instead of requiring setup knowledge", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("gamewake_session", "signed-session"));
+  await page.route("**/api/v1/me/accounts", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({
+      accounts: [{
+        id: "account-discord",
+        name: "Sexta com os amigos",
+        discordGuildId: null,
+        discordChannelConfigured: false,
+        access: ownerAccess,
+      }],
+    }),
+  }));
+  await page.route("**/api/v1/accounts/account-discord/worlds", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ worlds: [] }),
+  }));
+  await page.route("**/api/v1/accounts/account-discord/wallet", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ wallet: { availableBalance: "0.00", statement: [] } }),
+  }));
+  await page.route("**/api/v1/accounts/account-discord/memberships", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ memberships: [] }),
+  }));
+  await page.route("**/api/v1/accounts/account-discord/roles", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ customRoles: [], permissions: [] }),
+  }));
+
+  await page.goto("/accounts/account-discord?section=members");
+
+  await expect(page.getByTestId("discord-setup")).toContainText("Instale o GameWake no seu servidor");
+  await expect(page.getByTestId("discord-setup")).toContainText("Você não precisa configurar token, endpoint ou comando");
+  await expect(page.getByRole("link", { name: "Escolher servidor no Discord" })).toHaveAttribute(
+    "href",
+    "/auth/discord/start?install=1&accountId=account-discord",
+  );
+});
+
+test("Console verifies the Discord channel and reveals only the next useful commands", async ({ page }) => {
+  let channelConfigured = false;
+  await page.addInitScript(() => localStorage.setItem("gamewake_session", "signed-session"));
+  await page.route("**/api/v1/me/accounts", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({
+      accounts: [{
+        id: "account-discord",
+        name: "Sexta com os amigos",
+        discordGuildId: "123456789012345678",
+        discordChannelConfigured: channelConfigured,
+        access: ownerAccess,
+      }],
+    }),
+  }));
+  await page.route("**/api/v1/accounts/account-discord/worlds", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({
+      worlds: [{ id: "world-live", name: "Palpagos", region: "sa-east-1", status: "sleeping" }],
+    }),
+  }));
+  await page.route("**/api/v1/accounts/account-discord/wallet", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ wallet: { availableBalance: "25.00", statement: [] } }),
+  }));
+  await page.route("**/api/v1/accounts/account-discord/memberships", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ memberships: [] }),
+  }));
+  await page.route("**/api/v1/accounts/account-discord/roles", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ customRoles: [], permissions: [] }),
+  }));
+
+  await page.goto("/accounts/account-discord?section=members");
+
+  const setup = page.getByTestId("discord-setup");
+  await expect(setup).toContainText("Ative o canal onde seus amigos jogam");
+  await expect(setup.getByText("/gamewake comecar", { exact: true })).toBeVisible();
+  await expect(setup).toContainText("O Owner executa este comando uma única vez");
+
+  channelConfigured = true;
+  await setup.getByRole("button", { name: "Verificar novamente" }).click();
+
+  await expect(setup).toContainText("Discord pronto para jogar");
+  await expect(setup.getByText("/gamewake status", { exact: true })).toBeVisible();
+  await expect(setup.getByText("/gamewake acordar", { exact: true })).toBeVisible();
+  await expect(setup.getByText("/gamewake conectar", { exact: true })).toBeVisible();
+});
+
 test("logout is an explicit confirmed action in the user menu", async ({ page }) => {
   await page.addInitScript(() => {
     if (sessionStorage.getItem("gamewake:test-session-seeded")) return;
@@ -314,6 +405,27 @@ test("OAuth reauthentication returns to the exact Console section", async ({ pag
   expect(
     await page.evaluate(() => localStorage.getItem("gamewake:post-auth-return")),
   ).toBeNull();
+});
+
+test("Discord repair installation returns to the same Account section", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      "gamewake:post-auth-return",
+      "/accounts/account-live?section=members&world=world-live",
+    );
+  });
+  await page.route("**/api/v1/me/accounts", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({
+      accounts: [{ id: "account-live", name: "Grupo real", access: ownerAccess }],
+    }),
+  }));
+
+  await page.goto("/auth/callback#session=installed-session&accountId=account-live");
+
+  await expect(page).toHaveURL(
+    /\/accounts\/account-live\?section=members&world=world-live$/,
+  );
 });
 
 test("selecting another Discord server loads only that server account", async ({ page }) => {
@@ -1016,10 +1128,9 @@ test("Discord-bootstrapped account creates its first World from the Console", as
   await expect(guide).toContainText("Conectar e jogar");
   await expect(guide).toContainText("Pelo Console");
   await expect(guide).toContainText("Pelo Discord");
-  await expect(guide).toContainText("/gamewake acordar");
-  await expect(guide).toContainText("/gamewake conectar");
-  await expect(guide).toContainText("/gamewake convidar @amigo1 @amigo2");
-  await expect(guide).toContainText("/gamewake aceitar");
+  await expect(guide).toContainText("Antes, ative o Discord do grupo");
+  await expect(guide.getByRole("button", { name: "Configurar Discord" })).toBeVisible();
+  await expect(guide).not.toContainText("/gamewake acordar");
   expect(createdWorldBody).toMatchObject({
     name: "Primeiro World",
     gameTemplateId: "palworld:1",

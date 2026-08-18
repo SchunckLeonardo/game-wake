@@ -218,3 +218,18 @@ def test_discord_registration_exposes_guided_settings_panel() -> None:
     assert registration_script.count('name:"configurar"') == 1
     assert 'name:"palworld"' not in registration_script
     assert "painel guiado de configurações" in registration_script
+
+
+def test_discord_registration_publishes_gamewake_globally_without_overwriting_activity() -> None:
+    project_root = Path(__file__).resolve().parents[2]
+    registration_script = (project_root / "scripts" / "register-discord-commands.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "${DISCORD_GUILD_ID:?" not in registration_script
+    assert "applications/$DISCORD_APPLICATION_ID/commands" in registration_script
+    assert "guilds/$DISCORD_GUILD_ID/commands" not in registration_script
+    assert "--request POST" in registration_script
+    assert "--request PUT" not in registration_script
+    assert "integration_types:[0]" in registration_script
+    assert "contexts:[0]" in registration_script

@@ -10,17 +10,17 @@ if [[ -f "$project_root/.env" ]]; then
 fi
 
 : "${DISCORD_APPLICATION_ID:?Defina DISCORD_APPLICATION_ID no ambiente ou .env}"
-: "${DISCORD_GUILD_ID:?Defina DISCORD_GUILD_ID no ambiente ou .env}"
 : "${DISCORD_BOT_TOKEN:?Defina DISCORD_BOT_TOKEN no ambiente ou .env}"
 
-api_url="https://discord.com/api/v10/applications/$DISCORD_APPLICATION_ID/guilds/$DISCORD_GUILD_ID/commands"
-payload=$(jq -cn '[
+api_url="https://discord.com/api/v10/applications/$DISCORD_APPLICATION_ID/commands"
+payload=$(jq -cn '
   {
     name:"gamewake",
     description:"Jogue com seus amigos sem manter um servidor ligado",
     type:1,
     default_member_permissions:null,
-    dm_permission:false,
+    integration_types:[0],
+    contexts:[0],
     options:[
       {type:1,name:"comecar",description:"Cria a conta GameWake deste servidor"},
       {
@@ -43,7 +43,7 @@ payload=$(jq -cn '[
       {type:1,name:"ajuda",description:"Explica os comandos GameWake"}
     ]
   }
-]')
+')
 
 response_file=$(mktemp)
 curl_config=$(mktemp)
@@ -55,7 +55,7 @@ http_status=$(curl --config "$curl_config" \
   --show-error \
   --output "$response_file" \
   --write-out '%{http_code}' \
-  --request PUT \
+  --request POST \
   --header 'Content-Type: application/json' \
   --data "$payload" \
   --url "$api_url")
@@ -66,4 +66,4 @@ if [[ $http_status != 2* ]]; then
   exit 1
 fi
 
-jq -r '.[] | "Registrado: /" + .name + " (id=" + .id + ")"' "$response_file"
+jq -r '"Registrado globalmente: /" + .name + " (id=" + .id + ")"' "$response_file"
