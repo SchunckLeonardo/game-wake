@@ -70,7 +70,14 @@ export async function gameWakeFetch(path: string, init: RequestInit = {}) {
   if (init.body && !headers.has("content-type")) {
     headers.set("content-type", "application/json");
   }
-  const response = await fetch(gameWakeApiUrl(path), { ...init, headers });
+  let response: Response;
+  try {
+    response = await fetch(gameWakeApiUrl(path), { ...init, headers });
+  } catch {
+    throw new Error(
+      "Não foi possível conectar ao GameWake. Verifique sua conexão e tente novamente.",
+    );
+  }
   if (!response.ok) {
     if (response.status === 401) clearGameWakeSession();
     let message = "Não foi possível concluir a ação.";

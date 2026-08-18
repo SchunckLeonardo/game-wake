@@ -900,6 +900,44 @@ test("live Console switches Worlds and persists Auto Sleep and World Budget", as
   await expect.poll(() => budgetBody).toMatchObject({ monthlyLimit: "90.00", idempotencyKey: expect.any(String) });
 });
 
+test("Console dismisses a failed World Budget request after five seconds across navigation", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("gamewake_session", "signed-session"));
+  await page.route("**/api/v1/me/accounts", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ accounts: [{ id: "account-live", name: "Grupo real", access: ownerAccess }] }),
+  }));
+  await page.route("**/api/v1/accounts/account-live/wallet", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ wallet: { availableBalance: "30.00", statement: [] } }),
+  }));
+  await page.route("**/api/v1/accounts/account-live/worlds", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ worlds: [
+      { id: "world-live", name: "Palpagos", region: "sa-east-1", status: "sleeping", autoSleepMinutes: 20 },
+    ] }),
+  }));
+  await page.route("**/api/v1/accounts/account-live/worlds/world-live/budget", async (route) => {
+    if (route.request().method() === "PUT") {
+      await route.abort("failed");
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ budget: null }),
+    });
+  });
+
+  await page.goto("/accounts/account-live");
+  await navigation(page, "wallet").click();
+  await page.getByLabel("Limite mensal do World").fill("90.00");
+  await page.getByRole("button", { name: "Salvar orçamento" }).click();
+
+  const alert = page.getByRole("alert");
+  await expect(alert).toContainText("Não foi possível conectar ao GameWake");
+  await navigation(page, "worlds").click();
+  await expect(alert).toBeHidden({ timeout: 6_000 });
+});
+
 test("Discord-bootstrapped account creates its first World from the Console", async ({
   page,
 }) => {

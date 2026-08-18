@@ -432,6 +432,12 @@ export function ConsoleDashboard({
   const liveStateRequestActive = useRef(false);
   const progressRequestKey = useRef<string | null>(null);
 
+  useEffect(() => {
+    if (!error) return;
+    const timer = window.setTimeout(() => setError(""), 5_000);
+    return () => window.clearTimeout(timer);
+  }, [error]);
+
   const statusCopy = useMemo(
     () =>
       ({

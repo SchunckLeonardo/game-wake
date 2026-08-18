@@ -313,7 +313,7 @@ class GameWakeHttpHandler:
         return {
             "access-control-allow-origin": self._console_url,
             "access-control-allow-headers": "authorization,content-type,idempotency-key",
-            "access-control-allow-methods": "GET,POST,PATCH,DELETE,OPTIONS",
+            "access-control-allow-methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
             "vary": "Origin",
         }
 

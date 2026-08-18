@@ -378,6 +378,13 @@ def test_api_requires_a_bearer_session_and_applies_exact_origin_cors():
     transport = handler(api)
 
     unauthorized = transport.handle(event("GET", "/api/v1/accounts/a/worlds"))
+    preflight = transport.handle(
+        event(
+            "OPTIONS",
+            "/api/v1/accounts/a/worlds/world-1/budget",
+            headers={"origin": "https://app.gamewake.example"},
+        )
+    )
     accepted = transport.handle(
         event(
             "GET",
@@ -390,6 +397,8 @@ def test_api_requires_a_bearer_session_and_applies_exact_origin_cors():
     )
 
     assert unauthorized["statusCode"] == 401
+    assert preflight["statusCode"] == 204
+    assert "PUT" in preflight["headers"]["access-control-allow-methods"].split(",")
     assert accepted["statusCode"] == 200
     assert accepted["headers"]["access-control-allow-origin"] == ("https://app.gamewake.example")
     assert api.requests[0].user_id == "user-123"
