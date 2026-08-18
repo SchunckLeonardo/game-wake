@@ -11,6 +11,7 @@ import {
   getGameWakeLastWorldId,
   setGameWakeLastAccountId,
   setGameWakeLastWorldId,
+  setGameWakePostAuthReturn,
 } from "../gamewakeApi";
 import { useHydrated } from "../useHydrated";
 
@@ -574,6 +575,21 @@ export function ConsoleDashboard({
     },
     [selectedWorldId, updateConsoleUrl],
   );
+
+  useEffect(() => {
+    if (isDemo) return;
+    const rememberReauthenticationReturn = (event: MouseEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      const link = target?.closest<HTMLAnchorElement>(
+        'a[href^="/auth/discord/start?install=0&accountId="]',
+      );
+      if (link) {
+        setGameWakePostAuthReturn(`${window.location.pathname}${window.location.search}`);
+      }
+    };
+    document.addEventListener("click", rememberReauthenticationReturn, { capture: true });
+    return () => document.removeEventListener("click", rememberReauthenticationReturn, { capture: true });
+  }, [isDemo]);
 
   const loadLiveState = useCallback(async () => {
     if (isDemo) return;

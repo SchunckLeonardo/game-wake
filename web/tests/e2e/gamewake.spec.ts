@@ -287,6 +287,35 @@ test("OAuth callback persists the session and selected Discord server", async ({
   expect(await page.evaluate(() => localStorage.getItem("gamewake_known_user"))).toBe("true");
 });
 
+test("OAuth reauthentication returns to the exact Console section", async ({ page }) => {
+  await page.addInitScript(() => {
+    if (!sessionStorage.getItem("gamewake:test-post-auth-seeded")) {
+      localStorage.setItem(
+        "gamewake:post-auth-return",
+        "/accounts/account-live?section=members&world=world-live",
+      );
+      sessionStorage.setItem("gamewake:test-post-auth-seeded", "true");
+    }
+  });
+  await page.route("**/api/v1/me/accounts", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({
+      accounts: [{ id: "account-live", name: "Grupo real", access: ownerAccess }],
+    }),
+  }));
+
+  await page.goto(
+    "/auth/callback#session=renewed-session&accountId=account-live&reauthenticated=1",
+  );
+
+  await expect(page).toHaveURL(
+    /\/accounts\/account-live\?section=members&world=world-live$/,
+  );
+  expect(
+    await page.evaluate(() => localStorage.getItem("gamewake:post-auth-return")),
+  ).toBeNull();
+});
+
 test("selecting another Discord server loads only that server account", async ({ page }) => {
   let oldAccountWorldsRequested = false;
   await page.addInitScript(() => {
@@ -1209,6 +1238,13 @@ test("live Console reads members, custom roles, backups and redacted activity", 
   await page.getByLabel("Nova Role para user-friend").selectOption("custom:role-saves");
   await page.locator(".member-row", { hasText: "user-friend" }).getByRole("button", { name: "Trocar" }).click();
   await expect(page.getByText("Confirmar nova Role")).toBeVisible();
+  await page.locator(".role-confirmation-panel").getByRole("link", { name: "Renovar login Discord" }).evaluate((link) => {
+    link.addEventListener("click", (event) => event.preventDefault(), { once: true });
+    (link as HTMLAnchorElement).click();
+  });
+  expect(
+    await page.evaluate(() => localStorage.getItem("gamewake:post-auth-return")),
+  ).toBe("/accounts/account-live?section=members&world=world-live");
   await page.getByLabel("Confirme Grupo real para atribuir Role a user-friend").fill("Grupo real");
   await page.getByRole("button", { name: "Confirmar atribuição" }).click();
   await expect.poll(() => assignmentBody).toEqual({

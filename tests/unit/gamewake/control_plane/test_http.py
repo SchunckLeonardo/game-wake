@@ -96,6 +96,48 @@ def test_discord_oauth_issues_a_kms_session_only_after_code_exchange():
     )
 
 
+def test_explicit_reauthentication_with_account_hint_never_requests_install():
+    application = SimpleNamespace(
+        accounts=Accounts(),
+        list_accounts=lambda **kwargs: (
+            SimpleNamespace(id="account-1", discord_guild_id="123456789012345678"),
+        ),
+    )
+    transport = GameWakeHttpHandler(
+        application=application,
+        api=Api(),
+        sessions=Sessions(),
+        oauth=OAuth(),
+        console_url="https://app.gamewake.example",
+        oauth_redirect_uri="https://api.gamewake.example/auth/discord/callback",
+    )
+
+    started = transport.handle(
+        event(
+            "GET",
+            "/auth/discord/start",
+            query={"install": "0", "accountId": "account-1"},
+        )
+    )
+    callback = transport.handle(
+        event(
+            "GET",
+            "/auth/discord/callback",
+            query={"code": "discord-code", "state": "token:oauth:login:account-1"},
+        )
+    )
+
+    assert started["statusCode"] == 302
+    assert started["headers"]["location"].endswith(
+        "state=token:oauth:login:account-1"
+        "&redirect_uri=https://api.gamewake.example/auth/discord/callback&install=0"
+    )
+    assert callback["headers"]["location"] == (
+        "https://app.gamewake.example/auth/callback"
+        "#session=token:user-123&accountId=account-1&reauthenticated=1"
+    )
+
+
 def test_discord_oauth_preserves_the_installed_guild_for_onboarding():
     class GuildOAuth(OAuth):
         def authenticate(self, code, *, redirect_uri):

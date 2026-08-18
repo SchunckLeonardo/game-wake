@@ -73,12 +73,18 @@ class GameWakeHttpHandler:
                     or ":" in account_id
                 ):
                     return self._error(400, "invalid_oauth", "Account ID is invalid")
-                install = query.get("install") == "1" or account_id is not None
-                state_subject = (
-                    f"oauth:install:{account_id}"
-                    if account_id is not None
-                    else ("oauth:install" if install else "oauth:login")
+                requested_install = query.get("install")
+                install = requested_install == "1" or (
+                    requested_install is None and account_id is not None
                 )
+                if install:
+                    state_subject = (
+                        f"oauth:install:{account_id}" if account_id is not None else "oauth:install"
+                    )
+                else:
+                    state_subject = (
+                        f"oauth:login:{account_id}" if account_id is not None else "oauth:login"
+                    )
                 state = self._sessions.issue(state_subject, ttl=timedelta(minutes=10))
                 return self._redirect(
                     self._oauth.authorization_url(
@@ -93,9 +99,13 @@ class GameWakeHttpHandler:
                 if not isinstance(code, str) or not isinstance(state, str):
                     return self._error(400, "invalid_oauth", "OAuth callback is incomplete")
                 state_subject = self._sessions.verify(state).subject
-                if state_subject not in {"oauth:login", "oauth:install"} and not str(
-                    state_subject
-                ).startswith("oauth:install:"):
+                is_install = state_subject == "oauth:install" or str(state_subject).startswith(
+                    "oauth:install:"
+                )
+                is_login = state_subject == "oauth:login" or str(state_subject).startswith(
+                    "oauth:login:"
+                )
+                if not is_install and not is_login:
                     return self._error(401, "invalid_oauth", "OAuth state is invalid")
                 identity = self._oauth.authenticate(code, redirect_uri=oauth_redirect_uri)
                 user = self._application.accounts.sign_in_with_discord(
@@ -113,12 +123,17 @@ class GameWakeHttpHandler:
                 )
                 fragment = f"session={session}"
                 installed_guild_id = getattr(identity, "installed_guild_id", None)
-                account_id = (
+                install_account_id = (
                     str(state_subject).removeprefix("oauth:install:")
                     if str(state_subject).startswith("oauth:install:")
                     else None
                 )
-                if state_subject == "oauth:install" or account_id is not None:
+                login_account_id = (
+                    str(state_subject).removeprefix("oauth:login:")
+                    if str(state_subject).startswith("oauth:login:")
+                    else None
+                )
+                if is_install:
                     if not isinstance(installed_guild_id, str) or not installed_guild_id.isdigit():
                         return self._error(
                             400,
@@ -140,7 +155,7 @@ class GameWakeHttpHandler:
                         (
                             account
                             for account in existing_accounts
-                            if account_id is not None and account.id == account_id
+                            if install_account_id is not None and account.id == install_account_id
                         ),
                         None,
                     )
@@ -150,7 +165,7 @@ class GameWakeHttpHandler:
                         and getattr(requested_account, "discord_guild_id", None) is None
                         else (
                             existing_accounts[0]
-                            if account_id is None
+                            if install_account_id is None
                             and len(existing_accounts) == 1
                             and getattr(existing_accounts[0], "discord_guild_id", None) is None
                             else None
@@ -167,6 +182,10 @@ class GameWakeHttpHandler:
                         fragment += f"&accountId={unlinked_account.id}"
                     else:
                         fragment += f"&discordGuildId={installed_guild_id}"
+                elif login_account_id is not None:
+                    existing_accounts = self._application.list_accounts(viewer_user_id=user.id)
+                    if any(account.id == login_account_id for account in existing_accounts):
+                        fragment += f"&accountId={login_account_id}&reauthenticated=1"
                 if recovery:
                     encoded_recovery = (
                         base64.urlsafe_b64encode(json.dumps(recovery, ensure_ascii=False).encode())

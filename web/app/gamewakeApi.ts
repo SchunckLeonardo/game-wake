@@ -2,6 +2,7 @@ export const GAMEWAKE_SESSION_KEY = "gamewake_session";
 export const GAMEWAKE_DISCORD_GUILD_ID_KEY = "gamewake_discord_guild_id";
 export const GAMEWAKE_KNOWN_USER_KEY = "gamewake_known_user";
 export const GAMEWAKE_LAST_ACCOUNT_KEY = "gamewake:last-account";
+export const GAMEWAKE_POST_AUTH_RETURN_KEY = "gamewake:post-auth-return";
 
 function migrateSessionValue(key: string) {
   const persisted = window.localStorage.getItem(key);
@@ -34,6 +35,24 @@ export function getGameWakeLastAccountId() {
 
 export function setGameWakeLastAccountId(accountId: string) {
   window.localStorage.setItem(GAMEWAKE_LAST_ACCOUNT_KEY, accountId);
+}
+
+function safePostAuthReturn(value: string | null) {
+  if (!value || !/^\/accounts\/[A-Za-z0-9-]+(?:\/worlds\/[A-Za-z0-9-]+\/configuration)?(?:\?[^#]*)?$/.test(value)) {
+    return null;
+  }
+  return value;
+}
+
+export function setGameWakePostAuthReturn(path: string) {
+  const safePath = safePostAuthReturn(path);
+  if (safePath) window.localStorage.setItem(GAMEWAKE_POST_AUTH_RETURN_KEY, safePath);
+}
+
+export function takeGameWakePostAuthReturn() {
+  const path = safePostAuthReturn(window.localStorage.getItem(GAMEWAKE_POST_AUTH_RETURN_KEY));
+  window.localStorage.removeItem(GAMEWAKE_POST_AUTH_RETURN_KEY);
+  return path;
 }
 
 export function getGameWakeLastWorldId(accountId: string) {

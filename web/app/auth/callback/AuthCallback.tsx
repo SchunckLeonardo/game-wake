@@ -8,6 +8,7 @@ import {
   setGameWakeDiscordGuildId,
   setGameWakeLastAccountId,
   setGameWakeSession,
+  takeGameWakePostAuthReturn,
 } from "../../gamewakeApi";
 import { Icon } from "../../Icon";
 
@@ -73,7 +74,15 @@ export function AuthCallback() {
         if (safePendingInvitation) {
           window.localStorage.removeItem("gamewake:pending-invitation");
         }
-        const next = safePendingInvitation ?? (selectedAccount
+        const postAuthReturn = fragment.get("reauthenticated") === "1"
+          ? takeGameWakePostAuthReturn()
+          : null;
+        const postAuthAccountId = postAuthReturn?.match(/^\/accounts\/([^/?]+)/)?.[1];
+        const safePostAuthReturn = postAuthAccountId
+          && accounts.some((account) => account.id === decodeURIComponent(postAuthAccountId))
+          ? postAuthReturn
+          : null;
+        const next = safePendingInvitation ?? safePostAuthReturn ?? (selectedAccount
           ? `/accounts/${selectedAccount.id}`
           : selectedDiscordGuildId || accounts.length === 0
             ? "/onboarding"
