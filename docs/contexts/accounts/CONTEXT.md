@@ -21,7 +21,7 @@ Uma identidade de uma rede de jogo, como Steam ou Xbox, vinculada a um User para
 _Avoid_: Linked Identity, Discord identity, Membership
 
 **Membership**:
-O vínculo de um User com um GameWake Account, por meio do qual recebe Role Assignments.
+O vínculo de um User com um GameWake Account, por meio do qual recebe zero ou um Role Assignment.
 _Avoid_: Member, invitation, account user
 
 **Invitation**:
@@ -43,7 +43,7 @@ Uma Role criada em um GameWake Account para combinar permissões e limites próp
 _Avoid_: IAM role, custom profile
 
 **Role Assignment**:
-A atribuição de uma Role a uma Membership dentro de um Resource Scope.
+A única atribuição ativa de Role de uma Membership dentro de um Resource Scope. Uma nova atribuição substitui a anterior.
 _Avoid_: role binding, membership role
 
 **Resource Scope**:

@@ -27,7 +27,7 @@ Esta matriz separa três coisas diferentes:
 | Users internos e identidades Discord ligadas | Implementado | OAuth Web/Activity, sessão KMS HMAC e repositórios. |
 | Convite de até três amigos e aceite | Implementado | `/gamewake convidar`, `/gamewake aceitar`, Console e testes. |
 | Owner, Manager, Player e Billing | Implementado | Roles predefinidas e matriz de permissões. |
-| Custom Roles com escopo opcional por World | Implementado | Criação, atribuição e autorização aditiva allow-only. |
+| Custom Roles com escopo opcional por World | Implementado | Criação, substituição de Role única e autorização allow-only. |
 | Revogação imediata de membership/role | Implementado | API/Console, step-up e activity auditável. |
 | Impedir remoção do último Owner | Implementado | Invariante de domínio e testes. |
 | Recuperação sem support root | Implementado; exercício pendente | E-mail Discord somente quando verificado, recovery codes de uso único e apenas hashes persistidos. |

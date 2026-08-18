@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from enum import StrEnum
 
-from .model import PredefinedRole, RoleAssignment
+from .model import PredefinedRole, RoleAssignment, effective_role_assignment
 
 
 class Permission(StrEnum):
@@ -68,10 +68,11 @@ def permissions_for(
     world_id: str | None,
 ) -> frozenset[Permission]:
     custom_permissions = {role.id: role.permissions for role in custom_roles}
+    assignment = effective_role_assignment(assignments)
+    if assignment is None or not assignment.scope.applies_to(world_id):
+        return frozenset()
     return frozenset(
         permission
-        for assignment in assignments
-        if assignment.scope.applies_to(world_id)
         for permission in (
             PREDEFINED_ROLE_PERMISSIONS[assignment.predefined_role]
             if assignment.predefined_role is not None

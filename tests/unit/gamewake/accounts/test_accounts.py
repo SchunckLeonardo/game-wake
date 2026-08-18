@@ -225,6 +225,33 @@ def test_shareable_invitation_links_grant_play_or_console_access_once():
         )
 
 
+def test_an_existing_membership_cannot_collect_another_role_from_an_invitation():
+    accounts = Accounts(InMemoryAccountRepository())
+    account = accounts.create_account(name="Sexta com os amigos", owner_user_id="owner")
+    first = accounts.create_invitation_link(
+        account.id,
+        inviter_user_id="owner",
+        role=PredefinedRole.PLAYER,
+    )
+    accounts.accept_invitation(account.id, first.id, invited_user_id="friend")
+    second = accounts.create_invitation_link(
+        account.id,
+        inviter_user_id="owner",
+        role=PredefinedRole.MANAGER,
+    )
+
+    with pytest.raises(ValueError, match="already has a Membership"):
+        accounts.accept_invitation(account.id, second.id, invited_user_id="friend")
+
+    friend = next(
+        item
+        for item in accounts.list_memberships(account.id, viewer_user_id="owner")
+        if item.user_id == "friend"
+    )
+    assert friend.roles == frozenset({PredefinedRole.PLAYER})
+    assert len(friend.assignments) == 1
+
+
 def test_expired_shareable_invitation_link_cannot_be_accepted():
     now = datetime(2026, 8, 10, 12, 0, tzinfo=UTC)
     current = [now]

@@ -439,16 +439,15 @@ class Accounts:
         membership = next(
             membership for membership in snapshot.memberships if membership.id == membership_id
         )
+        assignment = RoleAssignment(
+            id=str(uuid4()),
+            scope=ResourceScope(account_id=custom_role.account_id, world_id=world_id),
+            custom_role_id=custom_role.id,
+        )
+        self._ensure_role_replacement_preserves_owner(snapshot, membership, assignment)
         updated = replace(
             membership,
-            assignments=(
-                *membership.assignments,
-                RoleAssignment(
-                    id=str(uuid4()),
-                    scope=ResourceScope(account_id=custom_role.account_id, world_id=world_id),
-                    custom_role_id=custom_role.id,
-                ),
-            ),
+            assignments=(assignment,),
         )
         memberships = tuple(
             updated if item.id == membership_id else item for item in snapshot.memberships
@@ -485,16 +484,15 @@ class Accounts:
         membership = next(
             membership for membership in snapshot.memberships if membership.id == membership_id
         )
+        assignment = RoleAssignment(
+            id=str(uuid4()),
+            scope=ResourceScope(account_id=account_id, world_id=world_id),
+            predefined_role=role,
+        )
+        self._ensure_role_replacement_preserves_owner(snapshot, membership, assignment)
         updated = replace(
             membership,
-            assignments=(
-                *membership.assignments,
-                RoleAssignment(
-                    id=str(uuid4()),
-                    scope=ResourceScope(account_id=account_id, world_id=world_id),
-                    predefined_role=role,
-                ),
-            ),
+            assignments=(assignment,),
         )
         memberships = tuple(
             updated if item.id == membership_id else item for item in snapshot.memberships
@@ -528,6 +526,8 @@ class Accounts:
         )
         membership = next(item for item in snapshot.memberships if item.id == membership_id)
         assignment = next(item for item in membership.assignments if item.id == role_assignment_id)
+        if membership.role_assignment != assignment:
+            raise ValueError("the Role Assignment is no longer active")
         if (
             assignment.predefined_role is PredefinedRole.OWNER
             and assignment.scope.world_id is None
@@ -537,9 +537,7 @@ class Accounts:
 
         updated = replace(
             membership,
-            assignments=tuple(
-                item for item in membership.assignments if item.id != role_assignment_id
-            ),
+            assignments=(),
         )
         memberships = tuple(
             updated if item.id == membership_id else item for item in snapshot.memberships
@@ -713,20 +711,7 @@ class Accounts:
             )
             memberships = (*snapshot.memberships, membership)
         else:
-            duplicate = any(
-                item.scope == assignment.scope
-                and item.predefined_role == assignment.predefined_role
-                and item.custom_role_id == assignment.custom_role_id
-                for item in existing.assignments
-            )
-            membership = (
-                existing
-                if duplicate
-                else replace(existing, assignments=(*existing.assignments, assignment))
-            )
-            memberships = tuple(
-                membership if item.id == existing.id else item for item in snapshot.memberships
-            )
+            raise ValueError("the User already has a Membership in this account")
         invitations = tuple(
             accepted if item.id == invitation.id else item for item in snapshot.invitations
         )
@@ -845,11 +830,9 @@ class Accounts:
     @staticmethod
     def _owner_count(snapshot: AccountSnapshot) -> int:
         return sum(
-            any(
-                assignment.predefined_role is PredefinedRole.OWNER
-                and assignment.scope.world_id is None
-                for assignment in membership.assignments
-            )
+            membership.role_assignment is not None
+            and membership.role_assignment.predefined_role is PredefinedRole.OWNER
+            and membership.role_assignment.scope.world_id is None
             for membership in snapshot.memberships
         )
 
@@ -858,12 +841,34 @@ class Accounts:
         return frozenset(
             membership.user_id
             for membership in snapshot.memberships
-            if any(
-                assignment.predefined_role is PredefinedRole.OWNER
-                and assignment.scope.world_id is None
-                for assignment in membership.assignments
-            )
+            if membership.role_assignment is not None
+            and membership.role_assignment.predefined_role is PredefinedRole.OWNER
+            and membership.role_assignment.scope.world_id is None
         )
+
+    @classmethod
+    def _ensure_role_replacement_preserves_owner(
+        cls,
+        snapshot: AccountSnapshot,
+        membership: Membership,
+        replacement: RoleAssignment,
+    ) -> None:
+        current = membership.role_assignment
+        replacing_account_owner = (
+            current is not None
+            and current.predefined_role is PredefinedRole.OWNER
+            and current.scope.world_id is None
+        )
+        replacement_is_account_owner = (
+            replacement.predefined_role is PredefinedRole.OWNER
+            and replacement.scope.world_id is None
+        )
+        if (
+            replacing_account_owner
+            and not replacement_is_account_owner
+            and cls._owner_count(snapshot) == 1
+        ):
+            raise LastOwnerRemovalError("an account must retain at least one Owner")
 
     @classmethod
     def _is_account_owner(cls, snapshot: AccountSnapshot, user_id: str) -> bool:

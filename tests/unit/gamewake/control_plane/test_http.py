@@ -2,6 +2,7 @@ import base64
 import json
 from types import SimpleNamespace
 
+from gamewake.accounts import PermissionDeniedError, SensitiveActionConfirmationError
 from gamewake.auth import InvalidSession
 from gamewake.billing import PaymentProviderError
 from gamewake.billing.abacatepay import InvalidWebhookSignature
@@ -507,6 +508,60 @@ def test_invalid_or_expired_session_is_an_unauthorized_response():
 
     assert response["statusCode"] == 401
     assert json.loads(response["body"])["error"]["code"] == "invalid_session"
+
+
+def test_sensitive_access_actions_return_an_actionable_reauthentication_error():
+    class StaleSensitiveActionApi:
+        def handle(self, request):
+            del request
+            raise SensitiveActionConfirmationError("private confirmation details")
+
+    response = handler(StaleSensitiveActionApi()).handle(
+        event(
+            "POST",
+            "/api/v1/accounts/account-1/roles",
+            headers={
+                "authorization": "Bearer token:user-123",
+                "origin": "https://app.gamewake.example",
+            },
+            body='{"name":"Operador"}',
+        )
+    )
+
+    assert response["statusCode"] == 403
+    assert json.loads(response["body"]) == {
+        "error": {
+            "code": "recent_authentication_required",
+            "message": "Renove seu login Discord e confirme o nome do grupo para continuar.",
+        }
+    }
+
+
+def test_forbidden_access_actions_return_a_safe_permission_error():
+    class ForbiddenApi:
+        def handle(self, request):
+            del request
+            raise PermissionDeniedError("private authorization details")
+
+    response = handler(ForbiddenApi()).handle(
+        event(
+            "DELETE",
+            "/api/v1/accounts/account-1/memberships/member-1",
+            headers={
+                "authorization": "Bearer token:user-123",
+                "origin": "https://app.gamewake.example",
+            },
+            body='{"confirmedResourceName":"Grupo"}',
+        )
+    )
+
+    assert response["statusCode"] == 403
+    assert json.loads(response["body"]) == {
+        "error": {
+            "code": "forbidden",
+            "message": "Você não tem permissão para concluir esta ação.",
+        }
+    }
 
 
 def test_unexpected_api_failure_is_a_safe_cors_response():

@@ -80,6 +80,27 @@ class RoleAssignment:
             raise ValueError("a Role Assignment must reference exactly one Role")
 
 
+def effective_role_assignment(
+    assignments: tuple[RoleAssignment, ...],
+) -> RoleAssignment | None:
+    """Project legacy additive data into the single-Role Membership model.
+
+    Existing aggregates may still contain multiple assignments. Preserve an
+    account-wide Owner while that data is being migrated; otherwise the newest
+    assignment is the active one.
+    """
+    legacy_owner = next(
+        (
+            assignment
+            for assignment in reversed(assignments)
+            if assignment.predefined_role is PredefinedRole.OWNER
+            and assignment.scope.world_id is None
+        ),
+        None,
+    )
+    return legacy_owner or (assignments[-1] if assignments else None)
+
+
 @dataclass(frozen=True)
 class Membership:
     id: str
@@ -88,12 +109,15 @@ class Membership:
     assignments: tuple[RoleAssignment, ...]
 
     @property
+    def role_assignment(self) -> RoleAssignment | None:
+        return effective_role_assignment(self.assignments)
+
+    @property
     def roles(self) -> frozenset[PredefinedRole]:
-        return frozenset(
-            assignment.predefined_role
-            for assignment in self.assignments
-            if assignment.predefined_role is not None
-        )
+        assignment = self.role_assignment
+        if assignment is None or assignment.predefined_role is None:
+            return frozenset()
+        return frozenset({assignment.predefined_role})
 
 
 @dataclass(frozen=True)

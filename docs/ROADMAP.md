@@ -78,7 +78,7 @@ Billing começa depois de o ciclo de vida ser confiável porque não devemos cob
 - Sign-in com Discord criando User interno e Linked Identity.
 - Criação de GameWake Account e relação um-para-um com Discord Guild no MVP.
 - Invitation individual e em lote com aceitação explícita.
-- Memberships, Resource Scopes, Policies allow-only e Role Assignments aditivos.
+- Memberships, Resource Scopes, Policies allow-only e um Role Assignment ativo por Membership.
 - Owner, Manager e Player predefinidos; editor avançado de Custom Roles.
 - Proteção do último Owner, Owner Recovery e confirmação de Sensitive Actions.
 - Access Revocation e Activity Events redigidos.

@@ -6,6 +6,7 @@ import logging
 from datetime import timedelta
 from typing import Any
 
+from gamewake.accounts import PermissionDeniedError, SensitiveActionConfirmationError
 from gamewake.auth import InvalidSession
 from gamewake.billing import (
     InvalidWebhookPayload,
@@ -226,6 +227,20 @@ class GameWakeHttpHandler:
             return self._error(404, "not_found", "Not found", cors)
         except InvalidSession:
             return self._error(401, "invalid_session", "Session is invalid or expired", cors)
+        except SensitiveActionConfirmationError:
+            return self._error(
+                403,
+                "recent_authentication_required",
+                "Renove seu login Discord e confirme o nome do grupo para continuar.",
+                cors,
+            )
+        except PermissionDeniedError:
+            return self._error(
+                403,
+                "forbidden",
+                "Você não tem permissão para concluir esta ação.",
+                cors,
+            )
         except InvalidWebhookSignature as error:
             _LOGGER.warning(
                 "Rejected unauthenticated AbacatePay webhook",

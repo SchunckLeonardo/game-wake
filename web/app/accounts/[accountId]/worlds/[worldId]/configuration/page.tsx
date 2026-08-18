@@ -11,6 +11,12 @@ export default async function WorldConfiguration({
 }: {
   params: Promise<{ accountId: string; worldId: string }>;
 }) {
-  const { accountId } = await params;
-  return <ConsoleDashboard accountId={accountId} initialSection="configuration" />;
+  const { accountId, worldId } = await params;
+  return (
+    <ConsoleDashboard
+      accountId={accountId}
+      initialSection="configuration"
+      initialWorldId={worldId}
+    />
+  );
 }

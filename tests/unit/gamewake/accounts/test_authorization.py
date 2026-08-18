@@ -250,7 +250,7 @@ def test_the_last_owner_assignment_cannot_be_removed():
         )
 
 
-def test_removing_a_scoped_role_revokes_its_access_immediately():
+def test_assigning_a_role_replaces_the_previous_role_and_removing_it_revokes_all_access():
     accounts = Accounts(InMemoryAccountRepository())
     account = accounts.create_account(name="Sexta com os amigos", owner_user_id="owner")
     [invitation] = accounts.invite_members(
@@ -271,11 +271,10 @@ def test_removing_a_scoped_role_revokes_its_access_immediately():
         world_id="world-palworld",
         confirmation=confirmed(account, "owner"),
     )
-    manager_assignment = next(
-        assignment
-        for assignment in membership.assignments
-        if assignment.predefined_role is PredefinedRole.MANAGER
-    )
+
+    [manager_assignment] = membership.assignments
+    assert manager_assignment.predefined_role is PredefinedRole.MANAGER
+    assert membership.roles == frozenset({PredefinedRole.MANAGER})
 
     accounts.remove_role_assignment(
         account.id,
@@ -285,12 +284,33 @@ def test_removing_a_scoped_role_revokes_its_access_immediately():
         confirmation=confirmed(account, "owner"),
     )
 
+    [updated] = [
+        item
+        for item in accounts.list_memberships(account.id, viewer_user_id="owner")
+        if item.id == membership.id
+    ]
+    assert updated.assignments == ()
     assert not accounts.authorize(
         account.id,
         user_id="friend",
-        permission=Permission.EDIT_WORLD,
+        permission=Permission.VIEW_WORLD,
         world_id="world-palworld",
     )
+
+
+def test_the_last_owner_role_cannot_be_replaced_with_a_less_privileged_role():
+    accounts = Accounts(InMemoryAccountRepository())
+    account = accounts.create_account(name="Sexta com os amigos", owner_user_id="owner")
+    [owner] = accounts.list_memberships(account.id, viewer_user_id="owner")
+
+    with pytest.raises(LastOwnerRemovalError):
+        accounts.assign_predefined_role(
+            account.id,
+            actor_user_id="owner",
+            membership_id=owner.id,
+            role=PredefinedRole.PLAYER,
+            confirmation=confirmed(account, "owner"),
+        )
 
 
 def test_a_user_from_another_account_cannot_list_memberships():

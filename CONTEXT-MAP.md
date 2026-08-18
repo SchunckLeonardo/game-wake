@@ -12,7 +12,7 @@
 ## Relationships
 
 - **Experience → Accounts and Access**: autentica o User e autoriza cada interação no Resource Scope solicitado
-- **Accounts and Access → Worlds**: o GameWake Account possui Worlds e seus Role Assignments limitam acesso a eles
+- **Accounts and Access → Worlds**: o GameWake Account possui Worlds e o Role Assignment único de cada Membership limita o acesso a eles
 - **Worlds → Game Catalog**: cada World usa um Game Template imutável para executar operações específicas do jogo
 - **Worlds → Billing**: um despertar solicita Usage Reservation e uma sessão produz Runtime Usage
 - **Billing → Worlds**: Balance Guard e World Budget podem solicitar que um World durma com segurança

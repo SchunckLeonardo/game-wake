@@ -1037,7 +1037,7 @@ test("returning from a paid Pix reconciles and refreshes the Wallet", async ({ p
     "Pagamento confirmado. Seus créditos já estão disponíveis.",
   );
   await expect(page.getByText("R$ 25,00").first()).toBeVisible();
-  await expect(page).toHaveURL(/\/accounts\/account-paid$/);
+  await expect(page).toHaveURL(/\/accounts\/account-paid\?section=wallet$/);
 });
 
 test("live Console reads members, custom roles, backups and redacted activity", async ({
@@ -1090,10 +1090,7 @@ test("live Console reads members, custom roles, backups and redacted activity", 
         membership: {
           id: "member-friend",
           userId: "user-friend",
-          roles: [
-            { id: "assignment-player", role: "player", kind: "predefined", worldId: null },
-            { id: "assignment-custom", role: "role-saves", kind: "custom", worldId: null },
-          ],
+          roles: [{ id: "assignment-custom", role: "role-saves", kind: "custom", worldId: null }],
         },
       }),
     });
@@ -1178,6 +1175,9 @@ test("live Console reads members, custom roles, backups and redacted activity", 
 
   await page.goto("/accounts/account-live");
   await navigation(page, "members").click();
+  await expect(page).toHaveURL(/\/accounts\/account-live\?section=members&world=world-live$/);
+  await page.reload();
+  await expect(page.getByTestId("members-panel")).toBeVisible();
   await expect(page.getByText("user-friend")).toBeVisible();
   await expect(page.locator(".advanced-roles strong", { hasText: "Guardião dos saves" })).toBeVisible();
   await page.getByTestId("create-invitation-link").click();
@@ -1194,7 +1194,11 @@ test("live Console reads members, custom roles, backups and redacted activity", 
   });
   await page.getByLabel("Nome da Role personalizada").fill("Operador");
   await page.getByLabel("Criar backups").check();
-  await page.getByLabel("Confirme o nome da conta").fill("Grupo real");
+  await expectControlsSeparated(
+    page.getByLabel("Nome da Role personalizada"),
+    page.getByRole("group", { name: "Permissões da Role" }),
+  );
+  await page.getByLabel("Confirme Grupo real para criar Role").fill("Grupo real");
   await page.getByRole("button", { name: "Criar Role personalizada" }).click();
   await expect(page.locator(".advanced-roles strong", { hasText: "Operador" })).toBeVisible();
   expect(roleBody).toEqual({
@@ -1203,7 +1207,7 @@ test("live Console reads members, custom roles, backups and redacted activity", 
     confirmedResourceName: "Grupo real",
   });
   await page.getByLabel("Nova Role para user-friend").selectOption("custom:role-saves");
-  await page.locator(".member-row", { hasText: "user-friend" }).getByRole("button", { name: "Atribuir" }).click();
+  await page.locator(".member-row", { hasText: "user-friend" }).getByRole("button", { name: "Trocar" }).click();
   await expect(page.getByText("Confirmar nova Role")).toBeVisible();
   await page.getByLabel("Confirme Grupo real para atribuir Role a user-friend").fill("Grupo real");
   await page.getByRole("button", { name: "Confirmar atribuição" }).click();
@@ -1212,10 +1216,15 @@ test("live Console reads members, custom roles, backups and redacted activity", 
     confirmedResourceName: "Grupo real",
   });
   await expect(page.getByText("Confirmar nova Role")).toHaveCount(0);
-  await page.getByLabel("Confirme o nome da conta").fill("Grupo real");
   await page.getByRole("button", { name: "Remover Role role-saves de user-friend" }).click();
+  await expect(page.getByText("Remover Role de user-friend")).toBeVisible();
+  await page.getByLabel("Confirme Grupo real para remover Role de user-friend").fill("Grupo real");
+  await page.getByRole("button", { name: "Confirmar remoção da Role" }).click();
   await expect.poll(() => removedRoleBody).toEqual({ confirmedResourceName: "Grupo real" });
   await page.getByRole("button", { name: "Remover membro user-friend" }).click();
+  await expect(page.getByText("Remover user-friend do grupo")).toBeVisible();
+  await page.getByLabel("Confirme Grupo real para remover user-friend").fill("Grupo real");
+  await page.getByRole("button", { name: "Confirmar remoção do jogador" }).click();
   await expect.poll(() => removedMembershipBody).toEqual({ confirmedResourceName: "Grupo real" });
   await expect(page.getByText("user-friend")).toHaveCount(0);
   await navigation(page, "backups").click();

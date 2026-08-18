@@ -1,5 +1,5 @@
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from gamewake.accounts import (
@@ -898,6 +898,16 @@ def test_owner_reads_members_and_creates_a_scoped_custom_role_with_recent_authen
             game_catalog=catalog,
         )
     )
+    [invitation] = accounts.invite_members(
+        account.id,
+        inviter_user_id="owner",
+        invited_user_ids=["friend"],
+    )
+    accounts.accept_invitation(
+        account.id,
+        invitation.id,
+        invited_user_id="friend",
+    )
 
     members = api.handle(ApiRequest("GET", f"/api/v1/accounts/{account.id}/memberships", "owner"))
     created = api.handle(
@@ -916,7 +926,7 @@ def test_owner_reads_members_and_creates_a_scoped_custom_role_with_recent_authen
     assigned = api.handle(
         ApiRequest(
             "POST",
-            f"/api/v1/accounts/{account.id}/memberships/{members.body['memberships'][0]['id']}/roles",
+            f"/api/v1/accounts/{account.id}/memberships/{members.body['memberships'][1]['id']}/roles",
             "owner",
             {
                 "customRoleId": created.body["role"]["id"],
@@ -937,9 +947,96 @@ def test_owner_reads_members_and_creates_a_scoped_custom_role_with_recent_authen
         "world:view",
     ]
     assert assigned.status == 200
-    assert assigned.body["membership"]["roles"][-1]["role"] == created.body["role"]["id"]
+    assert assigned.body["membership"]["roles"] == [
+        {
+            "id": assigned.body["membership"]["roles"][0]["id"],
+            "role": created.body["role"]["id"],
+            "kind": "custom",
+            "worldId": None,
+        }
+    ]
     assert roles.body["predefinedRoles"] == ["owner", "manager", "player"]
     assert roles.body["customRoles"][0]["id"] == created.body["role"]["id"]
+
+
+def test_custom_role_creation_explains_when_recent_authentication_expired():
+    now = datetime(2026, 7, 31, 18, 0, tzinfo=UTC)
+    accounts = Accounts(InMemoryAccountRepository(), clock=lambda: now)
+    account = accounts.create_account(name="Grupo", owner_user_id="owner")
+    catalog = GameCatalog.with_palworld()
+    api = GameWakeApi(
+        GameWakeApplication(
+            accounts=accounts,
+            worlds=Worlds(InMemoryWorldRepository(), access=accounts, game_catalog=catalog),
+            billing=Billing(InMemoryBillingRepository()),
+            game_catalog=catalog,
+        )
+    )
+
+    response = api.handle(
+        ApiRequest(
+            "POST",
+            f"/api/v1/accounts/{account.id}/roles",
+            "owner",
+            {
+                "name": "Guardiao dos saves",
+                "permissions": ["world:view", "backup:create"],
+                "confirmedResourceName": "Grupo",
+            },
+            authenticated_at=now - timedelta(minutes=6),
+        )
+    )
+
+    assert response.status == 403
+    assert response.body["error"]["code"] == "recent_authentication_required"
+    assert "Renove seu login Discord" in response.body["error"]["message"]
+
+
+def test_owner_can_remove_the_players_only_role_through_the_api():
+    now = datetime(2026, 7, 31, 18, 0, tzinfo=UTC)
+    accounts = Accounts(InMemoryAccountRepository(), clock=lambda: now)
+    account = accounts.create_account(name="Grupo", owner_user_id="owner")
+    [invitation] = accounts.invite_members(
+        account.id,
+        inviter_user_id="owner",
+        invited_user_ids=["friend"],
+    )
+    membership = accounts.accept_invitation(
+        account.id,
+        invitation.id,
+        invited_user_id="friend",
+    )
+    role_assignment_id = membership.role_assignment.id
+    catalog = GameCatalog.with_palworld()
+    api = GameWakeApi(
+        GameWakeApplication(
+            accounts=accounts,
+            worlds=Worlds(InMemoryWorldRepository(), access=accounts, game_catalog=catalog),
+            billing=Billing(InMemoryBillingRepository()),
+            game_catalog=catalog,
+        )
+    )
+
+    response = api.handle(
+        ApiRequest(
+            "DELETE",
+            (
+                f"/api/v1/accounts/{account.id}/memberships/{membership.id}"
+                f"/roles/{role_assignment_id}"
+            ),
+            "owner",
+            {"confirmedResourceName": "Grupo"},
+            authenticated_at=now,
+        )
+    )
+
+    assert response.status == 200
+    assert response.body["membership"]["roles"] == []
+    assert not accounts.authorize(
+        account.id,
+        user_id="friend",
+        permission=Permission.VIEW_WORLD,
+    )
 
 
 def test_world_backup_restore_and_portable_export_are_available_through_the_api():

@@ -44,7 +44,7 @@ Leia `CONTEXT.md`, `CONTEXT-MAP.md`, `docs/GAMEWAKE_FOUNDATION.md` e o contexto 
 - Uma `GameWake Account` é o perímetro de propriedade, acesso e responsabilidade financeira de um grupo.
 - Um `User` pode ter várias `Linked Identities` e várias `Memberships`.
 - Convite não cria acesso silenciosamente: o usuário precisa aceitar antes de a Membership ser criada.
-- Policies são aditivas e allow-only. Tudo que não foi concedido é negado; não introduza `DENY` explícito.
+- Cada Membership possui no máximo uma Role por vez. Trocar a Role substitui a anterior; remover a Role deixa a Membership sem permissões. Policies continuam allow-only: tudo que a Role não concede é negado e não existe `DENY` explícito.
 - Roles predefinidas internas: `Owner`, `Manager` e `Player`. Na interface pt-BR, `Manager` pode ser apresentado como **Moderador** para corresponder ao vocabulário esperado pelos usuários.
 - `Owner`: propriedade, membros, roles, integrações, Wallet, budgets e ações sensíveis.
 - `Manager`/Moderador: opera e configura os Worlds permitidos, sem controlar propriedade, membros ou finanças.

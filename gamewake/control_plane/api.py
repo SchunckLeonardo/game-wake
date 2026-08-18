@@ -7,10 +7,13 @@ from gamewake.accounts import (
     ActivityEvent,
     CustomRole,
     Invitation,
+    LastOwnerRemovalError,
     Membership,
     Permission,
+    PermissionDeniedError,
     PredefinedRole,
     SensitiveActionConfirmation,
+    SensitiveActionConfirmationError,
 )
 from gamewake.billing import Wallet, WalletContribution, WorldBudgetStatus
 from gamewake.game_catalog import GameTemplateDefinition
@@ -43,8 +46,48 @@ class GameWakeApi:
     def handle(self, request: ApiRequest) -> ApiResponse:
         try:
             return self._dispatch(request)
+        except SensitiveActionConfirmationError:
+            return ApiResponse(
+                403,
+                {
+                    "error": {
+                        "code": "recent_authentication_required",
+                        "message": (
+                            "Renove seu login Discord e confirme o nome do grupo para continuar."
+                        ),
+                    }
+                },
+            )
+        except PermissionDeniedError as error:
+            return ApiResponse(
+                403,
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": str(error),
+                    }
+                },
+            )
         except PermissionError as error:
-            return ApiResponse(403, {"error": {"code": "forbidden", "message": str(error)}})
+            return ApiResponse(
+                403,
+                {
+                    "error": {
+                        "code": "forbidden",
+                        "message": str(error),
+                    }
+                },
+            )
+        except LastOwnerRemovalError:
+            return ApiResponse(
+                409,
+                {
+                    "error": {
+                        "code": "last_owner_required",
+                        "message": "Defina outro Owner antes de remover ou trocar esta Role.",
+                    }
+                },
+            )
         except KeyError:
             return ApiResponse(404, {"error": {"code": "not_found", "message": "Not found"}})
         except (TypeError, ValueError) as error:
@@ -122,7 +165,9 @@ class GameWakeApi:
             )
         if request.method == "POST" and parts[4:] == ("roles",):
             if request.authenticated_at is None:
-                raise PermissionError("creating roles requires recent Discord authentication")
+                raise SensitiveActionConfirmationError(
+                    "creating roles requires recent Discord authentication"
+                )
             raw_permissions = request.body.get("permissions")
             if not isinstance(raw_permissions, list) or not raw_permissions:
                 raise ValueError("permissions must contain at least one permission")
@@ -147,7 +192,9 @@ class GameWakeApi:
             and parts[6] == "roles"
         ):
             if request.authenticated_at is None:
-                raise PermissionError("assigning roles requires recent Discord authentication")
+                raise SensitiveActionConfirmationError(
+                    "assigning roles requires recent Discord authentication"
+                )
             confirmation = SensitiveActionConfirmation(
                 actor_user_id=request.user_id,
                 reauthenticated_at=request.authenticated_at,
@@ -266,7 +313,7 @@ class GameWakeApi:
                 role = PredefinedRole.PLAYER
             else:
                 if request.authenticated_at is None:
-                    raise PermissionError(
+                    raise SensitiveActionConfirmationError(
                         "console invitation links require recent Discord authentication"
                     )
                 if (custom_role_id is None) == (predefined_role_value is None):
@@ -483,7 +530,9 @@ class GameWakeApi:
             return ApiResponse(201, {"export": self._export(export)})
         if request.method == "DELETE" and len(parts) == 6:
             if request.authenticated_at is None:
-                raise PermissionError("deleting a World requires recent Discord authentication")
+                raise SensitiveActionConfirmationError(
+                    "deleting a World requires recent Discord authentication"
+                )
             world = self._application.schedule_world_deletion(
                 account_id,
                 world_id,
@@ -555,7 +604,9 @@ class GameWakeApi:
         action: str,
     ) -> SensitiveActionConfirmation:
         if request.authenticated_at is None:
-            raise PermissionError(f"{action} requires recent Discord authentication")
+            raise SensitiveActionConfirmationError(
+                f"{action} requires recent Discord authentication"
+            )
         return SensitiveActionConfirmation(
             actor_user_id=request.user_id,
             reauthenticated_at=request.authenticated_at,
@@ -629,6 +680,9 @@ class GameWakeApi:
 
     @staticmethod
     def _membership(membership: Membership) -> dict[str, Any]:
+        assignments = (
+            (membership.role_assignment,) if membership.role_assignment is not None else ()
+        )
         return {
             "id": membership.id,
             "accountId": membership.account_id,
@@ -644,7 +698,7 @@ class GameWakeApi:
                     "kind": ("predefined" if assignment.predefined_role is not None else "custom"),
                     "worldId": assignment.scope.world_id,
                 }
-                for assignment in membership.assignments
+                for assignment in assignments
             ],
         }
 

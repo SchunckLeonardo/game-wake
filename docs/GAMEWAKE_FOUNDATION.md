@@ -45,7 +45,7 @@ flowchart TD
 - Um User pode participar de várias contas por Memberships diferentes.
 - No MVP, uma conta conecta-se a um Discord Guild e cada Guild conecta-se a uma conta.
 - O Discord oferece interação, mas não possui recursos nem concede acesso automaticamente.
-- Role Assignments são aditivos e limitáveis à conta ou a Worlds específicos. Policies concedem acesso; não existe `DENY` explícito.
+- Cada Membership possui no máximo um Role Assignment, limitado à conta ou a um World específico. Trocar a Role substitui a anterior atomicamente; remover a Role mantém a Membership sem permissões até uma nova atribuição. Policies concedem acesso; não existe `DENY` explícito.
 
 ## Papéis
 
@@ -66,6 +66,7 @@ flowchart TD
 - Novos participantes recebem Player após aceitar o Invitation.
 - `/gamewake convidar` usa seleção múltipla, mas cria um Invitation independente por pessoa.
 - Todo GameWake Account conserva ao menos um Owner e pode ter vários.
+- Uma nova atribuição nunca acumula Roles na mesma Membership e não pode remover o último Owner da conta.
 - Custom Roles permitem combinações próprias sem poluir o onboarding comum.
 - Sensitive Actions exigem reautenticação recente na Console, confirmação pelo nome do recurso e notificação a todos os Owners.
 - Uma conta com apenas um Owner exige e-mail verificado e códigos de recuperação antes do primeiro pagamento.

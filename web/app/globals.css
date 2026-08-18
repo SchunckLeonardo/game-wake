@@ -726,6 +726,8 @@ summary:focus-visible {
 .console-shell .button-outline { border-color: #3b4860; color: var(--white); }
 .console-shell .button-outline:hover:not(:disabled) { background: var(--white); color: var(--ink); }
 .console-shell .button-primary { box-shadow: 4px 4px 0 #02060d; }
+.console-shell .button-danger { background: var(--coral); color: var(--ink); }
+.console-shell .button-danger:hover:not(:disabled) { background: #ff8a80; }
 .contribution-panel {
   background: #111b2c;
   border: 1px solid #2b374d;
@@ -1129,6 +1131,7 @@ summary:focus-visible {
 }
 .role-owner { background: #3b3f20; color: #dcf794; }
 .role-manager { background: #253853; color: #c8dfff; }
+.role-empty { background: transparent; border: 1px dashed #59667a; color: #a9b4c5; }
 .role button { background: transparent; border: 0; color: inherit; cursor: pointer; padding: 0 2px; }
 .danger-link { background: transparent; border: 0; color: #ff9f97; cursor: pointer; }
 .role-controls { align-items: stretch; display: flex; flex-direction: row !important; gap: 8px !important; }
@@ -1147,6 +1150,11 @@ summary:focus-visible {
 .advanced-roles summary { cursor: pointer; font-size: 13px; font-weight: 700; }
 .advanced-roles > p { color: var(--night-muted); font-size: 12px; line-height: 1.6; }
 .advanced-roles .contribution-panel { margin-top: 16px; }
+.custom-role-form { display: grid; gap: 18px; }
+.custom-role-form .role-permissions { margin: 0; }
+.custom-role-form .field-error { color: #ffb0aa; font-size: 12px; margin: -4px 0 0; }
+.custom-role-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 12px; }
+.custom-role-actions a { color: #bfc6ff; font-size: 11px; margin-left: auto; }
 
 .invitation-shell { align-items: center; background: var(--night); color: var(--white); display: flex; min-height: 100vh; padding: 32px 18px; }
 .invitation-card { background: #101a2b; border: 1px solid var(--night-line); border-radius: 16px; margin: 0 auto; max-width: 560px; padding: clamp(24px, 5vw, 44px); width: 100%; }
@@ -1506,6 +1514,8 @@ summary:focus-visible {
   .role-controls > div { justify-content: space-between; }
   .role-confirmation-panel { grid-column: 1 / -1 !important; grid-template-columns: 1fr; }
   .role-confirmation-panel > * { grid-column: 1 !important; }
+  .custom-role-actions { align-items: stretch; flex-direction: column; }
+  .custom-role-actions a { margin-left: 0; }
   .invitation-access-picker { grid-template-columns: 1fr; }
   .invitation-create-row { align-items: stretch; flex-direction: column; }
   .invitation-create-row .button { width: 100%; }
