@@ -2044,7 +2044,7 @@ export function ConsoleDashboard({
                 </div>
                 {inviteAccess === "console" && <small>Por segurança, links de gerenciamento exigem que seu login Discord tenha sido renovado recentemente. <Link href={`/auth/discord/start?install=0&accountId=${encodeURIComponent(accountId)}`}>Renovar login</Link></small>}
                 {invitationLink && <div className="invitation-link-result" role="status"><label>Link pronto<input aria-label="Link de convite criado" readOnly value={invitationLink} /></label><button className="button button-outline" onClick={() => void copyInvitationLink()} type="button">{invitationCopied ? "Link copiado ✓" : "Copiar link"}</button><small>Expira em 7 dias e funciona uma única vez.</small></div>}
-                <div className="discord-command-guide"><Icon name="discord" size={19} /><p><strong>Quer convidar dentro do Discord?</strong> Use <code>/gamewake convidar @amigo1 @amigo2</code>. Esses convites dão acesso Player.</p></div>
+                <div className="discord-command-guide"><Icon name="discord" size={19} /><p><strong>Quer convidar dentro do Discord?</strong> Use <code>/gamewake convidar @amigo1 @amigo2</code>. Cada amigo recebe uma mensagem privada com o link para aceitar como Player; quem já faz parte do grupo não pode ser convidado novamente.</p></div>
               </article>
               <article className="table-card">
                 <div className="card-heading"><h2>Seu grupo</h2><span>{isDemo ? invites.length + 2 : memberships.length} membros</span></div>

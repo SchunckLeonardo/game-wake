@@ -35,6 +35,14 @@ class DiscordGuildAlreadyLinkedError(ValueError):
     """Raised when a Discord Guild is already linked to another account."""
 
 
+class ExistingMembershipInvitationError(ValueError):
+    """Raised when an invitation targets a User who already belongs to the account."""
+
+    def __init__(self, user_ids: set[str]) -> None:
+        self.user_ids = frozenset(user_ids)
+        super().__init__("pelo menos um jogador convidado já faz parte deste grupo")
+
+
 @dataclass(frozen=True)
 class User:
     id: str

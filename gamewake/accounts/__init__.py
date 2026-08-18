@@ -4,6 +4,7 @@ from .in_memory import InMemoryAccountRepository
 from .model import (
     Account,
     DiscordGuildAlreadyLinkedError,
+    ExistingMembershipInvitationError,
     IdentityProvider,
     Invitation,
     InvitationAccess,
@@ -35,6 +36,7 @@ __all__ = [
     "ActivityEvent",
     "CustomRole",
     "DiscordGuildAlreadyLinkedError",
+    "ExistingMembershipInvitationError",
     "IdentityProvider",
     "InMemoryAccountRepository",
     "InMemoryRecoverySecretStore",

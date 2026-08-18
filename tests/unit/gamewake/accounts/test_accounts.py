@@ -91,6 +91,36 @@ def test_batch_invitations_stay_independent_and_require_explicit_acceptance():
     ]
 
 
+def test_an_existing_member_cannot_be_invited_again():
+    accounts = Accounts(InMemoryAccountRepository())
+    account = accounts.create_account(name="Sexta com os amigos", owner_user_id="user-owner")
+    [first_invitation] = accounts.invite_members(
+        account.id,
+        inviter_user_id="user-owner",
+        invited_user_ids=["friend-one"],
+    )
+    accounts.accept_invitation(
+        account.id,
+        first_invitation.id,
+        invited_user_id="friend-one",
+    )
+
+    with pytest.raises(ValueError, match="já faz parte deste grupo"):
+        accounts.invite_members(
+            account.id,
+            inviter_user_id="user-owner",
+            invited_user_ids=["friend-one"],
+        )
+
+    invitations = accounts.list_invitations(
+        account.id,
+        viewer_user_id="user-owner",
+    )
+    assert len(invitations) == 1
+    assert invitations[0].id == first_invitation.id
+    assert invitations[0].status is InvitationStatus.ACCEPTED
+
+
 def test_a_player_cannot_invite_members():
     accounts = Accounts(InMemoryAccountRepository())
     account = accounts.create_account(name="Sexta com os amigos", owner_user_id="user-owner")

@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
+from gamewake.accounts import Account, Invitation
 from gamewake.control_plane import GameWakeApplication
 from gamewake.worlds import World, WorldOperation
+
+_LOGGER = logging.getLogger(__name__)
 
 _OPERATION_PHASES = {
     "wake": (
@@ -107,10 +111,28 @@ class DiscordCommandResponse:
     select_command: str | None = None
 
 
+class InvitationNotifier(Protocol):
+    def notify(
+        self,
+        account: Account,
+        invitation: Invitation,
+        *,
+        inviter_name: str,
+        recipient_discord_user_id: str,
+    ) -> bool: ...
+
+
 class DiscordCommandController:
-    def __init__(self, application: GameWakeApplication, *, console_url: str) -> None:
+    def __init__(
+        self,
+        application: GameWakeApplication,
+        *,
+        console_url: str,
+        invitation_notifier: InvitationNotifier | None = None,
+    ) -> None:
         self._application = application
         self._console_url = console_url.rstrip("/")
+        self._invitation_notifier = invitation_notifier
 
     def handle(self, interaction: DiscordInteraction) -> DiscordCommandResponse:
         try:
@@ -156,11 +178,46 @@ class DiscordCommandController:
                         (friend.id, friend.display_name) for friend in interaction.selected_users
                     ],
                 )
-                return DiscordCommandResponse(
-                    content=(
-                        f"✅ {len(invitations)} convites enviados separadamente. "
+                notification_failures: list[str] = []
+                if self._invitation_notifier is not None:
+                    for invitation, friend in zip(
+                        invitations,
+                        interaction.selected_users,
+                        strict=True,
+                    ):
+                        try:
+                            self._invitation_notifier.notify(
+                                account,
+                                invitation,
+                                inviter_name=interaction.display_name,
+                                recipient_discord_user_id=friend.id,
+                            )
+                        except RuntimeError:
+                            notification_failures.append(friend.display_name)
+                            _LOGGER.warning(
+                                "Discord invitation notification failed",
+                                extra={
+                                    "account_id": account.id,
+                                    "invitation_id": invitation.id,
+                                },
+                            )
+                invitation_label = "convite criado" if len(invitations) == 1 else "convites criados"
+                if notification_failures:
+                    failed_names = ", ".join(notification_failures)
+                    notification_copy = (
+                        f"{failed_names} não recebeu a mensagem privada, mas o convite "
+                        "continua válido. Peça para usar `/gamewake aceitar` neste servidor."
+                    )
+                elif self._invitation_notifier is not None:
+                    notification_copy = (
+                        "Cada amigo recebeu uma mensagem privada com o link para aceitar."
+                    )
+                else:
+                    notification_copy = (
                         "Agora cada amigo precisa usar `/gamewake aceitar` neste servidor."
-                    ),
+                    )
+                return DiscordCommandResponse(
+                    content=f"✅ {len(invitations)} {invitation_label}. {notification_copy}",
                     ephemeral=True,
                 )
             if interaction.command in {"status", "acordar"}:

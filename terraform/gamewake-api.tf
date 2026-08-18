@@ -63,6 +63,7 @@ data "aws_iam_policy_document" "gamewake_api" {
     actions = ["ssm:GetParameter"]
     resources = [
       aws_ssm_parameter.discord_client_secret.arn,
+      aws_ssm_parameter.discord_bot_token.arn,
       aws_ssm_parameter.abacatepay_api_key.arn,
       aws_ssm_parameter.abacatepay_webhook_secret.arn,
       aws_ssm_parameter.abacatepay_public_key.arn,
@@ -187,6 +188,7 @@ resource "aws_lambda_function" "gamewake_api" {
       AURORA_DATABASE_NAME                     = var.aurora_database_name
       AURORA_SECRET_ARN                        = aws_rds_cluster.gamewake.master_user_secret[0].secret_arn
       DISCORD_APPLICATION_ID                   = var.discord_application_id
+      DISCORD_BOT_TOKEN_PARAMETER_NAME         = aws_ssm_parameter.discord_bot_token.name
       DISCORD_CLIENT_SECRET_PARAMETER_NAME     = aws_ssm_parameter.discord_client_secret.name
       DISCORD_PUBLIC_KEY                       = var.discord_public_key
       GAMEWAKE_CONSOLE_URL                     = var.gamewake_console_url

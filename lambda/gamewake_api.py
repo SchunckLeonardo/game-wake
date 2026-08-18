@@ -32,6 +32,8 @@ from gamewake.experience import (
     DiscordCommandController,
     DiscordInteractionAdapter,
     DiscordInteractionWebhookClient,
+    DiscordInvitationNotifier,
+    DiscordRestMessageClient,
 )
 from gamewake.game_catalog import GameCatalog
 from gamewake.orchestration import StepFunctionsOperationOrchestrator
@@ -155,10 +157,15 @@ def build_handler(*, client_factory: Any = boto3.client) -> GameWakeHttpHandler:
         ),
         runtime_profile_hourly_rates=_runtime_profile_rates(),
     )
+    console_url = _required("GAMEWAKE_CONSOLE_URL")
     discord = DiscordInteractionAdapter(
         DiscordCommandController(
             application,
-            console_url=_required("GAMEWAKE_CONSOLE_URL"),
+            console_url=console_url,
+            invitation_notifier=DiscordInvitationNotifier(
+                DiscordRestMessageClient(_secret(ssm, "DISCORD_BOT_TOKEN_PARAMETER_NAME")),
+                console_url=console_url,
+            ),
         )
     )
     webhook = AbacatePayWebhookHandler(

@@ -4,8 +4,13 @@ from urllib.error import URLError
 
 import pytest
 
-from gamewake.accounts import Account
-from gamewake.experience import DiscordChannelNotifier, DiscordInteractionWebhookClient
+from gamewake.accounts import Account, Invitation, InvitationStatus
+from gamewake.experience import (
+    DiscordChannelNotifier,
+    DiscordInteractionWebhookClient,
+    DiscordInvitationNotifier,
+    DiscordRestMessageClient,
+)
 from gamewake.worlds import (
     OperationPhase,
     OperationStatus,
@@ -25,11 +30,25 @@ class Messages:
 
 
 class HttpResponse:
+    def __init__(self, payload: bytes = b""):
+        self.payload = payload
+
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc, traceback):
         return False
+
+    def read(self):
+        return self.payload
+
+
+class DirectMessages:
+    def __init__(self):
+        self.calls = []
+
+    def create_direct(self, recipient_user_id, *, content, nonce, enforce_nonce):
+        self.calls.append((recipient_user_id, content, nonce, enforce_nonce))
 
 
 def test_terminal_world_notification_is_non_sensitive_and_idempotent_by_nonce():
@@ -73,6 +92,72 @@ def test_terminal_world_notification_is_non_sensitive_and_idempotent_by_nonce():
     assert "segredo-do-grupo" not in content
     assert len(nonce) <= 25
     assert enforce_nonce is True
+
+
+def test_invited_friend_receives_a_private_acceptance_link_without_mentions():
+    messages = DirectMessages()
+    notifier = DiscordInvitationNotifier(
+        messages,
+        console_url="https://app.gamewake.example",
+    )
+    account = Account("account-1", "Sexta com os amigos", "guild-1")
+    invitation = Invitation(
+        "invitation-1",
+        account.id,
+        "owner-1",
+        "friend-1",
+        InvitationStatus.PENDING,
+    )
+
+    assert (
+        notifier.notify(
+            account,
+            invitation,
+            inviter_name="Leonardo",
+            recipient_discord_user_id="discord-friend-1",
+        )
+        is True
+    )
+
+    [(recipient_id, content, nonce, enforce_nonce)] = messages.calls
+    assert recipient_id == "discord-friend-1"
+    assert "Leonardo" in content
+    assert "Sexta com os amigos" in content
+    assert "https://app.gamewake.example/convites/account-1/invitation-1" in content
+    assert "/gamewake aceitar" in content
+    assert "@" not in content
+    assert len(nonce) <= 25
+    assert enforce_nonce is True
+
+
+def test_discord_rest_client_opens_a_dm_and_sends_the_invitation_safely():
+    calls = []
+
+    def open_request(request, timeout):
+        calls.append((request, timeout))
+        if request.full_url.endswith("/users/@me/channels"):
+            return HttpResponse(b'{"id":"direct-channel-1"}')
+        return HttpResponse()
+
+    DiscordRestMessageClient("bot-token", opener=open_request).create_direct(
+        "discord-friend-1",
+        content="Convite privado",
+        nonce="invitation-nonce",
+        enforce_nonce=True,
+    )
+
+    [(open_dm, first_timeout), (send_message, second_timeout)] = calls
+    assert open_dm.method == "POST"
+    assert json.loads(open_dm.data) == {"recipient_id": "discord-friend-1"}
+    assert send_message.method == "POST"
+    assert send_message.full_url.endswith("/channels/direct-channel-1/messages")
+    assert json.loads(send_message.data) == {
+        "content": "Convite privado",
+        "nonce": "invitation-nonce",
+        "enforce_nonce": True,
+        "allowed_mentions": {"parse": []},
+    }
+    assert first_timeout == second_timeout == 15
 
 
 def test_deferred_interaction_edits_the_original_message_without_the_bot_token():

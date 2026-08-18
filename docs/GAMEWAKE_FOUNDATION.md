@@ -65,6 +65,7 @@ flowchart TD
 
 - Novos participantes recebem Player após aceitar o Invitation.
 - `/gamewake convidar` usa seleção múltipla, mas cria um Invitation independente por pessoa.
+- `/gamewake convidar` recusa quem já possui Membership e envia a cada novo convidado uma mensagem privada com o caminho de aceite; se a DM estiver bloqueada, o Invitation continua válido e o Owner recebe uma orientação acionável.
 - Todo GameWake Account conserva ao menos um Owner e pode ter vários.
 - Uma nova atribuição nunca acumula Roles na mesma Membership e não pode remover o último Owner da conta.
 - Custom Roles permitem combinações próprias sem poluir o onboarding comum.

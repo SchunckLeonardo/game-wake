@@ -8,6 +8,7 @@ from uuid import uuid4
 from .model import (
     Account,
     DiscordGuildAlreadyLinkedError,
+    ExistingMembershipInvitationError,
     IdentityProvider,
     Invitation,
     InvitationAccess,
@@ -581,6 +582,10 @@ class Accounts:
             raise PermissionDeniedError(
                 "inviting members requires membership management permission"
             )
+        member_user_ids = {membership.user_id for membership in snapshot.memberships}
+        already_member_user_ids = member_user_ids.intersection(invited_user_ids)
+        if already_member_user_ids:
+            raise ExistingMembershipInvitationError(already_member_user_ids)
         invitations = [
             Invitation(
                 id=str(uuid4()),

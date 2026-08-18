@@ -5,6 +5,7 @@ from gamewake.accounts import (
     Accounts,
     ActivityEvent,
     CustomRole,
+    ExistingMembershipInvitationError,
     Invitation,
     Membership,
     Permission,
@@ -110,18 +111,33 @@ class GameWakeApplication:
         actor_user_id: str,
         friends: list[tuple[str, str]],
     ) -> list[Invitation]:
-        invited_user_ids = [
-            self.accounts.sign_in_with_discord(
-                discord_user_id=discord_user_id,
-                display_name=display_name,
-            ).id
+        resolved_friends = [
+            (
+                self.accounts.sign_in_with_discord(
+                    discord_user_id=discord_user_id,
+                    display_name=display_name,
+                ).id,
+                display_name,
+            )
             for discord_user_id, display_name in friends
         ]
-        return self.invite_friends(
-            account_id,
-            actor_user_id=actor_user_id,
-            invited_user_ids=invited_user_ids,
-        )
+        try:
+            return self.invite_friends(
+                account_id,
+                actor_user_id=actor_user_id,
+                invited_user_ids=[user_id for user_id, _ in resolved_friends],
+            )
+        except ExistingMembershipInvitationError as error:
+            names = [
+                display_name
+                for user_id, display_name in resolved_friends
+                if user_id in error.user_ids
+            ]
+            formatted_names = (
+                names[0] if len(names) == 1 else f"{', '.join(names[:-1])} e {names[-1]}"
+            )
+            verb = "já faz" if len(names) == 1 else "já fazem"
+            raise ValueError(f"{formatted_names} {verb} parte deste grupo") from error
 
     def create_account(
         self,

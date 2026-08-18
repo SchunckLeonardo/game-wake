@@ -9,7 +9,11 @@ from .discord import (
     DiscordUser,
     DiscordWorldOption,
 )
-from .notifications import DiscordChannelNotifier, DiscordRestMessageClient
+from .notifications import (
+    DiscordChannelNotifier,
+    DiscordInvitationNotifier,
+    DiscordRestMessageClient,
+)
 
 __all__ = [
     "DiscordChannelNotifier",
@@ -18,6 +22,7 @@ __all__ = [
     "DiscordInteraction",
     "DiscordInteractionAdapter",
     "DiscordInteractionWebhookClient",
+    "DiscordInvitationNotifier",
     "DiscordRestMessageClient",
     "DiscordUser",
     "DiscordWorldOption",

@@ -102,6 +102,13 @@ def test_api_can_dispatch_only_its_own_deferred_discord_interactions():
     assert "resources = [local.gamewake_api_function_arn]" in api
 
 
+def test_api_can_read_the_bot_token_used_for_private_invitation_notifications():
+    api = source("gamewake-api.tf")
+
+    assert "aws_ssm_parameter.discord_bot_token.arn" in api
+    assert "DISCORD_BOT_TOKEN_PARAMETER_NAME" in api
+
+
 def test_world_data_is_kms_encrypted_versioned_bounded_and_never_public():
     storage = source("gamewake-storage.tf")
     orchestration = source("gamewake-orchestration.tf")

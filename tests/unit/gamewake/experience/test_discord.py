@@ -22,6 +22,18 @@ class StubConnectionDetailsProvider:
         )
 
 
+class InvitationNotifications:
+    def __init__(self, *, fail_for: set[str] | None = None):
+        self.calls = []
+        self.fail_for = fail_for or set()
+
+    def notify(self, account, invitation, *, inviter_name, recipient_discord_user_id):
+        self.calls.append((account, invitation, inviter_name, recipient_discord_user_id))
+        if recipient_discord_user_id in self.fail_for:
+            raise RuntimeError("Discord direct messages are disabled")
+        return True
+
+
 def test_start_command_bootstraps_the_guild_account_with_the_caller_as_owner():
     repository = InMemoryAccountRepository()
     accounts = Accounts(repository)
@@ -127,9 +139,11 @@ def test_invite_command_creates_one_private_invitation_for_each_selected_friend(
         billing=Billing(InMemoryBillingRepository()),
         game_catalog=catalog,
     )
+    notifications = InvitationNotifications()
     controller = DiscordCommandController(
         application,
         console_url="https://app.gamewake.example",
+        invitation_notifier=notifications,
     )
 
     response = controller.handle(
@@ -157,9 +171,113 @@ def test_invite_command_creates_one_private_invitation_for_each_selected_friend(
     }
     assert response.ephemeral is True
     assert "3 convites" in response.content
-    assert "/gamewake aceitar" in response.content
+    assert "mensagem privada" in response.content
     assert len(invitations) == 3
     assert {invitation.invited_user_id for invitation in invitations} == invited_users
+    assert [call[3] for call in notifications.calls] == [
+        "discord-friend-1",
+        "discord-friend-2",
+        "discord-friend-3",
+    ]
+    assert all(call[0] == account for call in notifications.calls)
+    assert all(call[2] == "Leonardo" for call in notifications.calls)
+
+
+def test_invite_command_keeps_the_invitation_and_explains_when_a_private_message_is_blocked():
+    account_repository = InMemoryAccountRepository()
+    accounts = Accounts(account_repository)
+    owner = accounts.sign_in_with_discord(
+        discord_user_id="discord-owner",
+        display_name="Leonardo",
+    )
+    account = accounts.create_account(
+        name="Sexta com os amigos",
+        owner_user_id=owner.id,
+        discord_guild_id="guild-1",
+    )
+    catalog = GameCatalog.with_palworld()
+    application = GameWakeApplication(
+        accounts=accounts,
+        worlds=Worlds(InMemoryWorldRepository(), access=accounts, game_catalog=catalog),
+        billing=Billing(InMemoryBillingRepository()),
+        game_catalog=catalog,
+    )
+    notifications = InvitationNotifications(fail_for={"discord-friend"})
+    controller = DiscordCommandController(
+        application,
+        console_url="https://app.gamewake.example",
+        invitation_notifier=notifications,
+    )
+
+    response = controller.handle(
+        DiscordInteraction(
+            id="interaction-blocked-dm",
+            guild_id="guild-1",
+            discord_user_id="discord-owner",
+            display_name="Leonardo",
+            command="convidar",
+            selected_users=(DiscordUser("discord-friend", "Ana"),),
+        )
+    )
+
+    assert len(accounts.list_invitations(account.id, viewer_user_id=owner.id)) == 1
+    assert "não recebeu a mensagem privada" in response.content
+    assert "convite continua válido" in response.content
+
+
+def test_invite_command_does_not_notify_or_create_an_invitation_for_an_existing_member():
+    account_repository = InMemoryAccountRepository()
+    accounts = Accounts(account_repository)
+    owner = accounts.sign_in_with_discord(
+        discord_user_id="discord-owner",
+        display_name="Leonardo",
+    )
+    friend = accounts.sign_in_with_discord(
+        discord_user_id="discord-friend",
+        display_name="Ana",
+    )
+    account = accounts.create_account(
+        name="Sexta com os amigos",
+        owner_user_id=owner.id,
+        discord_guild_id="guild-1",
+    )
+    [first_invitation] = accounts.invite_members(
+        account.id,
+        inviter_user_id=owner.id,
+        invited_user_ids=[friend.id],
+    )
+    accounts.accept_invitation(
+        account.id,
+        first_invitation.id,
+        invited_user_id=friend.id,
+    )
+    catalog = GameCatalog.with_palworld()
+    notifications = InvitationNotifications()
+    controller = DiscordCommandController(
+        GameWakeApplication(
+            accounts=accounts,
+            worlds=Worlds(InMemoryWorldRepository(), access=accounts, game_catalog=catalog),
+            billing=Billing(InMemoryBillingRepository()),
+            game_catalog=catalog,
+        ),
+        console_url="https://app.gamewake.example",
+        invitation_notifier=notifications,
+    )
+
+    response = controller.handle(
+        DiscordInteraction(
+            id="interaction-existing-member",
+            guild_id="guild-1",
+            discord_user_id="discord-owner",
+            display_name="Leonardo",
+            command="convidar",
+            selected_users=(DiscordUser("discord-friend", "Ana"),),
+        )
+    )
+
+    assert "Ana já faz parte deste grupo" in response.content
+    assert len(accounts.list_invitations(account.id, viewer_user_id=owner.id)) == 1
+    assert notifications.calls == []
 
 
 def test_invited_friend_explicitly_accepts_from_discord_and_receives_player_access():
