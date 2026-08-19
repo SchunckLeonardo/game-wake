@@ -50,7 +50,7 @@ jobs:
           SOURCE_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           SOURCE_RUN_URL: ${{ github.event.workflow_run.html_url }}
         run: >-
-          python3 scripts/security/sync_github_issues.py
+          python3 -m scripts.security.sync_github_issues
           --report downloaded-findings/security-findings.json
           --repository "$GITHUB_REPOSITORY"
           --run-url "$SOURCE_RUN_URL"

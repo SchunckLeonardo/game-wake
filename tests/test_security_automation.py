@@ -310,12 +310,16 @@ def test_security_workflows_cover_pr_main_and_isolate_issue_writes() -> None:
     assert "version: v0.74.0" in security
     assert 'TRIVY_INCLUDE_DEV_DEPS: "true"' in security
     assert security.count("trivyignores: .trivyignore.yaml") == 2
+    assert security.count("mkdir -p reports") == 2
     assert "zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25" in security
+    assert "target: http://localhost:3000" in security
+    assert "curl --fail --silent --show-error http://localhost:3000/" in security
     assert "allow_issue_writing: false" in security
     assert "pull_request_target" not in security + reporter
 
     assert "workflow_run:" in reporter
     assert "issues: write" in reporter
+    assert "python3 -m scripts.security.sync_github_issues" in reporter
     assert "persist-credentials: false" in reporter
     assert "github.event.repository.default_branch" in reporter
     assert "ref: ${{ github.event.workflow_run.head_sha }}" not in reporter

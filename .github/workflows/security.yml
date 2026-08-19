@@ -23,6 +23,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Prepare report directory
+        run: mkdir -p reports
+
       - name: Scan Terraform and secrets with Trivy
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -55,6 +58,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Prepare report directory
+        run: mkdir -p reports
 
       - name: Scan locked dependencies with Trivy
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -113,7 +119,7 @@ jobs:
       - name: Wait for the Console
         run: |
           for _ in {1..60}; do
-            if curl --fail --silent --show-error http://127.0.0.1:3000/ >/dev/null; then
+            if curl --fail --silent --show-error http://localhost:3000/ >/dev/null; then
               exit 0
             fi
             sleep 2
@@ -124,7 +130,7 @@ jobs:
       - name: Run passive OWASP ZAP baseline
         uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0
         with:
-          target: http://127.0.0.1:3000
+          target: http://localhost:3000
           allow_issue_writing: false
           fail_action: false
           artifact_name: dast-report
