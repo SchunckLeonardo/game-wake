@@ -315,6 +315,7 @@ def test_security_workflows_cover_pr_main_and_isolate_issue_writes() -> None:
     security = Path(".github/workflows/security.yml").read_text(encoding="utf-8")
     reporter = Path(".github/workflows/security-issues.yml").read_text(encoding="utf-8")
     codeql = Path(".github/workflows/codeql.yml").read_text(encoding="utf-8")
+    zap_rules = Path("web/zap-rules.tsv").read_text(encoding="utf-8")
 
     assert "pull_request:" in security
     assert "push:" in security
@@ -330,6 +331,7 @@ def test_security_workflows_cover_pr_main_and_isolate_issue_writes() -> None:
     assert "curl --fail --silent --show-error http://localhost:3000/" in security
     assert "rules_file_name: web/zap-rules.tsv" in security
     assert "--zap-rules web/zap-rules.tsv" in security
+    assert "10055\tIGNORE\t" in zap_rules
     assert "allow_issue_writing: false" in security
     assert "pull_request_target" not in security + reporter
 

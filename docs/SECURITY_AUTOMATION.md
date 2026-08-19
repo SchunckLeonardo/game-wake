@@ -14,7 +14,7 @@ O GameWake executa SAST, SCA e DAST em toda Pull Request destinada à `main` e e
 
 O DAST não acessa produção, AWS, banco ou credenciais reais. Ele inicia uma Console descartável em `localhost:3000`, espera a aplicação responder e executa o baseline passivo do ZAP.
 
-O baseline usa `web/zap-rules.tsv` para excluir somente sinais não acionáveis: resposta dinâmica sem cache, identificação de aplicação moderna, ausência de SRI em assets versionados da própria origem e COEP, que é incompatível com a incorporação da Discord Activity. As proteções acionáveis continuam obrigatórias na resposta real: CSP com `frame-ancestors`, `X-Content-Type-Options`, `Referrer-Policy` e `Permissions-Policy`.
+O baseline usa `web/zap-rules.tsv` para excluir somente sinais não acionáveis: resposta dinâmica sem cache, scripts inline de hidratação/RSC gerados pelo Vinext, identificação de aplicação moderna, ausência de SRI em assets versionados da própria origem e COEP, que é incompatível com a incorporação da Discord Activity. A CSP compensa a exigência de hidratação com `script-src-attr 'none'`; as demais proteções acionáveis continuam obrigatórias na resposta real: `frame-ancestors`, `X-Content-Type-Options`, `Referrer-Policy` e `Permissions-Policy`.
 
 ## Workflows
 

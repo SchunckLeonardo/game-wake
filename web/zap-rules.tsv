@@ -1,4 +1,5 @@
 10049	IGNORE	(Conteúdo dinâmico da Console não deve ser armazenado por cache compartilhado)
+10055	IGNORE	(O Vinext gera scripts inline dinâmicos de hidratação; atributos de script continuam bloqueados por CSP)
 10109	IGNORE	(A detecção de aplicação web moderna é informativa)
 90003	IGNORE	(Assets versionados são servidos pela mesma origem; SRI não adiciona uma fronteira de confiança)
 90004	IGNORE	(COEP bloquearia a incorporação autorizada da Discord Activity)
