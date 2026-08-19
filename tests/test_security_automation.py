@@ -11,6 +11,7 @@ from scripts.security.collect_findings import (
     collect_trivy,
     collect_zap,
     load_report,
+    load_zap_ignored_rule_ids,
     new_report,
 )
 from scripts.security.sync_github_issues import SecurityIssueContext, sync_security_issues
@@ -177,12 +178,25 @@ def test_zap_collects_medium_or_higher_and_removes_query_strings(tmp_path: Path)
                         "riskcode": "1",
                         "name": "Low risk header",
                     },
+                    {
+                        "pluginid": "90003",
+                        "riskcode": "2",
+                        "name": "Accepted same-origin SRI signal",
+                    },
                 ]
             }
         ]
     }
+    rules = tmp_path / "zap-rules.tsv"
+    rules.write_text(
+        "90003\tIGNORE\t(Same-origin assets)\n10020\tWARN\t(Actionable header)\n",
+        encoding="utf-8",
+    )
 
-    findings = collect_zap(_write_json(tmp_path / "zap.json", payload))
+    findings = collect_zap(
+        _write_json(tmp_path / "zap.json", payload),
+        ignored_rule_ids=load_zap_ignored_rule_ids(rules),
+    )
 
     assert len(findings) == 1
     assert findings[0]["category"] == "DAST"
@@ -315,6 +329,7 @@ def test_security_workflows_cover_pr_main_and_isolate_issue_writes() -> None:
     assert "target: http://localhost:3000" in security
     assert "curl --fail --silent --show-error http://localhost:3000/" in security
     assert "rules_file_name: web/zap-rules.tsv" in security
+    assert "--zap-rules web/zap-rules.tsv" in security
     assert "allow_issue_writing: false" in security
     assert "pull_request_target" not in security + reporter
 

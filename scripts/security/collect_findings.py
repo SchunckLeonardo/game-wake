@@ -201,13 +201,35 @@ def collect_trivy(path: Path) -> list[dict[str, str]]:
     return _deduplicate(findings)
 
 
-def collect_zap(path: Path) -> list[dict[str, str]]:
+def load_zap_ignored_rule_ids(path: Path) -> set[str]:
+    if not path.is_file():
+        return set()
+    ignored: set[str] = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        fields = line.split("\t", 2)
+        if len(fields) >= 2 and fields[1].strip().upper() == "IGNORE":
+            rule_id = fields[0].strip()
+            if re.fullmatch(r"\d+", rule_id):
+                ignored.add(rule_id)
+    return ignored
+
+
+def collect_zap(
+    path: Path,
+    *,
+    ignored_rule_ids: set[str] | frozenset[str] = frozenset(),
+) -> list[dict[str, str]]:
     if not path.is_file():
         return []
     document = json.loads(path.read_text(encoding="utf-8"))
     findings: list[dict[str, str]] = []
     for site in document.get("site") or []:
         for alert in site.get("alerts") or []:
+            rule_id = _text(alert.get("pluginid"), limit=160)
+            if rule_id in ignored_rule_ids:
+                continue
             try:
                 risk_code = int(alert.get("riskcode", 0))
             except (TypeError, ValueError):
@@ -221,7 +243,7 @@ def collect_zap(path: Path) -> list[dict[str, str]]:
                     category="DAST",
                     scanner="OWASP ZAP",
                     severity=severity,
-                    rule_id=alert.get("pluginid"),
+                    rule_id=rule_id,
                     title=alert.get("name"),
                     location=_safe_url(instance.get("uri")),
                     description=alert.get("desc"),
@@ -328,6 +350,7 @@ def _parser() -> argparse.ArgumentParser:
     security.add_argument("--trivy-sast", type=Path, required=True)
     security.add_argument("--trivy-sca", type=Path, required=True)
     security.add_argument("--zap", type=Path, required=True)
+    security.add_argument("--zap-rules", type=Path, required=True)
     security.add_argument("--output", type=Path, required=True)
 
     gate = subparsers.add_parser("assert")
@@ -350,7 +373,10 @@ def main(argv: list[str] | None = None) -> int:
         findings = [
             *collect_trivy(args.trivy_sast),
             *collect_trivy(args.trivy_sca),
-            *collect_zap(args.zap),
+            *collect_zap(
+                args.zap,
+                ignored_rule_ids=load_zap_ignored_rule_ids(args.zap_rules),
+            ),
         ]
         report = new_report(
             source="security-checks",

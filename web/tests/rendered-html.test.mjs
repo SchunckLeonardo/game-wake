@@ -72,6 +72,10 @@ test("applies browser security headers to rendered responses", async () => {
     response.headers.get("content-security-policy") ?? "",
     /frame-ancestors 'self' https:\/\/discord\.com https:\/\/\*\.discord\.com/,
   );
+  assert.match(
+    response.headers.get("content-security-policy") ?? "",
+    /style-src 'self'; style-src-attr 'unsafe-inline'/,
+  );
   assert.equal(response.headers.get("x-content-type-options"), "nosniff");
   assert.equal(
     response.headers.get("referrer-policy"),

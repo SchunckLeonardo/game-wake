@@ -194,6 +194,7 @@ jobs:
           --trivy-sast reports/sast/trivy-sast.json
           --trivy-sca reports/sca/trivy-sca.json
           --zap reports/dast/report_json.json
+          --zap-rules web/zap-rules.tsv
           --output reports/security-findings.json
 
       - name: Upload consolidated findings
