@@ -314,6 +314,7 @@ def test_security_workflows_cover_pr_main_and_isolate_issue_writes() -> None:
     assert "zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25" in security
     assert "target: http://localhost:3000" in security
     assert "curl --fail --silent --show-error http://localhost:3000/" in security
+    assert "rules_file_name: web/zap-rules.tsv" in security
     assert "allow_issue_writing: false" in security
     assert "pull_request_target" not in security + reporter
 

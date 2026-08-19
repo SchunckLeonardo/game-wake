@@ -1,12 +1,27 @@
 import vinext from "vinext";
 import { defineConfig } from "vite";
 import hostingConfig from "./.openai/hosting.json" with { type: "json" };
+import { SECURITY_HEADERS } from "./security-headers.ts";
 import { sites } from "./sites-vite-plugin.ts";
 
 const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
   "00000000-0000-4000-8000-000000000000";
 
 const { d1, r2 } = hostingConfig;
+
+function browserSecurityHeaders(): Plugin {
+  return {
+    name: "browser-security-headers",
+    configureServer(server) {
+      server.middlewares.use((_request, response, next) => {
+        for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
+          response.setHeader(name, value);
+        }
+        next();
+      });
+    },
+  };
+}
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
@@ -48,6 +63,7 @@ export default defineConfig(async () => {
       ? { watch: { useFsEvents: false, usePolling: true } }
       : undefined,
     plugins: [
+      browserSecurityHeaders(),
       vinext(),
       sites(),
       cloudflare({

@@ -12,7 +12,9 @@ O GameWake executa SAST, SCA e DAST em toda Pull Request destinada à `main` e e
 | SCA | Dependency Review e `npm audit` | Mudanças de dependências em PR e auditoria npm já existentes no CI | Política do CI |
 | DAST | OWASP ZAP Baseline | Console iniciada de forma isolada no runner e varredura passiva das rotas descobertas | Medium, High e Critical |
 
-O DAST não acessa produção, AWS, banco ou credenciais reais. Ele inicia uma Console descartável em `127.0.0.1:3000`, espera a aplicação responder e executa o baseline passivo do ZAP.
+O DAST não acessa produção, AWS, banco ou credenciais reais. Ele inicia uma Console descartável em `localhost:3000`, espera a aplicação responder e executa o baseline passivo do ZAP.
+
+O baseline usa `web/zap-rules.tsv` para excluir somente sinais não acionáveis: resposta dinâmica sem cache, identificação de aplicação moderna, ausência de SRI em assets versionados da própria origem e COEP, que é incompatível com a incorporação da Discord Activity. As proteções acionáveis continuam obrigatórias na resposta real: CSP com `frame-ancestors`, `X-Content-Type-Options`, `Referrer-Policy` e `Permissions-Policy`.
 
 ## Workflows
 

@@ -65,6 +65,21 @@ test("renders the public GameWake landing page without starter artifacts", async
   assert.doesNotMatch(html, /codex-preview|SkeletonPreview|react-loading-skeleton/i);
 });
 
+test("applies browser security headers to rendered responses", async () => {
+  const response = await render();
+
+  assert.match(
+    response.headers.get("content-security-policy") ?? "",
+    /frame-ancestors 'self' https:\/\/discord\.com https:\/\/\*\.discord\.com/,
+  );
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(
+    response.headers.get("referrer-policy"),
+    "strict-origin-when-cross-origin",
+  );
+  assert.match(response.headers.get("permissions-policy") ?? "", /camera=\(\)/);
+});
+
 test("packages the GameWake browser icon referenced by the page metadata", async () => {
   const icon = await readFile(new URL("../dist/client/favicon.ico", import.meta.url));
   const scalableIcon = await readFile(
