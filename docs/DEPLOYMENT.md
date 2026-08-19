@@ -204,7 +204,7 @@ Crie um GitHub Environment protegido chamado `production`, com aprovação obrig
 
 O backend S3 usa criptografia e lockfile. `terraform-plan.yml` só planeja; `terraform-apply.yml` recria e mostra um plano antes de aplicar, exige `APPLY`, ou `DESTROY` para destruição. Nenhum secret de runtime deve entrar em GitHub Variables; eles são gravados diretamente no SSM.
 
-A branch `main` deve exigir o check agregado `Required quality gate`, CodeQL e aprovação do Owner antes do merge.
+A branch `main` deve exigir os checks `Required quality gate`, `CodeQL` e `Security gate`, além da aprovação do Owner antes do merge.
 
 ## 10. Smoke test após o deploy
 

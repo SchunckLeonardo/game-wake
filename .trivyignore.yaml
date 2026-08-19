@@ -1,0 +1,33 @@
+misconfigurations:
+  - id: AWS-0104
+    paths:
+      - "gamewake-runtime-image.tf"
+      - "security-group.tf"
+      - "terraform/gamewake-runtime-image.tf"
+      - "terraform/security-group.tf"
+    expired_at: 2027-02-19
+    statement: Runtimes e o builder precisam alcançar Steam, AWS, Discord, DNS e NTP; não há ingress administrativo público.
+  - id: AWS-0079
+    paths:
+      - "gamewake-database.tf"
+      - "terraform/gamewake-database.tf"
+    expired_at: 2027-02-19
+    statement: Aurora já usa criptografia em repouso com chave gerenciada pela AWS; uma CMK adicionaria custo fixo ao MVP.
+  - id: AWS-0135
+    paths:
+      - "gamewake-schedules.tf"
+      - "terraform/gamewake-schedules.tf"
+    expired_at: 2027-02-19
+    statement: A DLQ já usa alias/aws/sqs; uma CMK adicionaria custo fixo e não protege dados de World.
+  - id: AWS-0136
+    paths:
+      - "cloudwatch.tf"
+      - "terraform/cloudwatch.tf"
+    expired_at: 2027-02-19
+    statement: O tópico já usa alias/aws/sns e recebe somente alertas operacionais redigidos; uma CMK adicionaria custo fixo.
+  - id: AWS-0164
+    paths:
+      - "network.tf"
+      - "terraform/network.tf"
+    expired_at: 2027-02-19
+    statement: O Palworld requer endereço público dinâmico para os jogadores; SSH, REST e RCON permanecem fechados.

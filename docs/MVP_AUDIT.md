@@ -82,7 +82,7 @@ Esta matriz separa três coisas diferentes:
 | Integração PostgreSQL real | Verificável no CI | Service `postgres:16-alpine` e `GAMEWAKE_TEST_DATABASE_URL`. Localmente é ignorada sem essa variável. |
 | E2E desktop/mobile | Verificável | Playwright cobre onboarding, Wallet, convite, wake/connect/sleep, configuração e Activity. |
 | Lint/build/infra | Verificável | Ruff, ESLint/build, ShellCheck, pacote reproduzível, Terraform fmt/validate. |
-| Dependency review e CodeQL | Verificável no GitHub | Dependency review em PR e CodeQL Python/TypeScript. |
+| SAST, SCA e DAST | Verificável no GitHub | CodeQL para Actions/Python/TypeScript, Trivy para IaC/segredos/dependências e OWASP ZAP contra a Console isolada. |
 | Merge protegido | Verificação externa necessária | `main` deve exigir aprovação de Leonardo, checks e conversa resolvida; conferir live nas settings do GitHub. |
 | Segredos fora do state/Git | Implementado por desenho | SSM SecureString e RDS managed secret; `.env`, `.tfvars`, state e planos ignorados. É preciso confirmar que nenhum segredo histórico foi publicado. |
 

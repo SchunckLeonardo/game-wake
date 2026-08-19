@@ -25,10 +25,10 @@ def test_ci_runs_unit_postgres_web_and_browser_acceptance_suites():
     assert "lambda/requirements-dev.txt" in postgres_job
 
 
-def test_codeql_analyzes_python_and_typescript():
+def test_codeql_analyzes_actions_python_and_typescript():
     workflow = read(".github/workflows/codeql.yml")
 
-    assert "languages: python,javascript-typescript" in workflow
+    assert "languages: actions,python,javascript-typescript" in workflow
 
 
 def test_terraform_workflows_initialize_the_remote_s3_backend_from_environment_vars():

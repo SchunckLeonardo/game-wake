@@ -1,0 +1,217 @@
+name: Security checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sast-iac:
+    name: SAST - IaC and secrets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Scan Terraform and secrets with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.74.0
+          scan-type: fs
+          scan-ref: .
+          scanners: misconfig,secret
+          severity: HIGH,CRITICAL
+          format: json
+          output: reports/trivy-sast.json
+          exit-code: "0"
+          hide-progress: true
+          timeout: 10m
+          skip-dirs: .git,.venv,node_modules,web/.next,web/dist,build,graphify-out
+          trivyignores: .trivyignore.yaml
+
+      - name: Upload SAST report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sast-iac-report
+          path: reports/trivy-sast.json
+          if-no-files-found: error
+          retention-days: 14
+
+  sca:
+    name: SCA - dependencies
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Scan locked dependencies with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_INCLUDE_DEV_DEPS: "true"
+        with:
+          version: v0.74.0
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
+          vuln-type: library
+          severity: HIGH,CRITICAL
+          format: json
+          output: reports/trivy-sca.json
+          exit-code: "0"
+          hide-progress: true
+          timeout: 10m
+          skip-dirs: .git,.venv,node_modules,web/.next,web/dist,build,graphify-out
+          trivyignores: .trivyignore.yaml
+
+      - name: Upload SCA report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sca-report
+          path: reports/trivy-sca.json
+          if-no-files-found: error
+          retention-days: 14
+
+  dast:
+    name: DAST - OWASP ZAP
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Start isolated Console
+        run: |
+          npm run dev > "$RUNNER_TEMP/gamewake-dast.log" 2>&1 &
+          echo "$!" > "$RUNNER_TEMP/gamewake-dast.pid"
+
+      - name: Wait for the Console
+        run: |
+          for _ in {1..60}; do
+            if curl --fail --silent --show-error http://127.0.0.1:3000/ >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/gamewake-dast.log"
+          exit 1
+
+      - name: Run passive OWASP ZAP baseline
+        uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0
+        with:
+          target: http://127.0.0.1:3000
+          allow_issue_writing: false
+          fail_action: false
+          artifact_name: dast-report
+          cmd_options: -I -m 1 -T 5 -s
+
+      - name: Stop isolated Console
+        if: always()
+        run: |
+          if [[ -f "$RUNNER_TEMP/gamewake-dast.pid" ]]; then
+            read -r server_pid < "$RUNNER_TEMP/gamewake-dast.pid"
+            kill "$server_pid" 2>/dev/null || true
+          fi
+
+      - name: Upload Console diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dast-console-log
+          path: ${{ runner.temp }}/gamewake-dast.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  security-gate:
+    name: Security gate
+    if: always()
+    needs: [sast-iac, sca, dast]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Download SAST report
+        id: download-sast
+        continue-on-error: true
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: sast-iac-report
+          path: reports/sast
+
+      - name: Download SCA report
+        id: download-sca
+        continue-on-error: true
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: sca-report
+          path: reports/sca
+
+      - name: Download DAST report
+        id: download-dast
+        continue-on-error: true
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: dast-report
+          path: reports/dast
+
+      - name: Normalize security findings
+        run: >-
+          python3 scripts/security/collect_findings.py security
+          --trivy-sast reports/sast/trivy-sast.json
+          --trivy-sca reports/sca/trivy-sca.json
+          --zap reports/dast/report_json.json
+          --output reports/security-findings.json
+
+      - name: Upload consolidated findings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-findings
+          path: reports/security-findings.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Require every scanner to complete
+        env:
+          SAST_RESULT: ${{ needs.sast-iac.result }}
+          SCA_RESULT: ${{ needs.sca.result }}
+          DAST_RESULT: ${{ needs.dast.result }}
+        run: |
+          for result in "$SAST_RESULT" "$SCA_RESULT" "$DAST_RESULT"; do
+            if [[ "$result" != success ]]; then
+              echo "A security scanner finished with status: $result" >&2
+              exit 1
+            fi
+          done
+
+      - name: Block actionable vulnerabilities
+        run: >-
+          python3 scripts/security/collect_findings.py assert
+          --report reports/security-findings.json

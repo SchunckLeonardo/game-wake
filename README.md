@@ -1,7 +1,8 @@
 # GameWake
 
-[![Continuous integration](https://github.com/SchunckLeonardo/palworld-server/actions/workflows/tests.yml/badge.svg)](https://github.com/SchunckLeonardo/palworld-server/actions/workflows/tests.yml)
-[![CodeQL](https://github.com/SchunckLeonardo/palworld-server/actions/workflows/codeql.yml/badge.svg)](https://github.com/SchunckLeonardo/palworld-server/actions/workflows/codeql.yml)
+[![Continuous integration](https://github.com/SchunckLeonardo/game-wake/actions/workflows/tests.yml/badge.svg)](https://github.com/SchunckLeonardo/game-wake/actions/workflows/tests.yml)
+[![Security checks](https://github.com/SchunckLeonardo/game-wake/actions/workflows/security.yml/badge.svg)](https://github.com/SchunckLeonardo/game-wake/actions/workflows/security.yml)
+[![CodeQL](https://github.com/SchunckLeonardo/game-wake/actions/workflows/codeql.yml/badge.svg)](https://github.com/SchunckLeonardo/game-wake/actions/workflows/codeql.yml)
 
 GameWake deixa um grupo de amigos criar, pagar, configurar, acordar e dormir um servidor de jogo sem administrar infraestrutura. A experiência principal vive no Discord e na mesma Console responsiva, que também funciona no navegador.
 
@@ -18,7 +19,7 @@ O MVP suporta Palworld e foi desenhado para ampliar o catálogo por meio de Game
 - Landing page, onboarding, Console Web e Discord Activity com a mesma API e autorização.
 - Aurora PostgreSQL Serverless v2 via Data API, Step Functions Standard, runtimes EC2 descartáveis, S3/KMS, SSM, CloudWatch e alertas SNS.
 - Mensagens operacionais no canal do grupo sem expor IP ou senha; `/gamewake conectar` entrega credenciais somente ao usuário autorizado.
-- Testes unitários, integração PostgreSQL real, E2E desktop/mobile, lint, Terraform, dependency review e CodeQL em GitHub Actions.
+- Testes unitários, integração PostgreSQL real, E2E desktop/mobile, lint, Terraform, SAST, SCA e DAST em GitHub Actions.
 
 ## Arquitetura
 
@@ -110,6 +111,7 @@ Antes de abrir a beta, consulte a [auditoria do MVP](docs/MVP_AUDIT.md) e execut
 - [Restore e export de World](docs/runbooks/world-restore-export.md)
 - [Recuperação do Owner](docs/runbooks/owner-recovery.md)
 - [Resposta a incidentes](docs/runbooks/incident-response.md)
+- [Automação de segurança no GitHub](docs/SECURITY_AUTOMATION.md)
 
 ## Licença
 
